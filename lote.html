@@ -631,6 +631,7 @@
       .fonte-enorme { font-size: 14.5pt !important; }
     }
   </style>
+  <script src="concursos-store.js"></script>
 </head>
 <body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col antialiased overflow-x-hidden w-full max-w-full">
 
@@ -1662,6 +1663,9 @@
           <button type="button" id="subAbaBtnCadastros" onclick="trocarSubAbaAdmin('cadastros')" class="px-4 py-2 rounded-lg text-xs font-semibold transition-all bg-white text-slate-900 shadow-xs cursor-pointer flex items-center gap-1.5">
             <span>📋</span> Cadastros & Respostas
           </button>
+          <button type="button" id="subAbaBtnConcursos" onclick="trocarSubAbaAdmin('concursos')" class="px-4 py-2 rounded-lg text-xs font-medium transition-all text-slate-600 hover:text-slate-900 cursor-pointer flex items-center gap-1.5">
+            <span>🏛️</span> Gestão de Concursos & Cargos
+          </button>
           <button type="button" id="subAbaBtnLote" onclick="trocarSubAbaAdmin('lote')" class="px-4 py-2 rounded-lg text-xs font-medium transition-all text-slate-600 hover:text-slate-900 cursor-pointer flex items-center gap-1.5">
             <span>⚙️</span> Gestão de Lotes
             <span id="badgeStatusLoteTopo" class="ml-1 text-2xs font-semibold px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800">Padrão</span>
@@ -1817,6 +1821,191 @@
           </div>
         </div>
       </div> <!-- Fim de conteudoSubAbaCadastros -->
+
+      <!-- ============================================================== -->
+      <!-- Conteúdo da Sub-Aba: Gestão de Concursos & Cargos -->
+      <!-- ============================================================== -->
+      <div id="conteudoSubAbaConcursos" style="display: none;" class="space-y-6">
+        <!-- Banner Informativo -->
+        <div class="bg-gradient-to-r from-slate-900 via-teal-950 to-slate-900 rounded-2xl p-6 text-white shadow-sm border border-teal-800/40">
+          <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <div class="flex items-center gap-2 mb-2">
+                <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-2xs font-bold bg-teal-500/20 text-teal-300 border border-teal-400/30">
+                  🏛️ Gestão Centralizada de Concursos & Cargos
+                </span>
+                <span class="text-3xs text-slate-400 font-mono">CERTAM • Isolamento Total</span>
+              </div>
+              <h3 class="text-xl font-bold font-serif text-white">Concursos e Cargos Cadastrados</h3>
+              <p class="text-xs text-slate-300 mt-1 max-w-2xl leading-relaxed">
+                Aqui você organiza quais concursos existem no portal. Cada concurso pode conter múltiplos cargos independentes (com classificação, chat e painel de lotes isolados sem conflitos de dados).
+              </p>
+            </div>
+            <div class="flex items-center gap-2.5 flex-wrap">
+              <button type="button" onclick="abrirModalNovoConcursoAdmin()" class="px-4 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-500 active:bg-teal-700 text-white font-bold text-xs shadow-md cursor-pointer flex items-center gap-1.5 transition-all">
+                <span>➕</span> Cadastrar Novo Concurso
+              </button>
+              <button type="button" onclick="renderizarAdminConcursosECargos()" class="px-3.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs border border-slate-700 cursor-pointer flex items-center gap-1 transition-all" title="Recarregar">
+                <span>🔄</span> Atualizar
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Indicadores / Métricas -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
+            <span class="text-2xs font-bold text-slate-500 uppercase tracking-wider block">Concursos Cadastrados</span>
+            <div class="text-2xl font-extrabold text-slate-900 mt-1" id="adminTotalConcursosCount">0</div>
+            <span class="text-3xs text-slate-400">Certames ativos na plataforma</span>
+          </div>
+          <div class="bg-white p-4 rounded-xl border border-teal-200 shadow-2xs">
+            <span class="text-2xs font-bold text-teal-700 uppercase tracking-wider block">Cargos Mapeados</span>
+            <div class="text-2xl font-extrabold text-teal-800 mt-1" id="adminTotalCargosCount">0</div>
+            <span class="text-3xs text-teal-600">Com listas e chats isolados</span>
+          </div>
+          <div class="bg-white p-4 rounded-xl border border-emerald-200 shadow-2xs">
+            <span class="text-2xs font-bold text-emerald-700 uppercase tracking-wider block">Armazenamento & Nuvem</span>
+            <div class="text-sm font-bold text-emerald-800 mt-2 flex items-center gap-1.5">
+              <span class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+              Sincronizado Supabase / Local
+            </div>
+            <span class="text-3xs text-slate-400">Zero mock data / Dados 100% reais</span>
+          </div>
+        </div>
+
+        <!-- Lista de Concursos e seus respectivos Cargos -->
+        <div id="listaConcursosAdminContainer" class="space-y-6">
+          <!-- Renderizado dinamicamente via JS por renderizarAdminConcursosECargos() -->
+          <div class="text-center py-10 text-slate-400 text-xs">Carregando concursos...</div>
+        </div>
+      </div> <!-- Fim de conteudoSubAbaConcursos -->
+
+      <!-- Modal para Cadastrar / Editar Concurso -->
+      <div id="modalNovoConcursoAdmin" style="display: none;" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+          <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+            <div class="flex items-center gap-2">
+              <span class="text-xl">🏛️</span>
+              <h3 class="font-bold text-slate-900 text-base" id="modalConcursoTitulo">Cadastrar Novo Concurso</h3>
+            </div>
+            <button type="button" onclick="fecharModalConcursoAdmin()" class="text-slate-400 hover:text-slate-600 text-sm cursor-pointer">✕</button>
+          </div>
+
+          <form id="formNovoConcursoAdmin" onsubmit="salvarNovoConcursoAdmin(event)" class="space-y-3.5">
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">Identificador Único (Slug / ID):</label>
+              <input type="text" id="inputConcursoId" required placeholder="ex: tjrs, tre_rs, trf4, pcrj" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500">
+              <span class="text-3xs text-slate-400 mt-0.5 block">Apenas letras minúsculas, números e sublinhados (sem espaços).</span>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">Nome do Concurso:</label>
+                <input type="text" id="inputConcursoNome" required placeholder="ex: TJ-RS Tribunal de Justiça" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500">
+              </div>
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">Órgão / Sigla:</label>
+                <input type="text" id="inputConcursoOrgao" required placeholder="ex: TJRS" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500">
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">Ano / Edital:</label>
+                <input type="text" id="inputConcursoAno" placeholder="ex: 2024 / Edital 01/2024" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500">
+              </div>
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">Status:</label>
+                <select id="inputConcursoStatus" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500">
+                  <option value="Em Andamento">Em Andamento</option>
+                  <option value="Homologado">Homologado</option>
+                  <option value="Convocando">Convocando</option>
+                  <option value="Inscrições Abertas">Inscrições Abertas</option>
+                  <option value="Encerrado">Encerrado</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">Descrição / Observações:</label>
+              <textarea id="inputConcursoDesc" rows="2" placeholder="Informações gerais sobre o certame..." class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500"></textarea>
+            </div>
+
+            <div class="pt-3 border-t border-slate-100 flex items-center justify-end gap-2.5">
+              <button type="button" onclick="fecharModalConcursoAdmin()" class="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 cursor-pointer">Cancelar</button>
+              <button type="submit" class="px-5 py-2 rounded-xl text-xs font-bold bg-teal-700 hover:bg-teal-800 text-white shadow-xs cursor-pointer">Salvar Concurso</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- Modal para Cadastrar / Editar Cargo -->
+      <div id="modalNovoCargoAdmin" style="display: none;" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+          <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+            <div class="flex items-center gap-2">
+              <span class="text-xl">💼</span>
+              <h3 class="font-bold text-slate-900 text-base" id="modalCargoTitulo">Cadastrar Novo Cargo</h3>
+            </div>
+            <button type="button" onclick="fecharModalCargoAdmin()" class="text-slate-400 hover:text-slate-600 text-sm cursor-pointer">✕</button>
+          </div>
+
+          <form id="formNovoCargoAdmin" onsubmit="salvarNovoCargoAdmin(event)" class="space-y-3.5">
+            <input type="hidden" id="inputCargoConcursoId" value="">
+
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">Concurso:</label>
+              <input type="text" id="inputCargoConcursoNomeDisplay" readonly class="w-full px-3 py-2 bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 cursor-not-allowed">
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">Identificador do Cargo (Slug / ID):</label>
+              <input type="text" id="inputCargoId" required placeholder="ex: analista_judiciario, tecnico_judiciario" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500">
+              <span class="text-3xs text-slate-400 mt-0.5 block">Letras minúsculas e sublinhados. As classificações e o chat serão isolados por este ID.</span>
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">Nome Completo do Cargo:</label>
+              <input type="text" id="inputCargoNome" required placeholder="ex: Analista Judiciário - Área Judiciária" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500">
+            </div>
+
+            <div class="grid grid-cols-3 gap-3">
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">Escolaridade / Nível:</label>
+                <select id="inputCargoNivel" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500">
+                  <option value="Superior">Superior</option>
+                  <option value="Médio">Médio</option>
+                  <option value="Técnico">Técnico</option>
+                  <option value="Fundamental">Fundamental</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">Vagas Imediatas:</label>
+                <input type="number" id="inputCargoVagas" min="0" value="0" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500">
+              </div>
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">Cadastro Reserva:</label>
+                <select id="inputCargoCr" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500">
+                  <option value="Sim">Sim (CR)</option>
+                  <option value="Não">Não</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">Caminho CSV Opcional de Classificação Inicial:</label>
+              <input type="text" id="inputCargoCsvPath" placeholder="/assets/aistudio/... ou deixe vazio" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500">
+              <span class="text-3xs text-slate-400 mt-0.5 block">Se deixado em branco, a lista começa limpa até você importar a planilha deste cargo.</span>
+            </div>
+
+            <div class="pt-3 border-t border-slate-100 flex items-center justify-end gap-2.5">
+              <button type="button" onclick="fecharModalCargoAdmin()" class="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 cursor-pointer">Cancelar</button>
+              <button type="submit" class="px-5 py-2 rounded-xl text-xs font-bold bg-teal-700 hover:bg-teal-800 text-white shadow-xs cursor-pointer">Salvar Cargo</button>
+            </div>
+          </form>
+        </div>
+      </div>
 
       <!-- Conteúdo da Sub-Aba 2: Configuração de Lote (Candidatos, Comarcas e Vagas) -->
       <div id="conteudoSubAbaLote" style="display: none;" class="space-y-6">
@@ -2398,22 +2587,29 @@
           </div>
         </div>
 
-        <!-- Seletor de Concurso e Upload -->
+        <!-- Seletor de Concurso, Cargo e Upload -->
         <div class="bg-white rounded-2xl p-5 sm:p-6 border border-slate-200/90 shadow-2xs space-y-4">
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-              <label class="block text-xs font-bold text-slate-700 mb-1.5">1. Selecione o Concurso Destino:</label>
-              <select id="importarConcursoSelect" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500">
-                <option value="tjrs_analista_2024">Concurso TJRS - Analista Judiciário (tjrs_analista_2024)</option>
+              <label class="block text-xs font-bold text-slate-700 mb-1.5">1. Concurso Destino:</label>
+              <select id="importarConcursoSelect" onchange="atualizarCargosImportador()" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                <option value="tjrs">TJ-RS Tribunal de Justiça (tjrs)</option>
               </select>
-              <span class="text-3xs text-slate-500 mt-1 block">Os registros de <code class="text-slate-700">candidatos_base</code> receberão ID no padrão <code class="text-emerald-700 font-mono font-bold">${concurso_id}-${classificacao_ampla}</code></span>
+              <span class="text-3xs text-slate-500 mt-1 block">Concursos cadastrados pelo administrador</span>
             </div>
             <div>
-              <label class="block text-xs font-bold text-slate-700 mb-1.5">2. Selecione a Planilha (.xlsx, .xls ou .csv):</label>
+              <label class="block text-xs font-bold text-slate-700 mb-1.5">2. Cargo Destino:</label>
+              <select id="importarCargoSelect" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                <option value="analista_judiciario">Analista Judiciário - Área Judiciária</option>
+              </select>
+              <span class="text-3xs text-slate-500 mt-1 block">Lista e chat totalmente isolados por cargo</span>
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1.5">3. Selecione a Planilha (.xlsx, .xls ou .csv):</label>
               <div class="relative">
                 <input type="file" id="arquivoExcelInput" accept=".xlsx, .xls, .csv" onchange="aoSelecionarArquivoExcel(event)" class="block w-full text-xs text-slate-500 file:mr-3 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-emerald-700 file:text-white hover:file:bg-emerald-800 cursor-pointer border border-slate-300 rounded-xl bg-slate-50 p-1">
               </div>
-              <span class="text-3xs text-slate-500 mt-1 block">O leitor processa a aba <strong>Lista geral</strong> (a partir da linha 3) cruzando com <strong>Ordem de Nomeação</strong></span>
+              <span class="text-3xs text-slate-500 mt-1 block">Lê a aba <strong>Lista geral</strong> cruzada com <strong>Nomeação</strong></span>
             </div>
           </div>
 
@@ -5406,6 +5602,11 @@
 
       // Finaliza o carregamento inicial síncrono imediatamente para liberar a tela
       finalizarInicioApp(ESTADO.candidatos, ESTADO.comarcas, null);
+
+      var subAbaUrl = URL_PARAMS_LOTE.get('subaba');
+      if (subAbaUrl) {
+        ESTADO.subAbaAdminAtiva = subAbaUrl;
+      }
 
       if (querAdmin && (ehAdmin || ESTADO.usuarioLogado.isAdmin)) {
         trocarAba('admin');
@@ -8657,7 +8858,8 @@
         renderizarDadosAdmin();
         renderizarSolicitacoesAdmin();
         carregarListaLotesAdmin();
-        trocarSubAbaAdmin(ESTADO.subAbaAdminAtiva || 'cadastros');
+        var subAbaParam = URL_PARAMS_LOTE.get('subaba') || ESTADO.subAbaAdminAtiva || 'cadastros';
+        trocarSubAbaAdmin(subAbaParam);
       }
     }
 
@@ -11227,16 +11429,19 @@
     function trocarSubAbaAdmin(subAba) {
       ESTADO.subAbaAdminAtiva = subAba || 'cadastros';
       var btnCadastros = document.getElementById('subAbaBtnCadastros');
+      var btnConcursos = document.getElementById('subAbaBtnConcursos');
       var btnLote = document.getElementById('subAbaBtnLote');
       var btnCentral = document.getElementById('subAbaBtnCentralCandidatos');
       var btnImportar = document.getElementById('subAbaBtnImportar');
       var boxCadastros = document.getElementById('conteudoSubAbaCadastros');
+      var boxConcursos = document.getElementById('conteudoSubAbaConcursos');
       var boxLote = document.getElementById('conteudoSubAbaLote');
       var boxCentral = document.getElementById('conteudoSubAbaCentralCandidatos');
       var boxImportar = document.getElementById('conteudoSubAbaImportar');
 
       // Oculta todas as sub-abas
       if (boxCadastros) boxCadastros.style.display = 'none';
+      if (boxConcursos) boxConcursos.style.display = 'none';
       if (boxLote) boxLote.style.display = 'none';
       if (boxCentral) boxCentral.style.display = 'none';
       if (boxImportar) boxImportar.style.display = 'none';
@@ -11245,11 +11450,16 @@
       var btnAtivoClass = 'px-4 py-2 rounded-lg text-xs font-semibold transition-all bg-white text-slate-900 shadow-xs cursor-pointer flex items-center gap-1.5';
 
       if (btnCadastros) btnCadastros.className = btnInativoClass;
+      if (btnConcursos) btnConcursos.className = btnInativoClass;
       if (btnLote) btnLote.className = btnInativoClass;
       if (btnCentral) btnCentral.className = btnInativoClass;
       if (btnImportar) btnImportar.className = btnInativoClass;
 
-      if (subAba === 'lote') {
+      if (subAba === 'concursos') {
+        if (boxConcursos) boxConcursos.style.display = 'block';
+        if (btnConcursos) btnConcursos.className = btnAtivoClass;
+        renderizarAdminConcursosECargos();
+      } else if (subAba === 'lote') {
         if (boxLote) boxLote.style.display = 'block';
         if (btnLote) btnLote.className = btnAtivoClass;
 
@@ -11274,6 +11484,295 @@
     }
 
     // ===================================================================
+    // GESTÃO DE CONCURSOS E CARGOS - PAINEL ADMINISTRATIVO (CERTAM)
+    // ===================================================================
+
+    async function renderizarAdminConcursosECargos() {
+      var container = document.getElementById('listaConcursosAdminContainer');
+      if (!container) return;
+
+      var concursos = [];
+      if (typeof CertamStore !== 'undefined') {
+        try {
+          concursos = await CertamStore.carregarDoSupabase();
+        } catch(e) {
+          concursos = CertamStore.getConcursos();
+        }
+      }
+
+      if (!concursos || concursos.length === 0) {
+        concursos = (typeof CertamStore !== 'undefined') ? CertamStore.getConcursos() : [];
+      }
+
+      var totalConcursos = concursos.length;
+      var totalCargos = 0;
+      concursos.forEach(function(c) {
+        totalCargos += (c.cargos ? c.cargos.length : 0);
+      });
+
+      var badgeConc = document.getElementById('adminTotalConcursosCount');
+      var badgeCarg = document.getElementById('adminTotalCargosCount');
+      if (badgeConc) badgeConc.textContent = totalConcursos;
+      if (badgeCarg) badgeCarg.textContent = totalCargos;
+
+      if (concursos.length === 0) {
+        container.innerHTML = 
+          '<div class="bg-white rounded-2xl p-8 border border-slate-200 text-center space-y-3">' +
+            '<span class="text-3xl">📭</span>' +
+            '<h4 class="font-bold text-slate-800 text-sm">Nenhum concurso cadastrado</h4>' +
+            '<p class="text-xs text-slate-500 max-w-md mx-auto">Cadastre o primeiro concurso do portal utilizando o botão acima. Cada concurso poderá ser dividido em cargos isolados.</p>' +
+            '<button type="button" onclick="abrirModalNovoConcursoAdmin()" class="px-4 py-2 bg-teal-700 hover:bg-teal-800 text-white font-bold text-xs rounded-xl cursor-pointer">Cadastrar Primeiro Concurso</button>' +
+          '</div>';
+        return;
+      }
+
+      var html = '';
+      concursos.forEach(function(c) {
+        var cargos = c.cargos || [];
+        var statusClass = 'bg-teal-100 text-teal-800 border-teal-200';
+        if (c.status === 'Inscrições Abertas') statusClass = 'bg-blue-100 text-blue-800 border-blue-200';
+        else if (c.status === 'Homologado') statusClass = 'bg-emerald-100 text-emerald-800 border-emerald-200';
+        else if (c.status === 'Encerrado') statusClass = 'bg-slate-100 text-slate-700 border-slate-200';
+
+        html += 
+          '<div class="bg-white rounded-2xl border border-slate-200/90 shadow-2xs overflow-hidden transition-all hover:shadow-xs">' +
+            '<!-- Topo do Card Concurso -->' +
+            '<div class="p-5 bg-gradient-to-r from-slate-50 via-white to-teal-50/30 border-b border-slate-200/70 flex flex-col md:flex-row md:items-center justify-between gap-4">' +
+              '<div class="space-y-1">' +
+                '<div class="flex items-center gap-2 flex-wrap">' +
+                  '<span class="px-2 py-0.5 rounded text-3xs font-mono font-bold bg-slate-900 text-white uppercase">' + (c.id || '') + '</span>' +
+                  '<span class="px-2 py-0.5 rounded text-3xs font-bold border ' + statusClass + '">' + (c.status || 'Ativo') + '</span>' +
+                  '<span class="text-xs font-bold text-slate-700">' + (c.orgao || '') + '</span>' +
+                  (c.ano ? '<span class="text-xs text-slate-400">• ' + c.ano + '</span>' : '') +
+                '</div>' +
+                '<h4 class="text-base sm:text-lg font-bold text-slate-900 font-serif">' + (c.nome || c.id) + '</h4>' +
+                (c.descricao ? '<p class="text-xs text-slate-500 max-w-2xl">' + c.descricao + '</p>' : '') +
+              '</div>' +
+              '<div class="flex items-center gap-2 flex-wrap shrink-0">' +
+                '<a href="concurso.html?id=' + encodeURIComponent(c.id) + '" target="_blank" class="px-3 py-1.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold cursor-pointer flex items-center gap-1 transition-all">' +
+                  '<span>🌐</span> Abrir Portal' +
+                '</a>' +
+                '<button type="button" onclick="abrirModalNovoCargoAdmin(\'' + c.id + '\')" class="px-3.5 py-1.5 rounded-xl bg-teal-700 hover:bg-teal-800 text-white text-xs font-bold shadow-2xs cursor-pointer flex items-center gap-1 transition-all">' +
+                  '<span>➕</span> Adicionar Cargo' +
+                '</button>' +
+                '<button type="button" onclick="excluirConcursoAdmin(\'' + c.id + '\')" class="px-2.5 py-1.5 rounded-xl text-red-600 hover:bg-red-50 text-xs font-semibold cursor-pointer transition-all" title="Excluir Concurso">' +
+                  '🗑️' +
+                '</button>' +
+              '</div>' +
+            '</div>' +
+
+            '<!-- Lista de Cargos Vinculados -->' +
+            '<div class="p-5 space-y-3">' +
+              '<div class="flex items-center justify-between">' +
+                '<span class="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">' +
+                  '<span>💼</span> Cargos & Especialidades Cadastrados (' + cargos.length + ')' +
+                '</span>' +
+                '<span class="text-3xs text-slate-400">Cada cargo possui classificação, chat e lotes individuais</span>' +
+              '</div>';
+
+        if (cargos.length === 0) {
+          html += 
+            '<div class="p-4 rounded-xl bg-slate-50 border border-dashed border-slate-200 text-center text-xs text-slate-500">' +
+              'Nenhum cargo cadastrado neste concurso ainda. Clique em "Adicionar Cargo" acima.' +
+            '</div>';
+        } else {
+          html += 
+            '<div class="overflow-x-auto border border-slate-200 rounded-xl">' +
+              '<table class="w-full text-left text-xs">' +
+                '<thead class="bg-slate-50 border-b border-slate-200 text-2xs text-slate-600 font-semibold uppercase tracking-wider">' +
+                  '<tr>' +
+                    '<th class="py-2.5 px-3">Cargo / Especialidade</th>' +
+                    '<th class="py-2.5 px-3">ID do Cargo</th>' +
+                    '<th class="py-2.5 px-3 text-center">Nível</th>' +
+                    '<th class="py-2.5 px-3 text-center">Vagas Imediatas</th>' +
+                    '<th class="py-2.5 px-3 text-center">CR</th>' +
+                    '<th class="py-2.5 px-3 text-right">Ações Isoladas</th>' +
+                  '</tr>' +
+                '</thead>' +
+                '<tbody class="divide-y divide-slate-100">';
+
+          cargos.forEach(function(cg) {
+            html += 
+              '<tr class="hover:bg-slate-50 transition-colors">' +
+                '<td class="py-2.5 px-3">' +
+                  '<strong class="text-slate-900 font-medium block">' + (cg.nome || cg.id) + '</strong>' +
+                  (cg.csv_path ? '<span class="text-3xs text-teal-700 font-mono">CSV Vinculado</span>' : '<span class="text-3xs text-slate-400">Aguardando importação</span>') +
+                '</td>' +
+                '<td class="py-2.5 px-3 font-mono font-bold text-slate-600 text-2xs">' + cg.id + '</td>' +
+                '<td class="py-2.5 px-3 text-center">' +
+                  '<span class="px-2 py-0.5 rounded-full text-3xs font-semibold bg-slate-100 text-slate-700">' + (cg.nivel || 'Superior') + '</span>' +
+                '</td>' +
+                '<td class="py-2.5 px-3 text-center font-mono font-bold text-slate-800">' + (cg.vagas_imediatas !== undefined ? cg.vagas_imediatas : '-') + '</td>' +
+                '<td class="py-2.5 px-3 text-center">' +
+                  '<span class="px-2 py-0.5 rounded text-3xs font-bold ' + (cg.cr === 'Sim' ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-500') + '">' + (cg.cr || 'Não') + '</span>' +
+                '</td>' +
+                '<td class="py-2.5 px-3 text-right">' +
+                  '<div class="flex items-center justify-end gap-1.5 flex-wrap">' +
+                    '<a href="concurso.html?id=' + encodeURIComponent(c.id) + '&cargo=' + encodeURIComponent(cg.id) + '" target="_blank" class="px-2 py-1 rounded-lg text-3xs font-bold bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 transition-colors" title="Ver Lista de Classificação e Chat">' +
+                      '📋 Lista & Chat' +
+                    '</a>' +
+                    '<a href="lote.html?concurso=' + encodeURIComponent(c.id) + '&cargo=' + encodeURIComponent(cg.id) + '" class="px-2 py-1 rounded-lg text-3xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 transition-colors" title="Simular Escolha de Comarcas">' +
+                      '🎯 Simular Lote' +
+                    '</a>' +
+                    '<button type="button" onclick="excluirCargoAdmin(\'' + c.id + '\', \'' + cg.id + '\')" class="p-1 rounded text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer" title="Excluir Cargo">' +
+                      '🗑️' +
+                    '</button>' +
+                  '</div>' +
+                '</td>' +
+              '</tr>';
+          });
+
+          html += 
+                '</tbody>' +
+              '</table>' +
+            '</div>';
+        }
+
+        html += 
+            '</div>' +
+          '</div>';
+      });
+
+      container.innerHTML = html;
+    }
+
+    function abrirModalNovoConcursoAdmin() {
+      var modal = document.getElementById('modalNovoConcursoAdmin');
+      if (!modal) return;
+      var inpId = document.getElementById('inputConcursoId');
+      var inpNome = document.getElementById('inputConcursoNome');
+      var inpOrgao = document.getElementById('inputConcursoOrgao');
+      var inpAno = document.getElementById('inputConcursoAno');
+      var inpDesc = document.getElementById('inputConcursoDesc');
+      if (inpId) inpId.value = '';
+      if (inpNome) inpNome.value = '';
+      if (inpOrgao) inpOrgao.value = '';
+      if (inpAno) inpAno.value = '';
+      if (inpDesc) inpDesc.value = '';
+      modal.style.display = 'flex';
+    }
+
+    function fecharModalConcursoAdmin() {
+      var modal = document.getElementById('modalNovoConcursoAdmin');
+      if (modal) modal.style.display = 'none';
+    }
+
+    async function salvarNovoConcursoAdmin(e) {
+      if (e) e.preventDefault();
+      var id = (document.getElementById('inputConcursoId').value || '').toLowerCase().trim().replace(/[^a-z0-9_]/g, '_');
+      var nome = (document.getElementById('inputConcursoNome').value || '').trim();
+      var orgao = (document.getElementById('inputConcursoOrgao').value || '').trim();
+      var ano = (document.getElementById('inputConcursoAno').value || '').trim();
+      var status = (document.getElementById('inputConcursoStatus').value || 'Em Andamento').trim();
+      var desc = (document.getElementById('inputConcursoDesc').value || '').trim();
+
+      if (!id || !nome) {
+        alert('Por favor, informe o Identificador Único e o Nome do Concurso.');
+        return;
+      }
+
+      var concursoObj = {
+        id: id,
+        nome: nome,
+        orgao: orgao,
+        ano: ano,
+        status: status,
+        descricao: desc,
+        cargos: []
+      };
+
+      if (typeof CertamStore !== 'undefined') {
+        await CertamStore.salvarConcurso(concursoObj);
+      }
+
+      fecharModalConcursoAdmin();
+      mostrarAlerta('✓ Concurso "' + nome + '" cadastrado com sucesso!', 'sucesso');
+      await renderizarAdminConcursosECargos();
+    }
+
+    function abrirModalNovoCargoAdmin(concursoId) {
+      var modal = document.getElementById('modalNovoCargoAdmin');
+      if (!modal) return;
+
+      var conc = (typeof CertamStore !== 'undefined') ? CertamStore.getConcurso(concursoId) : null;
+      var inpConcId = document.getElementById('inputCargoConcursoId');
+      var inpConcNome = document.getElementById('inputCargoConcursoNomeDisplay');
+      var inpCargoId = document.getElementById('inputCargoId');
+      var inpCargoNome = document.getElementById('inputCargoNome');
+      var inpVagas = document.getElementById('inputCargoVagas');
+      var inpCsv = document.getElementById('inputCargoCsvPath');
+
+      if (inpConcId) inpConcId.value = concursoId;
+      if (inpConcNome) inpConcNome.value = conc ? (conc.nome + ' (' + conc.id + ')') : concursoId;
+      if (inpCargoId) inpCargoId.value = '';
+      if (inpCargoNome) inpCargoNome.value = '';
+      if (inpVagas) inpVagas.value = '0';
+      if (inpCsv) inpCsv.value = '';
+
+      modal.style.display = 'flex';
+    }
+
+    function fecharModalCargoAdmin() {
+      var modal = document.getElementById('modalNovoCargoAdmin');
+      if (modal) modal.style.display = 'none';
+    }
+
+    async function salvarNovoCargoAdmin(e) {
+      if (e) e.preventDefault();
+      var concursoId = document.getElementById('inputCargoConcursoId').value;
+      var cargoId = (document.getElementById('inputCargoId').value || '').toLowerCase().trim().replace(/[^a-z0-9_]/g, '_');
+      var nome = (document.getElementById('inputCargoNome').value || '').trim();
+      var nivel = (document.getElementById('inputCargoNivel').value || 'Superior').trim();
+      var vagas = parseInt(document.getElementById('inputCargoVagas').value, 10) || 0;
+      var cr = (document.getElementById('inputCargoCr').value || 'Sim').trim();
+      var csvPath = (document.getElementById('inputCargoCsvPath').value || '').trim();
+
+      if (!concursoId || !cargoId || !nome) {
+        alert('Por favor, preencha o ID e o Nome do Cargo.');
+        return;
+      }
+
+      var cargoObj = {
+        id: cargoId,
+        nome: nome,
+        nivel: nivel,
+        vagas_imediatas: vagas,
+        cr: cr,
+        csv_path: csvPath
+      };
+
+      if (typeof CertamStore !== 'undefined') {
+        await CertamStore.salvarCargo(concursoId, cargoObj);
+      }
+
+      fecharModalCargoAdmin();
+      mostrarAlerta('✓ Cargo "' + nome + '" cadastrado com sucesso!', 'sucesso');
+      await renderizarAdminConcursosECargos();
+    }
+
+    async function excluirConcursoAdmin(concursoId) {
+      if (!confirm('Tem certeza que deseja excluir o concurso "' + concursoId + '" e todos os seus cargos vinculados?')) {
+        return;
+      }
+      if (typeof CertamStore !== 'undefined') {
+        await CertamStore.excluirConcurso(concursoId);
+      }
+      mostrarAlerta('Concurso excluído com sucesso.', 'aviso');
+      await renderizarAdminConcursosECargos();
+    }
+
+    async function excluirCargoAdmin(concursoId, cargoId) {
+      if (!confirm('Tem certeza que deseja excluir o cargo "' + cargoId + '" deste concurso?')) {
+        return;
+      }
+      if (typeof CertamStore !== 'undefined') {
+        await CertamStore.excluirCargo(concursoId, cargoId);
+      }
+      mostrarAlerta('Cargo excluído com sucesso.', 'aviso');
+      await renderizarAdminConcursosECargos();
+    }
+
+    // ===================================================================
     // IMPORTADOR DE PLANILHA EXCEL / CSV (.XLSX) - ADMIN
     // ===================================================================
     var IMPORTADOR_ESTADO = {
@@ -11285,32 +11784,62 @@
     };
 
     async function carregarConcursosImportador() {
-      var select = document.getElementById('importarConcursoSelect');
-      if (!select) return;
+      var selectConc = document.getElementById('importarConcursoSelect');
+      if (!selectConc) return;
 
-      if (!supabaseClient) return;
-
-      try {
-        var res = await supabaseClient
-          .from('concursos')
-          .select('*')
-          .order('ativo', { ascending: false })
-          .order('created_at', { ascending: false });
-
-        if (res && res.data && res.data.length > 0) {
-          select.innerHTML = '';
-          res.data.forEach(function(c) {
-            var opt = document.createElement('option');
-            opt.value = c.id;
-            opt.textContent = (c.nome || c.id) + ' (' + c.id + ')' + (c.ativo ? ' [Ativo]' : ' [Inativo]');
-            if (c.id === (URL_PARAMS_LOTE.concurso || CONCURSO_ID_PADRAO)) {
-              opt.selected = true;
-            }
-            select.appendChild(opt);
-          });
+      var concursos = [];
+      if (typeof CertamStore !== 'undefined') {
+        try {
+          concursos = await CertamStore.carregarDoSupabase();
+        } catch(e) {
+          concursos = CertamStore.getConcursos();
         }
-      } catch(err) {
-        console.warn('Erro ao carregar lista de concursos no importador:', err);
+      }
+      if (!concursos || concursos.length === 0) {
+        if (typeof CertamStore !== 'undefined') {
+          concursos = CertamStore.getConcursos();
+        }
+      }
+
+      selectConc.innerHTML = '';
+      (concursos || []).forEach(function(c) {
+        var opt = document.createElement('option');
+        opt.value = c.id;
+        opt.textContent = (c.nome || c.id) + ' (' + c.id + ')';
+        if (c.id === (URL_PARAMS_LOTE.get('concurso') || 'tjrs')) {
+          opt.selected = true;
+        }
+        selectConc.appendChild(opt);
+      });
+
+      atualizarCargosImportador();
+    }
+
+    function atualizarCargosImportador() {
+      var selectConc = document.getElementById('importarConcursoSelect');
+      var selectCargo = document.getElementById('importarCargoSelect');
+      if (!selectConc || !selectCargo) return;
+
+      var concId = selectConc.value;
+      var concurso = (typeof CertamStore !== 'undefined') ? CertamStore.getConcurso(concId) : null;
+      var cargos = (concurso && concurso.cargos) ? concurso.cargos : [];
+
+      selectCargo.innerHTML = '';
+      if (cargos.length === 0) {
+        var optDef = document.createElement('option');
+        optDef.value = 'geral';
+        optDef.textContent = 'Geral / Único';
+        selectCargo.appendChild(optDef);
+      } else {
+        cargos.forEach(function(cg) {
+          var opt = document.createElement('option');
+          opt.value = cg.id;
+          opt.textContent = cg.nome + ' (' + (cg.nivel || 'Superior') + ')';
+          if (cg.id === URL_PARAMS_LOTE.get('cargo')) {
+            opt.selected = true;
+          }
+          selectCargo.appendChild(opt);
+        });
       }
     }
 
@@ -11851,7 +12380,9 @@
       }
 
       var selConcurso = document.getElementById('importarConcursoSelect');
-      var concursoId = (selConcurso && selConcurso.value) ? selConcurso.value : (URL_PARAMS_LOTE.concurso || CONCURSO_ID_PADRAO);
+      var selCargo = document.getElementById('importarCargoSelect');
+      var concursoId = (selConcurso && selConcurso.value) ? selConcurso.value : (URL_PARAMS_LOTE.get('concurso') || 'tjrs');
+      var cargoId = (selCargo && selCargo.value) ? selCargo.value : (URL_PARAMS_LOTE.get('cargo') || 'analista_judiciario');
 
       var btnSinc = document.getElementById('btnSincronizarSupabaseImportador');
       var containerProg = document.getElementById('containerProgressoImportador');
@@ -11876,10 +12407,12 @@
       var respostasRows = [];
 
       IMPORTADOR_ESTADO.candidatos.forEach(function(cand) {
-        var baseId = cand.id || (concursoId + '-' + cand.classificacao_ampla);
+        var baseId = cand.id || (concursoId + '-' + cargoId + '-' + cand.classificacao_ampla);
         candidatosBaseRows.push({
           id: baseId,
           concurso_id: cand.concurso_id || concursoId,
+          cargo_id: cargoId,
+          cargo: cand.cargo || cargoId,
           nome: cand.nome,
           cpf: cand.cpf || '',
           email: cand.email || '',
