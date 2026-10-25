@@ -11335,17 +11335,57 @@
     }
 
     function formatarDataImportador(val) {
-      if (!val) return '';
-      if (val instanceof Date) {
-        return val.toLocaleDateString('pt-BR');
+      if (val === null || val === undefined) return null;
+      var str = String(val).trim();
+      if (!str || str === '-' || str.toLowerCase() === 'null') return null;
+
+      // 1. Instância de Date
+      if (val instanceof Date && !isNaN(val.getTime())) {
+        var a = val.getFullYear();
+        var m = String(val.getMonth() + 1).padStart(2, '0');
+        var d = String(val.getDate()).padStart(2, '0');
+        return a + '-' + m + '-' + d;
       }
-      if (typeof val === 'number') {
-        try {
-          var dataJs = new Date(Math.round((val - 25569) * 86400 * 1000));
-          return dataJs.toLocaleDateString('pt-BR');
-        } catch(e) {}
+
+      // 2. Número serial de data do Excel (ex: 34389 = 24/02/1994)
+      if (typeof val === 'number' || (/^\d{4,5}(\.\d+)?$/.test(str) && !str.includes('/') && !str.includes('-'))) {
+        var num = parseFloat(str);
+        if (!isNaN(num) && num > 1000 && num < 100000) {
+          try {
+            var ms = Math.round((num - 25569) * 86400 * 1000);
+            var dt = new Date(ms);
+            if (!isNaN(dt.getTime())) {
+              var ano = dt.getUTCFullYear();
+              var mes = String(dt.getUTCMonth() + 1).padStart(2, '0');
+              var dia = String(dt.getUTCDate()).padStart(2, '0');
+              return ano + '-' + mes + '-' + dia;
+            }
+          } catch(e) {}
+        }
       }
-      return String(val).trim();
+
+      // 3. Formato ISO YYYY-MM-DD (ou YYYY-MM-DDTHH:mm:ss)
+      var matchIso = str.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
+      if (matchIso) {
+        var aIso = matchIso[1];
+        var mIso = matchIso[2].padStart(2, '0');
+        var dIso = matchIso[3].padStart(2, '0');
+        return aIso + '-' + mIso + '-' + dIso;
+      }
+
+      // 4. Formato brasileiro DD/MM/YYYY ou D/M/YY
+      var matchBr = str.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})/);
+      if (matchBr) {
+        var diaBr = matchBr[1].padStart(2, '0');
+        var mesBr = matchBr[2].padStart(2, '0');
+        var anoBr = matchBr[3];
+        if (anoBr.length === 2) {
+          anoBr = (parseInt(anoBr, 10) >= 30 ? '19' : '20') + anoBr;
+        }
+        return anoBr + '-' + mesBr + '-' + diaBr;
+      }
+
+      return null;
     }
 
     function aoSelecionarArquivoExcel(e) {
@@ -11422,7 +11462,7 @@
           var colOrdemNom = -1, colVagaChamada = -1;
           var colNotaFinal = -1, colNotaPort = -1, colNotaLeg = -1, colNotaInfo = -1;
           var colNotaComum = -1, colNotaConst = -1, colNotaAdm = -1, colNotaCivil = -1, colNotaPenal = -1, colNotaEspec = -1;
-          var colCpf = -1, colEmail = -1, colWhats = -1, colNasc = -1;
+          var colCpf = -1, colEmail = -1, colWhats = -1, colNasc = -1, col60Mais = -1;
           var colLoteCham = -1, colDataConv = -1, colStatus = -1, colLotacao = -1, colDataNom = -1;
           var colIntencao = -1;
           var colComarcaPref = -1, colRegiao = -1, colOutrosConcursos = -1;
@@ -11504,6 +11544,8 @@
               colWhats = idx;
             } else if (colNasc === -1 && (ht.includes('nasc') || ht.includes('data nasc'))) {
               colNasc = idx;
+            } else if (col60Mais === -1 && (ht.includes('60') || ht.includes('idoso'))) {
+              col60Mais = idx;
             }
           });
 
@@ -11593,7 +11635,8 @@
               classificacao_ampla: classAmpla,
               nome: rawNome,
               inscricao: (colInscricao !== -1 && r[colInscricao]) ? String(r[colInscricao]).trim() : '',
-              data_nascimento: (colNasc !== -1 && r[colNasc]) ? formatarDataImportador(r[colNasc]) : '',
+              data_nascimento: (colNasc !== -1 && r[colNasc]) ? formatarDataImportador(r[colNasc]) : null,
+              acima_60: (col60Mais !== -1 && r[col60Mais]) ? (String(r[col60Mais]).trim().toLowerCase() === 'sim' || r[col60Mais] === true) : false,
               cota: cotaNormalizada,
               classificacao_cota: (colClassCota !== -1 && r[colClassCota] !== undefined) ? parseNumeroImportador(r[colClassCota]) : null,
               ordem_nomeacao: candOrdemNom ? Math.round(candOrdemNom) : null,
@@ -11844,7 +11887,8 @@
           tipo: cand.cota || 'Ampla',
           cota: cand.cota || 'Ampla',
           inscricao: cand.inscricao || null,
-          data_nascimento: cand.data_nascimento || null,
+          data_nascimento: formatarDataImportador(cand.data_nascimento),
+          acima_60: !!cand.acima_60,
           classificacao_ampla: cand.classificacao_ampla || null,
           classificacao_cota: cand.classificacao_cota || null,
           ordem_nomeacao: cand.ordem_nomeacao || null,
@@ -11860,10 +11904,10 @@
           nota_espec: cand.nota_espec !== undefined ? cand.nota_espec : null,
           nota_final: cand.nota_final !== undefined ? cand.nota_final : null,
           lote_chamada: cand.lote_chamada || null,
-          data_convocacao: cand.data_convocacao || null,
+          data_convocacao: formatarDataImportador(cand.data_convocacao),
           status_nomeacao: cand.status_nomeacao || 'Aguardando',
           lotacao_assumida: cand.lotacao_assumida || null,
-          data_nomeacao: cand.data_nomeacao || null
+          data_nomeacao: formatarDataImportador(cand.data_nomeacao)
         });
 
         // Só sincroniza em respostas se o candidato possuir manifestação ou escolhas concretas
@@ -11891,7 +11935,7 @@
               status_nomeacao: cand.status_nomeacao || 'Aguardando',
               lote_chamada: cand.lote_chamada,
               lotacao_assumida: cand.lotacao_assumida,
-              data_nomeacao: cand.data_nomeacao,
+              data_nomeacao: formatarDataImportador(cand.data_nomeacao),
               nota_port: cand.nota_port,
               nota_leg: cand.nota_leg,
               nota_info: cand.nota_info,
@@ -11915,7 +11959,6 @@
           var end = Math.min(start + TAMANHO_LOTE, total);
 
           var chunkCandidatos = candidatosBaseRows.slice(start, end);
-          var chunkRespostas = respostasRows.slice(start, end);
 
           if (labelStatus) labelStatus.textContent = 'Sincronizando lote ' + (loteIdx + 1) + ' de ' + totalLotes + '...';
           if (detalhe) detalhe.textContent = 'Processando registros de ' + (start + 1) + ' a ' + end + ' no concurso ' + concursoId;
@@ -11923,15 +11966,22 @@
           var res1 = await supabaseClient.from('candidatos_base').upsert(chunkCandidatos, { onConflict: 'id' });
           if (res1.error) throw res1.error;
 
-          if (chunkRespostas.length > 0) {
-            var res2 = await supabaseClient.from('respostas').upsert(chunkRespostas, { onConflict: 'id' });
-            if (res2.error) throw res2.error;
-          }
-
           processados = end;
           var pct = Math.round((processados / total) * 100);
           if (barraProg) barraProg.style.width = pct + '%';
           if (porcentagem) porcentagem.textContent = pct + '%';
+        }
+
+        // Sincroniza respostas de intenções de candidatos se houver
+        if (respostasRows.length > 0) {
+          try {
+            for (var rIdx = 0; rIdx < respostasRows.length; rIdx += TAMANHO_LOTE) {
+              var chunkR = respostasRows.slice(rIdx, rIdx + TAMANHO_LOTE);
+              await supabaseClient.from('respostas').upsert(chunkR, { onConflict: 'id' });
+            }
+          } catch(eResp) {
+            console.warn('Aviso ao sincronizar respostas:', eResp);
+          }
         }
 
         // Também sincroniza a Central Global de Candidatos em configuracoes
@@ -11949,18 +11999,36 @@
               vaga: c.ordem_nomeacao || (i + 1),
               classificacao_ampla: c.classificacao_ampla || (i + 1),
               classificacao_cota: c.classificacao_cota || null,
+              ordem_nomeacao: c.ordem_nomeacao || null,
+              vaga_chamada: c.vaga_chamada || (c.ordem_nomeacao ? (c.ordem_nomeacao + 'º ' + (c.cota || 'Ampla')) : null),
+              data_nascimento: formatarDataImportador(c.data_nascimento),
+              acima_60: !!c.acima_60,
+              inscricao: c.inscricao || '',
+              nota_port: c.nota_port !== undefined ? c.nota_port : null,
+              nota_leg: c.nota_leg !== undefined ? c.nota_leg : null,
+              nota_info: c.nota_info !== undefined ? c.nota_info : null,
+              nota_comum: c.nota_comum !== undefined ? c.nota_comum : null,
+              nota_const: c.nota_const !== undefined ? c.nota_const : null,
+              nota_adm: c.nota_adm !== undefined ? c.nota_adm : null,
+              nota_civil: c.nota_civil !== undefined ? c.nota_civil : null,
+              nota_penal: c.nota_penal !== undefined ? c.nota_penal : null,
+              nota_espec: c.nota_espec !== undefined ? c.nota_espec : null,
               nota_final: c.nota_final || null,
               status_nomeacao: c.status_nomeacao || 'Aguardando',
+              lote_chamada: c.lote_chamada || null,
+              data_convocacao: formatarDataImportador(c.data_convocacao),
               lotacao_assumida: c.lotacao_assumida || null,
+              data_nomeacao: formatarDataImportador(c.data_nomeacao),
+              assumira: c.assumira || '',
               intencao: c.intencao || 'indefinido',
               comarca_preferencia: c.comarca_preferencia || '',
               regiao_preferencia: c.regiao_preferencia || '',
               outros_concursos: c.outros_concursos || '',
               cargo: c.cargo || '',
               possui_fg_cc: c.possui_fg_cc || '',
-              fg_cc_comarca_atual: c.fg_cc_comarca_atual || '',
-              fg_cc_unidade_atual: c.fg_cc_unidade_atual || '',
-              fg_cc_registro_funcional: c.fg_cc_registro_funcional || '',
+              fg_cc_comarca_atual: c.fg_cc_comarca_atual || c.comarca_atual || '',
+              fg_cc_unidade_atual: c.fg_cc_unidade_atual || c.unidade_atual || '',
+              fg_cc_registro_funcional: c.fg_cc_registro_funcional || c.registro_funcional || '',
               suplente: c.status_nomeacao !== 'Convocado Titular'
             };
           });
@@ -11976,7 +12044,7 @@
         }
 
         if (labelStatus) labelStatus.textContent = '✓ Sincronização concluída com sucesso!';
-        if (detalhe) detalhe.textContent = total.toLocaleString('pt-BR') + ' registros sincronizados em public.candidatos_base e public.respostas';
+        if (detalhe) detalhe.textContent = total.toLocaleString('pt-BR') + ' registros sincronizados em public.candidatos_base e banco_central_candidatos';
 
         if (alerta) {
           alerta.className = 'p-4 rounded-xl text-xs font-semibold bg-emerald-50 border border-emerald-300 text-emerald-950 flex items-center gap-2';
