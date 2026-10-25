@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { AuthProvider, useAuth } from './store/authContext';
+import { AuthProvider } from './store/authContext';
 import { Sidebar } from './components/Sidebar';
 import { Header } from './components/Header';
 import { PortalHome } from './pages/PortalHome';
@@ -9,8 +9,60 @@ import { AdminPanel } from './pages/AdminPanel';
 import { PrivacyPolicy } from './pages/PrivacyPolicy';
 import { certamStore } from './store/certamStore';
 
-export const AppContent: React.FC = () => {
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error?: Error;
+}
 
+class ErrorBoundary extends React.Component<{ children: React.ReactNode }, ErrorBoundaryState> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error('CERTAM ErrorBoundary:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen bg-[#07192B] text-white flex items-center justify-center p-6 text-center">
+          <div className="max-w-md bg-[#0C2640] p-8 rounded-2xl border border-teal-500/30 space-y-4 shadow-2xl">
+            <div className="w-12 h-12 mx-auto rounded-xl bg-teal-500/20 text-[#2DD4AA] flex items-center justify-center font-bold text-xl">
+              ✓
+            </div>
+            <h2 className="text-xl font-bold font-serif">CERTAM • Portal do Concurseiro</h2>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Foi identificado um estado inconsistente no cache do navegador. Clique no botão abaixo para restaurar o portal com segurança.
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                try {
+                  localStorage.clear();
+                } catch {
+                  // ignore
+                }
+                window.location.href = '/';
+              }}
+              className="bg-[#2DD4AA] text-slate-950 font-bold px-5 py-2.5 rounded-xl text-xs hover:bg-[#20BE96] transition-all cursor-pointer shadow-md"
+            >
+              Restaurar Dados e Recarregar Portal
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+export const AppContent: React.FC = () => {
   // Navigation routing state
   const [currentView, setCurrentView] = useState<'portal' | 'concurso' | 'lote' | 'admin' | 'politica'>('portal');
   const [concursoId, setConcursoId] = useState<string>('tjrs_2024');
@@ -18,19 +70,24 @@ export const AppContent: React.FC = () => {
   const [initialTab, setInitialTab] = useState<string>('dashboard');
   const [sidebarMobileOpen, setSidebarMobileOpen] = useState(false);
 
-  // Read URL query params on initial mount
+  // Read URL query params and path on initial mount
   useEffect(() => {
     try {
+      const pathname = window.location.pathname.toLowerCase();
       const params = new URLSearchParams(window.location.search);
       const urlId = params.get('id');
       const urlCargo = params.get('cargo');
       const urlTab = params.get('tab');
       const urlAdmin = params.get('admin');
 
-      if (urlAdmin === '1') {
+      if (urlAdmin === '1' || pathname.includes('admin')) {
         setCurrentView('admin');
-      } else if (urlId) {
-        setConcursoId(urlId);
+      } else if (urlTab === 'lote' || pathname.includes('lote')) {
+        setCurrentView('lote');
+      } else if (urlTab === 'politica' || pathname.includes('politica')) {
+        setCurrentView('politica');
+      } else if (urlId || pathname.includes('concurso')) {
+        if (urlId) setConcursoId(urlId);
         if (urlCargo) setCargoId(urlCargo);
         if (urlTab) setInitialTab(urlTab);
         setCurrentView('concurso');
@@ -185,8 +242,10 @@ export const AppContent: React.FC = () => {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <AppContent />
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }

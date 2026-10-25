@@ -1,3 +1,27 @@
 {
-  "cleanUrls": true
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "cleanUrls": true,
+  "rewrites": [
+    {
+      "source": "/admin(.*)",
+      "destination": "/index.html?admin=1"
+    },
+    {
+      "source": "/lote(.*)",
+      "destination": "/index.html?tab=lote"
+    },
+    {
+      "source": "/concurso(.*)",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/politica(.*)",
+      "destination": "/index.html?tab=politica"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
 }
