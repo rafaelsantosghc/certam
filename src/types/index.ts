@@ -83,16 +83,49 @@ export interface Lote {
   candidatos_ids: string[];
 }
 
+export type FaqCategoria =
+  | 'Remuneração e Benefícios'
+  | 'Escolha de Lotação'
+  | 'Posse e Documentos'
+  | 'Carreira e Teletrabalho'
+  | 'Recursos e Classificação'
+  | 'Geral';
+
+export interface FaqItem {
+  id: string;
+  concurso_id?: string;
+  cargo_id?: string;
+  categoria: FaqCategoria;
+  pergunta: string;
+  resposta: string;
+  destaque?: boolean;
+  data_atualizacao?: string;
+  tags?: string[];
+}
+
+export type CanalChatId = 'geral' | 'lotacao' | 'posse' | 'recursos';
+
 export interface ChatMensagem {
   id: string;
   concurso_id: string;
   cargo_id: string;
+  canal_id?: CanalChatId;
   autor: string;
   email: string;
   avatar_cor: string;
   texto: string;
   data_hora: string;
   is_admin?: boolean;
+  is_fixado?: boolean;
+  posicao_candidato?: number;
+  comarca_preferida?: string;
+  curtidas?: number;
+}
+
+export interface UsuarioInscricao {
+  concurso_id: string;
+  cargo_id: string;
+  data_inscricao?: string;
 }
 
 export interface Usuario {
@@ -101,4 +134,10 @@ export interface Usuario {
   avatar?: string;
   is_admin: boolean;
   candidato_id?: string;
+  telefone?: string;
+  whatsapp?: string;
+  cpf?: string;
+  concursos_inscritos?: UsuarioInscricao[];
 }
+
+

@@ -1,11 +1,12 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { certamStore } from '../store/certamStore';
 import { lotesStore } from '../store/lotesStore';
-import { chatStore } from '../store/chatStore';
 import { useAuth } from '../store/authContext';
-import { Concurso, Cargo, Candidato, ChatMensagem } from '../types';
+import { Concurso, Cargo, Candidato } from '../types';
 import { COMARCAS_RS } from '../data/comarcas';
 import { RegionalMapSvg } from '../components/RegionalMapSvg';
+import { CommunityForum } from '../components/CommunityForum';
+import { FaqSection } from '../components/FaqSection';
 import {
   BarChart3,
   ListOrdered,
@@ -20,6 +21,8 @@ import {
   CheckCircle2,
   Lock,
   Save,
+  MessageSquare,
+  HelpCircle,
 } from 'lucide-react';
 
 interface ConcursoCargoDashboardProps {
@@ -45,9 +48,15 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
     return certamStore.getCargo(concurso.id, cargoId) || concurso.cargos[0];
   }, [concurso, cargoId]);
 
-  const [abaAtiva, setAbaAtiva] = useState<'dashboard' | 'classificacao' | 'candidato'>(
-    (initialTab as 'dashboard' | 'classificacao' | 'candidato') || 'dashboard'
+  const [abaAtiva, setAbaAtiva] = useState<'dashboard' | 'classificacao' | 'candidato' | 'forum' | 'faq'>(
+    (initialTab as any) || 'dashboard'
   );
+
+  useEffect(() => {
+    if (initialTab) {
+      setAbaAtiva(initialTab as any);
+    }
+  }, [initialTab]);
 
   // Candidates for this cargo
   const [candidatos, setCandidatos] = useState<Candidato[]>(() =>
@@ -59,21 +68,6 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
     setCandidatos(lotesStore.getCandidatos(concurso.id, cargo.id));
   }, [concurso.id, cargo.id]);
 
-  // Chat for this cargo
-  const [mensagensChat, setMensagensChat] = useState<ChatMensagem[]>(() =>
-    chatStore.getMensagens(concurso.id, cargo.id)
-  );
-  const [novoTextoChat, setNovoTextoChat] = useState('');
-
-  useEffect(() => {
-    setMensagensChat(chatStore.getMensagens(concurso.id, cargo.id));
-    const handleChatUpdate = () => {
-      setMensagensChat(chatStore.getMensagens(concurso.id, cargo.id));
-    };
-    window.addEventListener('certam_chat_updated', handleChatUpdate);
-    return () => window.removeEventListener('certam_chat_updated', handleChatUpdate);
-  }, [concurso.id, cargo.id]);
-
   // Candidate detail modal state
   const [candidatoModal, setCandidatoModal] = useState<Candidato | null>(null);
 
@@ -83,16 +77,6 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
   const showToast = (msg: string) => {
     setToastMsg(msg);
     setTimeout(() => setToastMsg(null), 3000);
-  };
-
-  // Chat send
-  const handleEnviarChat = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!novoTextoChat.trim()) return;
-    const autor = usuario ? usuario.nome : 'Candidato Participante';
-    const email = usuario ? usuario.email : 'candidato@email.com';
-    chatStore.enviarMensagem(concurso.id, cargo.id, autor, email, novoTextoChat, isAdmin);
-    setNovoTextoChat('');
   };
 
   // KPIs
@@ -294,6 +278,32 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
             <UserCheck className="w-4 h-4" />
             <span>Área do Candidato &amp; Comarcas</span>
           </button>
+
+          <button
+            type="button"
+            onClick={() => setAbaAtiva('forum')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 ${
+              abaAtiva === 'forum'
+                ? 'bg-[#0C2640] text-[#2DD4AA]'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            <MessageSquare className="w-4 h-4" />
+            <span>Fórum &amp; Chat da Comunidade</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setAbaAtiva('faq')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 ${
+              abaAtiva === 'faq'
+                ? 'bg-[#0C2640] text-[#2DD4AA]'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            <HelpCircle className="w-4 h-4" />
+            <span>Dúvidas &amp; FAQ</span>
+          </button>
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
@@ -469,53 +479,21 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
               </div>
             </div>
 
-            {/* COLUNA 3: CHAT DOS CANDIDATOS DO CARGO (lg:col-span-3) */}
-            <div className="lg:col-span-3 bg-white rounded-2xl border border-slate-200 card-shadow p-5 flex flex-col h-[600px]">
-              <div className="pb-3 border-b border-slate-100 mb-3">
-                <h3 className="text-base font-bold text-slate-900 leading-tight">
-                  Chat dos Candidatos
-                </h3>
-                <span className="text-[11px] text-teal-700 font-semibold truncate block">
-                  Comunidade exclusiva deste cargo
-                </span>
-              </div>
-
-              {/* Lista de Mensagens */}
-              <div className="flex-1 overflow-y-auto space-y-3 pr-1 text-xs">
-                {mensagensChat.map((msg) => (
-                  <div key={msg.id} className="p-2.5 rounded-xl bg-slate-50 border border-slate-100 space-y-1">
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-slate-800 text-[11px] flex items-center gap-1">
-                        {msg.autor}
-                        {msg.is_admin && (
-                          <span className="px-1 py-0.2 rounded text-[9px] bg-amber-100 text-amber-800 font-mono">
-                            ADMIN
-                          </span>
-                        )}
-                      </span>
-                      <span className="text-[10px] text-slate-400">{msg.data_hora}</span>
-                    </div>
-                    <p className="text-slate-600 text-xs leading-relaxed">{msg.texto}</p>
-                  </div>
-                ))}
-              </div>
-
-              {/* Caixa de Envio */}
-              <form onSubmit={handleEnviarChat} className="mt-3 pt-3 border-t border-slate-100 flex items-center gap-2">
-                <input
-                  type="text"
-                  value={novoTextoChat}
-                  onChange={(e) => setNovoTextoChat(e.target.value)}
-                  placeholder="Escreva para a turma..."
-                  className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-[#2DD4AA] focus:outline-none"
-                />
-                <button
-                  type="submit"
-                  className="bg-[#2DD4AA] hover:bg-teal-400 text-slate-950 font-bold px-3 py-2 rounded-xl text-xs shadow-xs transition-colors cursor-pointer shrink-0"
-                >
-                  <Send className="w-3.5 h-3.5" />
-                </button>
-              </form>
+            {/* COLUNA 3: FÓRUM & CHAT DA COMUNIDADE DO CARGO (lg:col-span-3) */}
+            <div className="lg:col-span-3 flex flex-col gap-2">
+              <CommunityForum
+                concursoId={concurso.id}
+                cargoId={cargo.id}
+                cargoNome={cargo.nome}
+                isCompact={true}
+              />
+              <button
+                type="button"
+                onClick={() => setAbaAtiva('forum')}
+                className="w-full py-2 px-3 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold flex items-center justify-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
+              >
+                <span>Expandir Fórum em Tela Cheia ↗</span>
+              </button>
             </div>
           </div>
         </section>
@@ -969,6 +947,34 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
               </div>
             </div>
           )}
+        </section>
+      )}
+
+      {/* =================================================================== */}
+      {/* ABA 4: FÓRUM & CHAT COMPLETO DA COMUNIDADE                          */}
+      {/* =================================================================== */}
+      {abaAtiva === 'forum' && (
+        <section className="space-y-6">
+          <CommunityForum
+            concursoId={concurso.id}
+            cargoId={cargo.id}
+            cargoNome={cargo.nome}
+            isCompact={false}
+          />
+        </section>
+      )}
+
+      {/* =================================================================== */}
+      {/* ABA 5: DÚVIDAS FREQUENTES & BASE DE CONHECIMENTO (FAQ)              */}
+      {/* =================================================================== */}
+      {abaAtiva === 'faq' && (
+        <section className="space-y-6">
+          <FaqSection
+            concursoId={concurso.id}
+            cargoId={cargo.id}
+            concursoNome={concurso.nome}
+            onOpenChat={() => setAbaAtiva('forum')}
+          />
         </section>
       )}
 

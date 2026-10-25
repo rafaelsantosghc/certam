@@ -1,8 +1,9 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { certamStore } from '../store/certamStore';
 import { lotesStore } from '../store/lotesStore';
+import { faqStore } from '../store/faqStore';
 import { useAuth } from '../store/authContext';
-import { Concurso, Cargo, Candidato } from '../types';
+import { Concurso, Cargo, Candidato, FaqItem, FaqCategoria } from '../types';
 import * as XLSX from 'xlsx';
 import {
   Plus,
@@ -12,10 +13,15 @@ import {
   FileSpreadsheet,
   Users,
   Building,
+  Pencil,
+  Check,
+  HelpCircle,
+  Bookmark,
+  Sparkles,
 } from 'lucide-react';
 
 interface AdminPanelProps {
-  initialTab?: 'concursos' | 'importar' | 'candidatos';
+  initialTab?: 'concursos' | 'importar' | 'candidatos' | 'faq';
   onNavigate: (view: string, params?: { concursoId?: string; cargoId?: string; tab?: string }) => void;
 }
 
@@ -23,15 +29,53 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   initialTab = 'concursos',
   onNavigate,
 }) => {
-  const [abaAdmin, setAbaAdmin] = useState<'concursos' | 'importar' | 'candidatos'>(initialTab);
+  const [abaAdmin, setAbaAdmin] = useState<'concursos' | 'importar' | 'candidatos' | 'faq'>(initialTab);
 
   const [concursos, setConcursos] = useState<Concurso[]>(() => certamStore.getConcursos());
   const [busca, setBusca] = useState('');
 
-  // Modais
+  // Modais e Estados de FAQ
+  const [faqs, setFaqs] = useState<FaqItem[]>(() => faqStore.getFaqs());
+  const [buscaFaq, setBuscaFaq] = useState('');
+  const [modalNovoFaqAberto, setModalNovoFaqAberto] = useState(false);
+  const [modalEditarFaqAberto, setModalEditarFaqAberto] = useState(false);
+  const [faqEditandoId, setFaqEditandoId] = useState<string>('');
+  const [faqPergunta, setFaqPergunta] = useState('');
+  const [faqResposta, setFaqResposta] = useState('');
+  const [faqCategoria, setFaqCategoria] = useState<FaqCategoria>('Remuneração e Benefícios');
+  const [faqConcursoId, setFaqConcursoId] = useState<string>('tjrs_2024');
+  const [faqDestaque, setFaqDestaque] = useState(false);
+  const [faqTags, setFaqTags] = useState('');
+
+  useEffect(() => {
+    const handleFaqUpdate = () => setFaqs(faqStore.getFaqs());
+    window.addEventListener('certam_faq_updated', handleFaqUpdate);
+    return () => window.removeEventListener('certam_faq_updated', handleFaqUpdate);
+  }, []);
+
+  // Modais de Criação
   const [modalNovoConcursoAberto, setModalNovoConcursoAberto] = useState(false);
   const [modalNovoCargoAberto, setModalNovoCargoAberto] = useState(false);
   const [concursoAlvoId, setConcursoAlvoId] = useState<string>('');
+
+  // Modais de Edição
+  const [modalEditarConcursoAberto, setModalEditarConcursoAberto] = useState(false);
+  const [concursoEditando, setConcursoEditando] = useState<Concurso | null>(null);
+  const [editConcursoNome, setEditConcursoNome] = useState('');
+  const [editConcursoOrgao, setEditConcursoOrgao] = useState('');
+  const [editConcursoAno, setEditConcursoAno] = useState('');
+  const [editConcursoEdital, setEditConcursoEdital] = useState('');
+  const [editConcursoStatus, setEditConcursoStatus] = useState<Concurso['status']>('ativo');
+  const [editConcursoDesc, setEditConcursoDesc] = useState('');
+
+  const [modalEditarCargoAberto, setModalEditarCargoAberto] = useState(false);
+  const [cargoEditando, setCargoEditando] = useState<Cargo | null>(null);
+  const [cargoEditandoConcursoId, setCargoEditandoConcursoId] = useState<string>('');
+  const [editCargoNome, setEditCargoNome] = useState('');
+  const [editCargoNivel, setEditCargoNivel] = useState<Cargo['nivel']>('Superior');
+  const [editCargoVagas, setEditCargoVagas] = useState(0);
+  const [editCargoCr, setEditCargoCr] = useState(true);
+  const [editCargoAtivo, setEditCargoAtivo] = useState(true);
 
   // Form Novo Concurso
   const [formId, setFormId] = useState('');
@@ -129,6 +173,67 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     showToast('Cargo adicionado ao concurso!');
   };
 
+  // Abrir Modal de Edição de Concurso
+  const abrirEdicaoConcurso = (conc: Concurso) => {
+    setConcursoEditando(conc);
+    setEditConcursoNome(conc.nome);
+    setEditConcursoOrgao(conc.orgao);
+    setEditConcursoAno(conc.ano || '2024');
+    setEditConcursoEdital(conc.edital || '');
+    setEditConcursoStatus(conc.status || 'ativo');
+    setEditConcursoDesc(conc.descricao || '');
+    setModalEditarConcursoAberto(true);
+  };
+
+  // Salvar Edição de Concurso
+  const handleSalvarEdicaoConcurso = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!concursoEditando) return;
+    const atualizado: Concurso = {
+      ...concursoEditando,
+      nome: editConcursoNome,
+      orgao: editConcursoOrgao,
+      ano: editConcursoAno,
+      edital: editConcursoEdital,
+      status: editConcursoStatus,
+      descricao: editConcursoDesc,
+    };
+    certamStore.salvarConcurso(atualizado);
+    reloadData();
+    setModalEditarConcursoAberto(false);
+    showToast('Concurso atualizado com sucesso!');
+  };
+
+  // Abrir Modal de Edição de Cargo
+  const abrirEdicaoCargo = (cid: string, cg: Cargo) => {
+    setCargoEditandoConcursoId(cid);
+    setCargoEditando(cg);
+    setEditCargoNome(cg.nome);
+    setEditCargoNivel(cg.nivel);
+    setEditCargoVagas(cg.vagas_imediatas);
+    setEditCargoCr(cg.tem_cr);
+    setEditCargoAtivo(cg.ativo ?? true);
+    setModalEditarCargoAberto(true);
+  };
+
+  // Salvar Edição de Cargo
+  const handleSalvarEdicaoCargo = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!cargoEditando || !cargoEditandoConcursoId) return;
+    const atualizado: Cargo = {
+      ...cargoEditando,
+      nome: editCargoNome,
+      nivel: editCargoNivel,
+      vagas_imediatas: Number(editCargoVagas) || 0,
+      tem_cr: editCargoCr,
+      ativo: editCargoAtivo,
+    };
+    certamStore.salvarCargo(cargoEditandoConcursoId, atualizado);
+    reloadData();
+    setModalEditarCargoAberto(false);
+    showToast('Cargo atualizado com sucesso!');
+  };
+
   // Excluir Concurso
   const handleExcluirConcurso = (cid: string) => {
     if (confirm('Deseja realmente excluir este concurso e todos os seus cargos?')) {
@@ -144,6 +249,68 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       certamStore.excluirCargo(cid, gid);
       reloadData();
       showToast('Cargo removido.');
+    }
+  };
+
+  // FAQ Handlers
+  const handleSalvarNovoFaq = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!faqPergunta.trim() || !faqResposta.trim()) return;
+    const tagsArray = faqTags.split(',').map((t) => t.trim().toLowerCase()).filter(Boolean);
+    faqStore.salvarFaq({
+      id: `faq-${Date.now()}`,
+      pergunta: faqPergunta.trim(),
+      resposta: faqResposta.trim(),
+      categoria: faqCategoria,
+      concurso_id: faqConcursoId === 'geral' ? '' : faqConcursoId,
+      destaque: faqDestaque,
+      tags: tagsArray,
+    });
+    setModalNovoFaqAberto(false);
+    setFaqPergunta('');
+    setFaqResposta('');
+    setFaqTags('');
+    setFaqDestaque(false);
+    showToast('Dúvida adicionada à Central de FAQ!');
+  };
+
+  const abrirEdicaoFaq = (f: FaqItem) => {
+    setFaqEditandoId(f.id);
+    setFaqPergunta(f.pergunta);
+    setFaqResposta(f.resposta);
+    setFaqCategoria(f.categoria);
+    setFaqConcursoId(f.concurso_id || 'geral');
+    setFaqDestaque(Boolean(f.destaque));
+    setFaqTags(f.tags?.join(', ') || '');
+    setModalEditarFaqAberto(true);
+  };
+
+  const handleSalvarEdicaoFaq = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!faqEditandoId || !faqPergunta.trim() || !faqResposta.trim()) return;
+    const tagsArray = faqTags.split(',').map((t) => t.trim().toLowerCase()).filter(Boolean);
+    faqStore.salvarFaq({
+      id: faqEditandoId,
+      pergunta: faqPergunta.trim(),
+      resposta: faqResposta.trim(),
+      categoria: faqCategoria,
+      concurso_id: faqConcursoId === 'geral' ? '' : faqConcursoId,
+      destaque: faqDestaque,
+      tags: tagsArray,
+    });
+    setModalEditarFaqAberto(false);
+    showToast('Dúvida do FAQ atualizada!');
+  };
+
+  const handleAlternarDestaqueFaq = (f: FaqItem) => {
+    faqStore.salvarFaq({ ...f, destaque: !f.destaque });
+    showToast(f.destaque ? 'Destaque removido.' : 'Pergunta marcada como destaque!');
+  };
+
+  const handleExcluirFaq = (id: string) => {
+    if (confirm('Deseja realmente excluir esta dúvida do FAQ?')) {
+      faqStore.excluirFaq(id);
+      showToast('Dúvida removida do FAQ.');
     }
   };
 
@@ -308,16 +475,53 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             <Users className="w-4 h-4" />
             <span>Central de Candidatos</span>
           </button>
+
+          <button
+            type="button"
+            onClick={() => setAbaAdmin('faq')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              abaAdmin === 'faq'
+                ? 'bg-[#0C2640] text-[#2DD4AA]'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            <HelpCircle className="w-4 h-4" />
+            <span>Perguntas Frequentes (FAQ)</span>
+            <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-teal-500/20 text-[#2DD4AA] font-mono">
+              {faqs.length}
+            </span>
+          </button>
         </div>
 
-        <button
-          type="button"
-          onClick={() => setModalNovoConcursoAberto(true)}
-          className="bg-[#2DD4AA] hover:bg-[#20BE96] text-slate-950 font-extrabold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-xs cursor-pointer shrink-0"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Novo Concurso</span>
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          {abaAdmin === 'faq' ? (
+            <button
+              type="button"
+              onClick={() => {
+                setFaqPergunta('');
+                setFaqResposta('');
+                setFaqTags('');
+                setFaqDestaque(false);
+                setFaqCategoria('Remuneração e Benefícios');
+                setFaqConcursoId(concursos[0]?.id || 'tjrs_2024');
+                setModalNovoFaqAberto(true);
+              }}
+              className="bg-[#2DD4AA] hover:bg-[#20BE96] text-slate-950 font-extrabold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-xs cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Nova Dúvida / FAQ</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setModalNovoConcursoAberto(true)}
+              className="bg-[#2DD4AA] hover:bg-[#20BE96] text-slate-950 font-extrabold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-xs cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Novo Concurso</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* ============================================================== */}
@@ -366,6 +570,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   </div>
 
                   <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => abrirEdicaoConcurso(concurso)}
+                      className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold rounded-xl transition-colors cursor-pointer flex items-center gap-1.5 border border-slate-200"
+                      title="Editar dados deste concurso"
+                    >
+                      <Pencil className="w-3.5 h-3.5 text-slate-600" />
+                      <span>Editar Concurso</span>
+                    </button>
                     <button
                       type="button"
                       onClick={() => {
@@ -426,6 +639,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                                 className="text-xs text-[#135A7A] hover:underline font-semibold"
                               >
                                 Ver Dashboard
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => abrirEdicaoCargo(concurso.id, cg)}
+                                className="px-2 py-1 text-xs text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg font-semibold flex items-center gap-1 transition-colors cursor-pointer border border-slate-200"
+                                title="Editar dados deste cargo"
+                              >
+                                <Pencil className="w-3 h-3 text-slate-600" />
+                                <span>Editar</span>
                               </button>
                               <button
                                 type="button"
@@ -590,6 +812,161 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             <p className="text-xs text-slate-600 leading-relaxed">
               O gerenciamento detalhado de respostas de candidatos do lote TJRS (como intenção de assumir, desistência, comarcas preferidas e dados cadastrais) está sincronizado em tempo real no simulador de lotes.
             </p>
+          </div>
+        </section>
+      )}
+
+      {/* ============================================================== */}
+      {/* ABA 4: CENTRAL DE PERGUNTAS FREQUENTES (FAQ)                   */}
+      {/* ============================================================== */}
+      {abaAdmin === 'faq' && (
+        <section className="space-y-6">
+          {/* Header e Estatísticas do FAQ */}
+          <div className="bg-white rounded-2xl p-6 sm:p-8 border border-slate-200 card-shadow flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-teal-50 text-teal-800 border border-teal-200">
+                <Sparkles className="w-3.5 h-3.5 text-teal-600" />
+                <span>Base de Conhecimento Oficial</span>
+              </div>
+              <h2 className="text-xl font-bold font-serif text-slate-900">
+                Perguntas Frequentes &amp; Orientações Cadastradas
+              </h2>
+              <p className="text-xs text-slate-500">
+                Tire as dúvidas dos candidatos antes das audiências. Cadastre orientações sobre posse, salário, comarcas e recursos.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <div className="text-right">
+                <span className="text-2xl font-mono font-extrabold text-slate-900">{faqs.length}</span>
+                <span className="block text-[11px] text-slate-400">perguntas ativas</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setFaqPergunta('');
+                  setFaqResposta('');
+                  setFaqTags('');
+                  setFaqDestaque(false);
+                  setFaqCategoria('Remuneração e Benefícios');
+                  setFaqConcursoId(concursos[0]?.id || 'tjrs_2024');
+                  setModalNovoFaqAberto(true);
+                }}
+                className="bg-[#07192B] hover:bg-[#0C2640] text-white px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-sm transition-colors"
+              >
+                <Plus className="w-4 h-4 text-[#2DD4AA]" />
+                <span>Adicionar Dúvida</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Campo de Busca de Dúvidas */}
+          <div className="bg-white rounded-2xl p-4 border border-slate-200 card-shadow">
+            <div className="relative max-w-md">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={buscaFaq}
+                onChange={(e) => setBuscaFaq(e.target.value)}
+                placeholder="Buscar nas dúvidas e respostas cadastradas..."
+                className="w-full pl-10 pr-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-[#2DD4AA]"
+              />
+            </div>
+          </div>
+
+          {/* Lista de FAQs Cadastrados */}
+          <div className="space-y-3.5">
+            {faqs
+              .filter((f) => {
+                if (!buscaFaq.trim()) return true;
+                const b = buscaFaq.toLowerCase();
+                return (
+                  f.pergunta.toLowerCase().includes(b) ||
+                  f.resposta.toLowerCase().includes(b) ||
+                  f.categoria.toLowerCase().includes(b)
+                );
+              })
+              .map((faq) => {
+                const conc = concursos.find((c) => c.id === faq.concurso_id);
+                return (
+                  <div
+                    key={faq.id}
+                    className="bg-white rounded-2xl p-5 border border-slate-200 card-shadow hover:border-slate-300 transition-all space-y-3"
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                      <div className="space-y-1 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="px-2.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700">
+                            {faq.categoria}
+                          </span>
+                          <span className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-teal-50 text-teal-800 border border-teal-200">
+                            {conc ? conc.orgao : 'Geral / Todos os Concursos'}
+                          </span>
+                          {faq.destaque && (
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200 flex items-center gap-1">
+                              <Bookmark className="w-3 h-3 fill-amber-500 text-amber-500" />
+                              Destaque
+                            </span>
+                          )}
+                        </div>
+                        <h3 className="font-bold text-slate-900 text-sm sm:text-base">
+                          {faq.pergunta}
+                        </h3>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => handleAlternarDestaqueFaq(faq)}
+                          className={`p-2 rounded-xl text-xs font-semibold flex items-center gap-1 border transition-colors cursor-pointer ${
+                            faq.destaque
+                              ? 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100'
+                              : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                          }`}
+                          title="Alternar Destaque"
+                        >
+                          <Bookmark className={`w-3.5 h-3.5 ${faq.destaque ? 'fill-amber-500 text-amber-500' : ''}`} />
+                          <span className="hidden sm:inline">{faq.destaque ? 'Em Destaque' : 'Destacar'}</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => abrirEdicaoFaq(faq)}
+                          className="p-2 rounded-xl text-xs font-semibold bg-slate-50 text-slate-700 border border-slate-200 hover:bg-slate-100 flex items-center gap-1 transition-colors cursor-pointer"
+                          title="Editar Dúvida"
+                        >
+                          <Pencil className="w-3.5 h-3.5 text-slate-500" />
+                          <span className="hidden sm:inline">Editar</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleExcluirFaq(faq.id)}
+                          className="p-2 rounded-xl text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 flex items-center gap-1 transition-colors cursor-pointer"
+                          title="Excluir Dúvida"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+
+                    <p className="text-xs text-slate-600 leading-relaxed bg-slate-50 p-3.5 rounded-xl border border-slate-100 whitespace-pre-line">
+                      {faq.resposta}
+                    </p>
+
+                    {faq.tags && faq.tags.length > 0 && (
+                      <div className="flex flex-wrap items-center gap-1.5 pt-1 text-[11px] text-slate-400">
+                        <span>Tags:</span>
+                        {faq.tags.map((t) => (
+                          <span key={t} className="px-2 py-0.5 rounded bg-slate-100 text-slate-600 font-mono text-[10px]">
+                            #{t}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
           </div>
         </section>
       )}
@@ -830,6 +1207,499 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   className="px-5 py-2 rounded-xl text-xs font-bold bg-[#07192B] hover:bg-[#0C2640] text-white cursor-pointer"
                 >
                   Adicionar Cargo
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Editar Concurso */}
+      {modalEditarConcursoAberto && concursoEditando && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-teal-50 text-teal-700 flex items-center justify-center border border-teal-200">
+                  <Pencil className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-sm">Editar Concurso</h3>
+                  <p className="text-[11px] text-slate-500">ID: {concursoEditando.id}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setModalEditarConcursoAberto(false)}
+                className="w-7 h-7 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-700"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSalvarEdicaoConcurso} className="space-y-3.5">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Nome Completo do Concurso:
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editConcursoNome}
+                  onChange={(e) => setEditConcursoNome(e.target.value)}
+                  placeholder="ex: Concurso TJRS - Tribunal de Justiça do RS"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-[#2DD4AA]"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Órgão / Sigla:</label>
+                  <input
+                    type="text"
+                    required
+                    value={editConcursoOrgao}
+                    onChange={(e) => setEditConcursoOrgao(e.target.value)}
+                    placeholder="ex: TJRS"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Ano:</label>
+                  <input
+                    type="text"
+                    required
+                    value={editConcursoAno}
+                    onChange={(e) => setEditConcursoAno(e.target.value)}
+                    placeholder="ex: 2024"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Edital:</label>
+                  <input
+                    type="text"
+                    value={editConcursoEdital}
+                    onChange={(e) => setEditConcursoEdital(e.target.value)}
+                    placeholder="ex: Edital 01/2024"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Status:</label>
+                  <select
+                    value={editConcursoStatus}
+                    onChange={(e) => setEditConcursoStatus(e.target.value as any)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800"
+                  >
+                    <option value="ativo">Ativo (Em Andamento)</option>
+                    <option value="Homologado">Homologado</option>
+                    <option value="Convocando">Convocando</option>
+                    <option value="Inscrições Abertas">Inscrições Abertas</option>
+                    <option value="encerrado">Encerrado</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Descrição:</label>
+                <textarea
+                  rows={3}
+                  value={editConcursoDesc}
+                  onChange={(e) => setEditConcursoDesc(e.target.value)}
+                  placeholder="Informações adicionais do certame..."
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium text-slate-800 focus:ring-2 focus:ring-[#2DD4AA]"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setModalEditarConcursoAberto(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl text-xs font-bold bg-[#07192B] hover:bg-[#0C2640] text-white flex items-center gap-1.5 cursor-pointer shadow-sm hover:shadow"
+                >
+                  <Check className="w-3.5 h-3.5 text-[#2DD4AA]" />
+                  Salvar Alterações
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Editar Cargo */}
+      {modalEditarCargoAberto && cargoEditando && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-teal-50 text-teal-700 flex items-center justify-center border border-teal-200">
+                  <Pencil className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-sm">Editar Cargo</h3>
+                  <p className="text-[11px] text-slate-500 font-mono">ID: {cargoEditando.id}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setModalEditarCargoAberto(false)}
+                className="w-7 h-7 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-700"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSalvarEdicaoCargo} className="space-y-3.5">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Nome do Cargo:
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editCargoNome}
+                  onChange={(e) => setEditCargoNome(e.target.value)}
+                  placeholder="ex: Analista Judiciário"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-[#2DD4AA]"
+                />
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Nível:</label>
+                  <select
+                    value={editCargoNivel}
+                    onChange={(e) => setEditCargoNivel(e.target.value as Cargo['nivel'])}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800"
+                  >
+                    <option value="Superior">Superior</option>
+                    <option value="Médio">Médio</option>
+                    <option value="Técnico">Técnico</option>
+                    <option value="Fundamental">Fundamental</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Vagas:</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={editCargoVagas}
+                    onChange={(e) => setEditCargoVagas(Number(e.target.value))}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">CR:</label>
+                  <select
+                    value={editCargoCr ? 'Sim' : 'Não'}
+                    onChange={(e) => setEditCargoCr(e.target.value === 'Sim')}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800"
+                  >
+                    <option value="Sim">Sim (CR)</option>
+                    <option value="Não">Não</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Situação / Status:</label>
+                <select
+                  value={editCargoAtivo ? 'ativo' : 'inativo'}
+                  onChange={(e) => setEditCargoAtivo(e.target.value === 'ativo')}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800"
+                >
+                  <option value="ativo">Ativo (visível no portal e simulações)</option>
+                  <option value="inativo">Inativo (ocultar)</option>
+                </select>
+              </div>
+
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setModalEditarCargoAberto(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl text-xs font-bold bg-[#07192B] hover:bg-[#0C2640] text-white flex items-center gap-1.5 cursor-pointer shadow-sm hover:shadow"
+                >
+                  <Check className="w-3.5 h-3.5 text-[#2DD4AA]" />
+                  Salvar Cargo
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL NOVO FAQ */}
+      {modalNovoFaqAberto && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-teal-50 text-teal-700 flex items-center justify-center border border-teal-200">
+                  <HelpCircle className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-sm">Cadastrar Dúvida / FAQ</h3>
+                  <p className="text-[11px] text-slate-500">Adicione orientações práticas para os candidatos</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setModalNovoFaqAberto(false)}
+                className="w-7 h-7 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-700"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSalvarNovoFaq} className="space-y-3.5">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Pergunta / Título da Dúvida:
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={faqPergunta}
+                  onChange={(e) => setFaqPergunta(e.target.value)}
+                  placeholder="ex: Qual a remuneração inicial e auxílios?"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-[#2DD4AA]"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Categoria:</label>
+                  <select
+                    value={faqCategoria}
+                    onChange={(e) => setFaqCategoria(e.target.value as FaqCategoria)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800"
+                  >
+                    <option value="Remuneração e Benefícios">Remuneração e Benefícios</option>
+                    <option value="Escolha de Lotação">Escolha de Lotação</option>
+                    <option value="Posse e Documentos">Posse e Documentos</option>
+                    <option value="Carreira e Teletrabalho">Carreira e Teletrabalho</option>
+                    <option value="Recursos e Classificação">Recursos e Classificação</option>
+                    <option value="Geral">Geral</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Concurso:</label>
+                  <select
+                    value={faqConcursoId}
+                    onChange={(e) => setFaqConcursoId(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800"
+                  >
+                    <option value="geral">Geral (Todos os Concursos)</option>
+                    {concursos.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.orgao} - {c.nome}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Resposta Completa:</label>
+                <textarea
+                  rows={4}
+                  required
+                  value={faqResposta}
+                  onChange={(e) => setFaqResposta(e.target.value)}
+                  placeholder="Explique com detalhes e precisão as orientações, normas do tribunal e dicas..."
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:ring-2 focus:ring-[#2DD4AA]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Tags de Busca (separadas por vírgula):
+                </label>
+                <input
+                  type="text"
+                  value={faqTags}
+                  onChange={(e) => setFaqTags(e.target.value)}
+                  placeholder="ex: salário, benefícios, pós-graduação"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium text-slate-800"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  type="checkbox"
+                  id="faqNovoDestaque"
+                  checked={faqDestaque}
+                  onChange={(e) => setFaqDestaque(e.target.checked)}
+                  className="rounded text-teal-600 focus:ring-[#2DD4AA]"
+                />
+                <label htmlFor="faqNovoDestaque" className="text-xs font-semibold text-slate-700 cursor-pointer">
+                  Destacar no topo da central de FAQ (Mais Acessada)
+                </label>
+              </div>
+
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setModalNovoFaqAberto(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl text-xs font-bold bg-[#07192B] hover:bg-[#0C2640] text-white flex items-center gap-1.5 cursor-pointer shadow-sm hover:shadow"
+                >
+                  <Check className="w-3.5 h-3.5 text-[#2DD4AA]" />
+                  Cadastrar Dúvida
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL EDITAR FAQ */}
+      {modalEditarFaqAberto && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-teal-50 text-teal-700 flex items-center justify-center border border-teal-200">
+                  <Pencil className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-sm">Editar Pergunta do FAQ</h3>
+                  <p className="text-[11px] text-slate-500 font-mono">ID: {faqEditandoId}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setModalEditarFaqAberto(false)}
+                className="w-7 h-7 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-700"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSalvarEdicaoFaq} className="space-y-3.5">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Pergunta / Título da Dúvida:
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={faqPergunta}
+                  onChange={(e) => setFaqPergunta(e.target.value)}
+                  placeholder="ex: Qual a remuneração inicial e auxílios?"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-[#2DD4AA]"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Categoria:</label>
+                  <select
+                    value={faqCategoria}
+                    onChange={(e) => setFaqCategoria(e.target.value as FaqCategoria)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800"
+                  >
+                    <option value="Remuneração e Benefícios">Remuneração e Benefícios</option>
+                    <option value="Escolha de Lotação">Escolha de Lotação</option>
+                    <option value="Posse e Documentos">Posse e Documentos</option>
+                    <option value="Carreira e Teletrabalho">Carreira e Teletrabalho</option>
+                    <option value="Recursos e Classificação">Recursos e Classificação</option>
+                    <option value="Geral">Geral</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Concurso:</label>
+                  <select
+                    value={faqConcursoId}
+                    onChange={(e) => setFaqConcursoId(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800"
+                  >
+                    <option value="geral">Geral (Todos os Concursos)</option>
+                    {concursos.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.orgao} - {c.nome}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Resposta Completa:</label>
+                <textarea
+                  rows={4}
+                  required
+                  value={faqResposta}
+                  onChange={(e) => setFaqResposta(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:ring-2 focus:ring-[#2DD4AA]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Tags de Busca (separadas por vírgula):
+                </label>
+                <input
+                  type="text"
+                  value={faqTags}
+                  onChange={(e) => setFaqTags(e.target.value)}
+                  placeholder="ex: salário, benefícios, pós-graduação"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium text-slate-800"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  type="checkbox"
+                  id="faqEditarDestaque"
+                  checked={faqDestaque}
+                  onChange={(e) => setFaqDestaque(e.target.checked)}
+                  className="rounded text-teal-600 focus:ring-[#2DD4AA]"
+                />
+                <label htmlFor="faqEditarDestaque" className="text-xs font-semibold text-slate-700 cursor-pointer">
+                  Destacar no topo da central de FAQ (Mais Acessada)
+                </label>
+              </div>
+
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setModalEditarFaqAberto(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl text-xs font-bold bg-[#07192B] hover:bg-[#0C2640] text-white flex items-center gap-1.5 cursor-pointer shadow-sm hover:shadow"
+                >
+                  <Check className="w-3.5 h-3.5 text-[#2DD4AA]" />
+                  Salvar Alterações
                 </button>
               </div>
             </form>

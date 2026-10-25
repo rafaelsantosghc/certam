@@ -9,6 +9,7 @@ import {
   ShieldCheck,
   LogOut,
   ChevronRight,
+  HelpCircle,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -211,6 +212,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
                           <span className="truncate">{cg.nome}</span>
                         </button>
                       ))}
+
+                      {isActive && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleLinkClick('concurso', {
+                              concursoId: conc.id,
+                              cargoId: conc.cargos?.[0]?.id || 'geral',
+                              tab: 'faq',
+                            })
+                          }
+                          className="w-full text-left px-2.5 py-1 text-[11px] text-teal-300 hover:text-white truncate rounded-md hover:bg-white/5 transition-colors flex items-center gap-1.5 font-medium"
+                        >
+                          <HelpCircle className="w-3.5 h-3.5 text-[#2DD4AA] shrink-0" />
+                          <span>Dúvidas &amp; FAQ do Concurso</span>
+                        </button>
+                      )}
                     </div>
                   </div>
                 );
