@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>CERTAM | Portal do Concurseiro - Dashboard &amp; Escolha de Comarcas</title>
+  <title>CERTAM | Portal do Concurseiro - Concursos e Escolha de Lotação</title>
   <meta name="description" content="CERTAM - Portal do Concurseiro. Acompanhamento em tempo real de convocações, simulação de escolha de comarcas e classificação de concursos públicos.">
   <meta property="og:title" content="CERTAM | Portal do Concurseiro">
-  <meta property="og:description" content="Dashboard oficial de acompanhamento, simulação de lotação e classificação de concursos públicos.">
+  <meta property="og:description" content="Portal oficial de acompanhamento de certames, escolha de lotação e classificação de concursos públicos.">
   <meta property="og:type" content="website">
 
   <!-- Fontes Oficiais do Design System CERTAM -->
@@ -33,7 +33,7 @@
       font-family: 'JetBrains Mono', monospace;
     }
 
-    /* Cores Oficiais do Padrão Visual */
+    /* Cores Oficiais do Design System */
     :root {
       --certam-dark: #07192B;
       --certam-active-nav: #0C2640;
@@ -43,7 +43,7 @@
       --certam-light-bg: #F4F6F9;
     }
 
-    /* Sombras suaves e elegantes do design */
+    /* Sombras suaves e elegantes */
     .card-shadow {
       box-shadow: 0 4px 16px -2px rgba(15, 23, 42, 0.05), 0 2px 6px -1px rgba(15, 23, 42, 0.03);
     }
@@ -66,22 +66,6 @@
     ::-webkit-scrollbar-thumb:hover {
       background: #94A3B8;
     }
-
-    /* Efeitos do Mapa Interativo */
-    .map-region {
-      cursor: pointer;
-      transition: all 0.2s ease-in-out;
-    }
-    .map-region:hover {
-      filter: brightness(1.2) drop-shadow(0 2px 8px rgba(45, 212, 170, 0.4));
-      transform: scale(1.02);
-      transform-origin: center;
-    }
-    .map-region.active-region {
-      stroke: #FFFFFF !important;
-      stroke-width: 3.5 !important;
-      filter: brightness(1.25) drop-shadow(0 4px 12px rgba(45, 212, 170, 0.6));
-    }
   </style>
 </head>
 <body class="min-h-screen flex antialiased selection:bg-[#2DD4AA] selection:text-slate-950">
@@ -92,8 +76,8 @@
   <aside id="sidebarPrincipal" class="fixed inset-y-0 left-0 z-50 w-64 bg-[#07192B] text-white flex flex-col transition-transform duration-300 transform -translate-x-full lg:translate-x-0 shadow-2xl lg:shadow-none shrink-0 border-r border-[#0F2942]">
     
     <!-- Logo e Marca CERTAM -->
-    <div class="h-[76px] flex items-center px-6 border-b border-[#0F2942] gap-3">
-      <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-[#135A7A] via-[#1D8A8A] to-[#2DD4AA] p-1.5 flex items-center justify-center shrink-0 shadow-sm">
+    <a href="index.html" class="h-[76px] flex items-center px-6 border-b border-[#0F2942] gap-3 group">
+      <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-[#135A7A] via-[#1D8A8A] to-[#2DD4AA] p-1.5 flex items-center justify-center shrink-0 shadow-sm group-hover:brightness-110 transition-all">
         <svg class="w-full h-full" viewBox="0 0 100 100" fill="none">
           <path d="M 68 18 C 38 10 12 30 12 56 C 12 80 34 94 58 92 C 76 90 90 76 90 58" stroke="#FFFFFF" stroke-width="12" stroke-linecap="round" fill="none"/>
           <path d="M 32 53 L 48 69 L 88 23" stroke="#FFFFFF" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
@@ -103,17 +87,18 @@
         <span class="text-xl font-bold tracking-widest text-white font-serif uppercase">
           CERTAM
         </span>
+        <span class="block text-[10px] text-teal-300/80 font-medium tracking-wide">Portal do Concurseiro</span>
       </div>
-    </div>
+    </a>
 
-    <!-- Navegação de Menus -->
+    <!-- Navegação Geral do Portal -->
     <nav class="flex-1 py-6 space-y-1.5 overflow-y-auto">
       
-      <!-- 1. Dashboard (Item Ativo Padrão) -->
+      <!-- 1. Todos os Concursos (Item Ativo Padrão) -->
       <button 
         type="button" 
-        id="navItemDashboard" 
-        onclick="navegarSecao('dashboard')" 
+        id="navItemConcursos" 
+        onclick="navegarPortal('concursos')" 
         class="w-full flex items-center gap-3.5 px-6 py-3 text-sm font-semibold text-[#2DD4AA] bg-[#0C2640] border-l-4 border-[#2DD4AA] transition-all cursor-pointer text-left"
       >
         <span class="w-5 h-5 flex items-center justify-center">
@@ -124,14 +109,14 @@
             <rect x="3" y="14" width="7" height="7" rx="1.5" />
           </svg>
         </span>
-        <span>Dashboard</span>
+        <span>Todos os Concursos</span>
       </button>
 
-      <!-- 2. Classificações -->
+      <!-- 2. Chamamentos & Lotes -->
       <button 
         type="button" 
-        id="navItemClassificacoes" 
-        onclick="navegarSecao('classificacoes')" 
+        id="navItemChamamentos" 
+        onclick="navegarPortal('chamamentos')" 
         class="w-full flex items-center gap-3.5 px-6 py-3 text-sm font-medium text-[#94A3B8] hover:text-white hover:bg-[#0C2640]/50 border-l-4 border-transparent transition-all cursor-pointer text-left"
       >
         <span class="w-5 h-5 flex items-center justify-center">
@@ -141,30 +126,30 @@
             <line x1="6" y1="20" x2="6" y2="14" />
           </svg>
         </span>
-        <span>Classificações</span>
+        <span>Chamamentos &amp; Lotes</span>
       </button>
 
-      <!-- 3. Simulador de Comarcas -->
+      <!-- 3. Guia de Lotação -->
       <button 
         type="button" 
-        id="navItemSimulador" 
-        onclick="navegarSecao('simulador')" 
+        id="navItemGuia" 
+        onclick="navegarPortal('guia')" 
         class="w-full flex items-center gap-3.5 px-6 py-3 text-sm font-medium text-[#94A3B8] hover:text-white hover:bg-[#0C2640]/50 border-l-4 border-transparent transition-all cursor-pointer text-left"
       >
         <span class="w-5 h-5 flex items-center justify-center">
           <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="8" />
-            <circle cx="12" cy="12" r="2.5" fill="currentColor" />
+            <circle cx="12" cy="12" r="9" />
+            <path d="M12 16v-4M12 8h.01" />
           </svg>
         </span>
-        <span class="truncate">Simulador de Com...</span>
+        <span>Guia de Escolha</span>
       </button>
 
-      <!-- 4. Comunidade (Chat / Fórum) -->
+      <!-- 4. Comunidade Geral -->
       <button 
         type="button" 
         id="navItemComunidade" 
-        onclick="navegarSecao('comunidade')" 
+        onclick="navegarPortal('comunidade')" 
         class="w-full flex items-center gap-3.5 px-6 py-3 text-sm font-medium text-[#94A3B8] hover:text-white hover:bg-[#0C2640]/50 border-l-4 border-transparent transition-all cursor-pointer text-left"
       >
         <span class="w-5 h-5 flex items-center justify-center">
@@ -173,33 +158,15 @@
             <path d="M7 17 L7 20 L11 17 Z" fill="currentColor" />
           </svg>
         </span>
-        <span>Comunidade</span>
+        <span>Comunidade Geral</span>
       </button>
 
-      <!-- 5. Nomeações -->
-      <button 
-        type="button" 
-        id="navItemNomeacoes" 
-        onclick="navegarSecao('nomeacoes')" 
-        class="w-full flex items-center gap-3.5 px-6 py-3 text-sm font-medium text-[#94A3B8] hover:text-white hover:bg-[#0C2640]/50 border-l-4 border-transparent transition-all cursor-pointer text-left"
-      >
-        <span class="w-5 h-5 flex items-center justify-center">
-          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-            <rect x="4" y="3" width="16" height="18" rx="2" />
-            <line x1="8" y1="8" x2="16" y2="8" />
-            <line x1="8" y1="12" x2="16" y2="12" />
-            <line x1="8" y1="16" x2="12" y2="16" />
-          </svg>
-        </span>
-        <span>Nomeações</span>
-      </button>
-
-      <!-- 6. Configurações -->
-      <button 
-        type="button" 
-        id="navItemConfiguracoes" 
-        onclick="navegarSecao('configuracoes')" 
-        class="w-full flex items-center gap-3.5 px-6 py-3 text-sm font-medium text-[#94A3B8] hover:text-white hover:bg-[#0C2640]/50 border-l-4 border-transparent transition-all cursor-pointer text-left"
+      <!-- 5. Painel Admin -->
+      <a 
+        id="navItemAdmin" 
+        href="lote.html?admin=1" 
+        class="w-full flex items-center gap-3.5 px-6 py-3 text-sm font-medium text-[#94A3B8] hover:text-amber-300 hover:bg-[#0C2640]/50 border-l-4 border-transparent transition-all cursor-pointer text-left"
+        title="Painel de Administração e Gestão de Lotes"
       >
         <span class="w-5 h-5 flex items-center justify-center">
           <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -207,12 +174,12 @@
             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
           </svg>
         </span>
-        <span>Configurações</span>
-      </button>
+        <span>Painel Admin</span>
+      </a>
 
     </nav>
 
-    <!-- Rodapé da Sidebar: Sair / Autenticação -->
+    <!-- Rodapé da Sidebar -->
     <div class="p-4 border-t border-[#0F2942]">
       <button 
         type="button" 
@@ -225,7 +192,7 @@
           <polyline points="16 17 21 12 16 7"></polyline>
           <line x1="21" y1="12" x2="9" y2="12"></line>
         </svg>
-        <span id="textoBotaoSairSidebar">Sair</span>
+        <span>Sair do Portal</span>
       </button>
     </div>
 
@@ -235,7 +202,7 @@
   <div id="sidebarBackdrop" onclick="toggleSidebarMobile(false)" class="fixed inset-0 bg-slate-950/60 z-40 hidden lg:hidden backdrop-blur-xs"></div>
 
   <!-- ===================================================================== -->
-  <!-- CONTEÚDO PRINCIPAL (COM HEADER SUPERIOR)                              -->
+  <!-- CONTEÚDO PRINCIPAL (COM TOP HEADER)                                   -->
   <!-- ===================================================================== -->
   <div class="flex-1 flex flex-col min-w-0 lg:pl-64">
     
@@ -244,13 +211,13 @@
     <!-- =================================================================== -->
     <header class="h-[68px] bg-white border-b border-slate-200/80 sticky top-0 z-30 flex items-center justify-between px-4 sm:px-6 lg:px-8 card-shadow">
       
-      <!-- Esquerda: Botão Hamburger Mobile & Título Contextual -->
+      <!-- Esquerda: Hamburger Mobile & Contexto do Portal -->
       <div class="flex items-center gap-3">
         <button 
           type="button" 
           onclick="toggleSidebarMobile(true)" 
           class="lg:hidden p-2 text-slate-600 hover:text-slate-900 rounded-lg hover:bg-slate-100 cursor-pointer"
-          aria-label="Abrir menu lateral"
+          aria-label="Abrir menu"
         >
           <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
             <line x1="3" y1="6" x2="21" y2="6" />
@@ -260,48 +227,32 @@
         </button>
 
         <div class="hidden sm:flex items-center gap-2">
-          <span class="text-xs font-semibold px-2.5 py-1 rounded-md bg-[#0C2640]/5 text-[#135A7A] border border-[#135A7A]/20 font-mono uppercase">
-            TJRS • Analista Judiciário
-          </span>
-          <span class="text-xs text-slate-400">Edital 2024 / Convocação Oficial</span>
+          <span class="text-xs font-bold text-slate-900 tracking-wider font-serif uppercase">CERTAM</span>
+          <span class="text-slate-300">·</span>
+          <span class="text-xs font-medium text-slate-500">Portal Nacional de Concursos e Escolha de Lotação</span>
         </div>
       </div>
 
-      <!-- Direita: Busca, Notificações com Dot Vermelho e Perfil do Candidato -->
+      <!-- Direita: Busca, Notificações, Admin e Perfil -->
       <div class="flex items-center gap-3 sm:gap-4">
         
-        <!-- Botão Busca Rápida -->
+        <!-- Notificações com Badge Dot -->
         <button 
           type="button" 
-          onclick="abrirModalBuscaRapida()" 
-          class="p-2 text-slate-600 hover:text-slate-900 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer" 
-          title="Pesquisar candidatos ou comarcas"
+          onclick="mostrarToast('🔔 Novos chamamentos abertos no TJRS e TRF4!', 'info')" 
+          class="p-2 text-slate-600 hover:text-slate-900 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer relative"
+          title="Notificações de chamamentos"
         >
           <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-            <circle cx="11" cy="11" r="8" />
-            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+            <path d="M13.73 21a2 2 0 0 1-3.46 0" />
           </svg>
+          <span class="absolute top-1.5 right-1.5 w-2.5 h-2.5 rounded-full bg-[#EF4444] border-2 border-white"></span>
         </button>
-
-        <!-- Sino de Notificações com Badge Dot Vermelho -->
-        <div class="relative">
-          <button 
-            type="button" 
-            onclick="abrirNotificacoes()" 
-            class="p-2 text-slate-600 hover:text-slate-900 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer relative"
-            title="Notificações de convocações e chamamentos"
-          >
-            <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-              <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-            </svg>
-            <span class="absolute top-1.5 right-1.5 w-2.5 h-2.5 rounded-full bg-[#EF4444] border-2 border-white"></span>
-          </button>
-        </div>
 
         <div class="h-6 w-px bg-slate-200"></div>
 
-        <!-- Botão Admin Preview Rápido (Se ambiente preview ou admin) -->
+        <!-- Botão Admin Preview Rápido -->
         <button 
           id="btnAdminPreviewHeader" 
           type="button" 
@@ -313,12 +264,12 @@
           <span>Admin</span>
         </button>
 
-        <!-- Widget: Painel do Candidato / Perfil Oficial -->
-        <div class="flex items-center gap-2.5 pl-1 cursor-pointer" onclick="navegarSecao('configuracoes')">
-          <span id="nomePainelCandidatoHeader" class="text-xs sm:text-sm font-semibold text-[#334155] hidden md:inline">
+        <!-- Widget: Painel do Candidato -->
+        <div class="flex items-center gap-2.5 pl-1">
+          <span id="nomeUsuarioHeader" class="text-xs sm:text-sm font-semibold text-[#334155] hidden md:inline">
             Painel do Candidato
           </span>
-          <div id="avatarCandidatoHeader" class="w-8 h-8 rounded-full bg-[#135A7A] text-white flex items-center justify-center font-bold text-xs shadow-xs border border-teal-600">
+          <div id="avatarUsuarioHeader" class="w-8 h-8 rounded-full bg-[#135A7A] text-white flex items-center justify-center font-bold text-xs shadow-xs border border-teal-600">
             PC
           </div>
         </div>
@@ -328,799 +279,455 @@
     </header>
 
     <!-- =================================================================== -->
-    <!-- ÁREA DE CONTEÚDO PRINCIPAL (SEÇÕES DINÂMICAS)                        -->
+    <!-- ÁREA DE CONTEÚDO PRINCIPAL (PORTAL DE CONCURSOS GENÉRICO)           -->
     <!-- =================================================================== -->
-    <main class="flex-1 p-4 sm:p-6 lg:p-8 space-y-6">
+    <main class="flex-1 p-4 sm:p-6 lg:p-8 space-y-8">
 
-      <!-- ================================================================= -->
-      <!-- SEÇÃO 1: DASHBOARD COMPLETO (EXATAMENTE COMO NO DESIGN ANEXO)     -->
-      <!-- ================================================================= -->
-      <div id="secaoDashboard" class="space-y-6">
+      <!-- =============================================================== -->
+      <!-- SEÇÃO 1: VISÃO GERAL DO PORTAL E CATÁLOGO DE CERTAMES           -->
+      <!-- =============================================================== -->
+      <div id="secaoCatalogoConcursos" class="space-y-8">
         
-        <!-- Título do Dashboard -->
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <!-- Apresentação Geral do Portal -->
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
+            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#2DD4AA]/15 text-[#135A7A] text-xs font-semibold mb-2">
+              <span>🏛️</span>
+              <span>Portal de Acompanhamento e Escolha de Lotação</span>
+            </div>
             <h1 class="text-2xl sm:text-3xl font-bold text-[#0F172A] tracking-tight">
-              Dashboard
+              Concursos Públicos Acompanhados
             </h1>
-            <p class="text-xs sm:text-sm text-slate-500 mt-0.5">
-              Acompanhamento centralizado de chamamentos, ranking regional de comarcas e comunidade ativa.
+            <p class="text-xs sm:text-sm text-slate-500 mt-1 max-w-3xl leading-relaxed">
+              Selecione o concurso desejado para acessar seu dashboard exclusivo, consultar a lista oficial de classificação, conferir notas e manifestar suas prioridades de posse no simulador de comarcas.
             </p>
           </div>
 
-          <div class="flex items-center gap-2">
+          <div class="flex items-center gap-2 shrink-0">
             <span class="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200">
               <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              <span>1º Chamamento Ativo</span>
+              <span>Base Oficial Conectada</span>
             </span>
-            <button 
-              type="button" 
-              onclick="recarregarDadosComFeedback()" 
-              class="p-2 text-slate-600 hover:text-slate-900 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-2xs cursor-pointer"
-              title="Atualizar dados do Supabase"
-            >
-              🔄
-            </button>
           </div>
         </div>
 
-        <!-- =============================================================== -->
-        <!-- 4 KPI STAT CARDS (Linha Superior)                               -->
-        <!-- =============================================================== -->
+        <!-- ============================================================= -->
+        <!-- 4 KPI CARDS GERAIS DO PORTAL (Linha Superior)                -->
+        <!-- ============================================================= -->
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
           
-          <!-- Card 1: Posição Atual -->
           <div class="bg-white rounded-xl p-5 border border-slate-200/80 card-shadow card-shadow-hover transition-all">
-            <span class="text-xs font-semibold text-[#475569] block">Posição Atual</span>
-            <div id="kpiPosicaoAtual" class="text-3xl font-extrabold text-[#0F172A] font-mono mt-1">38</div>
-            <span class="text-xs text-[#94A3B8] mt-1 block">Vagas imediatas</span>
+            <span class="text-xs font-semibold text-[#475569] block">Concursos Monitorados</span>
+            <div class="text-3xl font-extrabold text-[#0F172A] font-mono mt-1">12</div>
+            <span class="text-xs text-[#2DD4AA] font-semibold mt-1 block">Tribunais e Órgãos de Justiça</span>
           </div>
 
-          <!-- Card 2: Posição -->
           <div class="bg-white rounded-xl p-5 border border-slate-200/80 card-shadow card-shadow-hover transition-all">
-            <span class="text-xs font-semibold text-[#475569] block">Posição:</span>
-            <div id="kpiPosicaoTotal" class="text-3xl font-extrabold text-[#0F172A] font-mono mt-1">56</div>
-            <span id="kpiSubtextoVisualizando" class="text-xs font-semibold text-[#2DD4AA] mt-1 block">Visualizando 30 convocados</span>
+            <span class="text-xs font-semibold text-[#475569] block">Candidatos Cadastrados</span>
+            <div class="text-3xl font-extrabold text-[#0F172A] font-mono mt-1">1.480+</div>
+            <span class="text-xs text-[#94A3B8] mt-1 block">Aprovados nas listas homologadas</span>
           </div>
 
-          <!-- Card 3: Último Convocado -->
           <div class="bg-white rounded-xl p-5 border border-slate-200/80 card-shadow card-shadow-hover transition-all">
-            <span class="text-xs font-semibold text-[#475569] block">Último Convocado</span>
-            <div id="kpiUltimoConvocado" class="text-3xl font-extrabold text-[#0F172A] font-mono mt-1">0</div>
-            <span class="text-xs text-[#94A3B8] mt-1 block">Lote de 1ª chamada</span>
+            <span class="text-xs font-semibold text-[#475569] block">Vagas em Simulação</span>
+            <div class="text-3xl font-extrabold text-[#0F172A] font-mono mt-1">450+</div>
+            <span class="text-xs text-[#94A3B8] mt-1 block">Comarcas e cidades de lotação</span>
           </div>
 
-          <!-- Card 4: Próxima Chamada -->
           <div class="bg-white rounded-xl p-5 border border-slate-200/80 card-shadow card-shadow-hover transition-all">
-            <span class="text-xs font-semibold text-[#475569] block">Próxima Chamada</span>
-            <div id="kpiProximaChamada" class="text-3xl font-extrabold text-[#0F172A] font-mono mt-1">01</div>
-            <span class="text-xs text-[#94A3B8] mt-1 block">Previsão de 3 comarcas</span>
+            <span class="text-xs font-semibold text-[#475569] block">Chamamentos Ativos</span>
+            <div class="text-3xl font-extrabold text-[#0F172A] font-mono mt-1">04</div>
+            <span class="text-xs text-emerald-600 font-semibold mt-1 block">Escolha de comarcas em aberto</span>
           </div>
 
         </div>
 
-        <!-- =============================================================== -->
-        <!-- 3-COLUMN DASHBOARD GRID (Mapa + Classificação + Chat)           -->
-        <!-- =============================================================== -->
-        <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 xl:gap-6 items-start">
-
-          <!-- ============================================================= -->
-          <!-- COLUNA 1: ESCOLHA DE COMARCA (MAPA REGIONAL INTERATIVO)       -->
-          <!-- ============================================================= -->
-          <div class="lg:col-span-4 bg-white rounded-xl border border-slate-200/80 p-5 sm:p-6 card-shadow flex flex-col min-h-[620px]">
+        <!-- ============================================================= -->
+        <!-- BARRA DE FILTROS E BUSCA DE CONCURSOS                         -->
+        <!-- ============================================================= -->
+        <div class="bg-white rounded-xl p-4 sm:p-5 border border-slate-200/80 card-shadow space-y-4">
+          <div class="flex flex-col md:flex-row gap-3">
             
-            <div class="flex items-center justify-between pb-3.5 border-b border-slate-100 mb-4">
-              <h2 class="text-base sm:text-lg font-bold text-[#0F172A]">
-                Escolha de Comarca
-              </h2>
-              
-              <!-- Dropdown Selecionar Região -->
-              <div class="relative">
-                <select 
-                  id="selectFiltroRegiaoMapa" 
-                  onchange="filtrarPorRegiao(this.value)" 
-                  class="bg-white border border-slate-200 hover:border-slate-300 text-slate-700 text-xs font-semibold px-3 py-1.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2DD4AA] cursor-pointer"
-                >
-                  <option value="todas">Selecionar ▾</option>
-                  <option value="Capital">Capital (Porto Alegre)</option>
-                  <option value="Metropolitana">Região Metropolitana</option>
-                  <option value="Serra">Região da Serra</option>
-                  <option value="Interior">Interior / Centro</option>
-                  <option value="Sul">Região Sul / Litoral</option>
-                </select>
-              </div>
-            </div>
-
-            <!-- Mapa Estilizado Vetorial Interativo -->
-            <div class="flex-1 flex flex-col items-center justify-center p-2 relative">
-              <div class="w-full max-w-[340px] aspect-[4/5] flex items-center justify-center">
-                <svg class="w-full h-full drop-shadow-sm select-none" viewBox="0 0 380 470" fill="none">
-                  
-                  <!-- Região 1: Norte / Noroeste (#135A7A) -->
-                  <path 
-                    id="mapRegiaoNorte" 
-                    class="map-region transition-all" 
-                    onclick="selecionarRegiaoNoMapa('Norte/Noroeste', '#135A7A')" 
-                    d="M 90 15 L 135 5 L 165 40 L 210 30 L 220 90 L 155 145 L 70 140 L 20 105 L 40 55 Z" 
-                    fill="#135A7A" 
-                    stroke="#FFFFFF" 
-                    stroke-width="2.5"
-                  >
-                    <title>Norte / Noroeste (Passo Fundo, Erechim, Santo Ângelo)</title>
-                  </path>
-
-                  <!-- Região 2: Centro-Oeste / Missões (#2DD4AA) -->
-                  <path 
-                    id="mapRegiaoCentro" 
-                    class="map-region transition-all" 
-                    onclick="selecionarRegiaoNoMapa('Centro-Oeste', '#2DD4AA')" 
-                    d="M 155 145 L 220 90 L 255 130 L 245 235 L 180 265 L 135 215 Z" 
-                    fill="#2DD4AA" 
-                    stroke="#FFFFFF" 
-                    stroke-width="2.5"
-                  >
-                    <title>Centro-Oeste (Santa Maria, Cruz Alta, Ijuí)</title>
-                  </path>
-
-                  <!-- Região 3: Nordeste / Serra (#1D8A8A) -->
-                  <path 
-                    id="mapRegiaoNordeste" 
-                    class="map-region transition-all" 
-                    onclick="selecionarRegiaoNoMapa('Nordeste/Serra', '#1D8A8A')" 
-                    d="M 220 90 L 275 65 L 345 105 L 355 160 L 310 215 L 255 185 L 255 130 Z" 
-                    fill="#1D8A8A" 
-                    stroke="#FFFFFF" 
-                    stroke-width="2.5"
-                  >
-                    <title>Nordeste / Serra (Caxias do Sul, Bento Gonçalves, Gramado)</title>
-                  </path>
-
-                  <!-- Região 4: Sudeste / Capital & Metropolitana (#07192B) -->
-                  <path 
-                    id="mapRegiaoSudeste" 
-                    class="map-region transition-all" 
-                    onclick="selecionarRegiaoNoMapa('Capital/Metropolitana', '#07192B')" 
-                    d="M 245 235 L 255 185 L 310 215 L 320 275 L 265 320 L 210 295 Z" 
-                    fill="#07192B" 
-                    stroke="#FFFFFF" 
-                    stroke-width="2.5"
-                  >
-                    <title>Capital &amp; Região Metropolitana (Porto Alegre, Canoas, Novo Hamburgo)</title>
-                  </path>
-
-                  <!-- Região 5: Sul / Litoral (#3CE3B4) -->
-                  <path 
-                    id="mapRegiaoSul" 
-                    class="map-region transition-all" 
-                    onclick="selecionarRegiaoNoMapa('Sul/Litoral', '#3CE3B4')" 
-                    d="M 210 295 L 265 320 L 245 395 L 195 445 L 165 410 L 185 345 Z" 
-                    fill="#3CE3B4" 
-                    stroke="#FFFFFF" 
-                    stroke-width="2.5"
-                  >
-                    <title>Sul &amp; Litoral (Pelotas, Rio Grande, Osório, Torres)</title>
-                  </path>
-
-                  <!-- Subdivisão Oeste (#155263) -->
-                  <path 
-                    id="mapRegiaoOeste" 
-                    class="map-region transition-all" 
-                    onclick="selecionarRegiaoNoMapa('Fronteira Oeste', '#155263')" 
-                    d="M 70 140 L 155 145 L 135 215 L 85 190 Z" 
-                    fill="#155263" 
-                    stroke="#FFFFFF" 
-                    stroke-width="2.5"
-                  >
-                    <title>Fronteira Oeste (Uruguaiana, Santana do Livramento)</title>
-                  </path>
-
-                  <!-- Subdivisão Central (#135A7A) -->
-                  <path 
-                    id="mapRegiaoVale" 
-                    class="map-region transition-all" 
-                    onclick="selecionarRegiaoNoMapa('Vales', '#135A7A')" 
-                    d="M 180 265 L 245 235 L 210 295 L 185 345 L 160 295 Z" 
-                    fill="#135A7A" 
-                    stroke="#FFFFFF" 
-                    stroke-width="2.5"
-                  >
-                    <title>Vales dos Sinos e Taquari (Lajeado, Montenegro)</title>
-                  </path>
-
+            <!-- Campo de Busca em Tempo Real -->
+            <div class="relative flex-1">
+              <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
                 </svg>
-              </div>
-
-              <!-- Indicador da Região Selecionada -->
-              <div class="w-full mt-3 bg-slate-50 border border-slate-200/80 rounded-xl p-3 text-center">
-                <div class="text-xs text-slate-500 font-medium">Região em Destaque:</div>
-                <div id="textoRegiaoDestaque" class="text-sm font-bold text-[#0F172A] mt-0.5">
-                  Todas as Comarcas do Estado (98)
-                </div>
-                <div class="flex items-center justify-center gap-3 text-xs text-slate-500 mt-1 font-mono">
-                  <span>Vagas: <strong id="vagasRegiaoDestaque" class="text-emerald-700">166</strong></span>
-                  <span>•</span>
-                  <span>Candidatos: <strong id="candidatosRegiaoDestaque" class="text-[#135A7A]">305</strong></span>
-                </div>
-              </div>
-            </div>
-
-            <!-- Botão Atalho para o Simulador -->
-            <div class="pt-3 border-t border-slate-100">
-              <button 
-                type="button" 
-                onclick="navegarSecao('simulador')" 
-                class="w-full bg-slate-50 hover:bg-[#2DD4AA]/10 text-slate-700 hover:text-slate-900 border border-slate-200 hover:border-[#2DD4AA]/50 font-semibold py-2 px-3 rounded-lg text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
-              >
-                <span>🏛️ Organizar Prioridades no Simulador →</span>
-              </button>
-            </div>
-
-          </div>
-
-          <!-- ============================================================= -->
-          <!-- COLUNA 2: LISTA DE CLASSIFICAÇÃO                              -->
-          <!-- ============================================================= -->
-          <div class="lg:col-span-5 bg-white rounded-xl border border-slate-200/80 p-5 sm:p-6 card-shadow flex flex-col min-h-[620px]">
-            
-            <div class="flex items-center justify-between pb-3.5 border-b border-slate-100 mb-3">
-              <h2 class="text-base sm:text-lg font-bold text-[#0F172A]">
-                Lista de Classificação
-              </h2>
-
-              <!-- Dropdown Selecionar Filtro -->
-              <div class="relative">
-                <select 
-                  id="selectFiltroTabelaDashboard" 
-                  onchange="filtrarClassificacaoDashboard(this.value)" 
-                  class="bg-white border border-slate-200 hover:border-slate-300 text-slate-700 text-xs font-semibold px-3 py-1.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2DD4AA] cursor-pointer"
-                >
-                  <option value="todos">Selecionar ▾</option>
-                  <option value="convocados">Convocados</option>
-                  <option value="aprovados">Aprovados</option>
-                  <option value="Capital">Comarca da Capital</option>
-                  <option value="Metropolitana">Comarca Metropolitana</option>
-                  <option value="Interior">Comarca do Interior</option>
-                </select>
-              </div>
-            </div>
-
-            <!-- Tabela de Classificação Estilo Mockup -->
-            <div class="flex-1 overflow-x-auto">
-              <table class="w-full text-left text-xs sm:text-sm">
-                <thead>
-                  <tr class="text-xs font-bold text-slate-600 border-b border-slate-200 pb-2">
-                    <th class="py-2 pr-2 text-slate-700">Pos.</th>
-                    <th class="py-2 px-2 text-slate-700">Candidato</th>
-                    <th class="py-2 px-2 text-slate-700">Comarca Desejada</th>
-                    <th class="py-2 pl-2 text-center text-slate-700">Status</th>
-                  </tr>
-                </thead>
-                <tbody id="tabelaClassificacaoDashboardBody" class="divide-y divide-slate-100">
-                  <!-- Inserido dinamicamente via JS com Avatares circulares coloridos -->
-                </tbody>
-              </table>
-            </div>
-
-            <!-- Rodapé da Tabela: Ver Classificação Completa -->
-            <div class="pt-3 border-t border-slate-100 mt-2 flex items-center justify-between text-xs text-slate-500">
-              <span id="contadorClassifDashboard">Exibindo 8 de 305 candidatos</span>
-              <button 
-                type="button" 
-                onclick="navegarSecao('classificacoes')" 
-                class="text-[#135A7A] hover:text-[#2DD4AA] font-bold cursor-pointer hover:underline"
-              >
-                Ver Lista Completa &amp; Notas →
-              </button>
-            </div>
-
-          </div>
-
-          <!-- ============================================================= -->
-          <!-- COLUNA 3: CHAT DOS CANDIDATOS (FÓRUM / COMUNIDADE ATIVA)      -->
-          <!-- ============================================================= -->
-          <div class="lg:col-span-3 bg-white rounded-xl border border-slate-200/80 p-5 sm:p-6 card-shadow flex flex-col h-[620px]">
-            
-            <div class="pb-3 border-b border-slate-100 mb-3">
-              <h2 class="text-base font-bold text-[#0F172A]">
-                Chat dos Candidatos
-              </h2>
-              <span class="text-xs text-[#64748B] block mt-0.5">
-                (fórum/comunidade ativa)
-              </span>
-            </div>
-
-            <!-- Feed de Mensagens Rolável -->
-            <div id="containerFeedChat" class="flex-1 overflow-y-auto space-y-3.5 pr-1 py-1">
-              
-              <!-- Mensagem 1: Recebida (Carlos Eduardo) -->
-              <div class="flex items-start gap-2.5">
-                <div class="w-8 h-8 rounded-full bg-[#0A253B] text-[#2DD4AA] flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs">
-                  CE
-                </div>
-                <div class="bg-[#F1F5F9] rounded-2xl p-3 text-xs text-[#334155] max-w-[85%] space-y-1">
-                  <div class="font-bold text-[#0F172A]">Carlos Eduardo</div>
-                  <p class="leading-relaxed">Ainda restam vagas para a comarca da capital neste lote do certame?</p>
-                </div>
-              </div>
-
-              <!-- Mensagem 2: Enviada (Marina Hartmann - Destaque Verde-Água) -->
-              <div class="flex items-start justify-end gap-2.5">
-                <div class="bg-[#2DD4AA] text-white rounded-2xl p-3 text-xs max-w-[85%] space-y-1 shadow-2xs">
-                  <p class="leading-relaxed font-medium">Sim! Restam 3 vagas na comarca que vai escolher!</p>
-                  <div class="text-[9px] text-white/80 text-right">09:30</div>
-                </div>
-                <div class="w-8 h-8 rounded-full bg-[#135A7A] text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs">
-                  MH
-                </div>
-              </div>
-
-              <!-- Mensagem 3: Recebida (Marcos Rocha) -->
-              <div class="flex items-start gap-2.5">
-                <div class="w-8 h-8 rounded-full bg-[#1D8A8A] text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs">
-                  MR
-                </div>
-                <div class="bg-[#F1F5F9] rounded-2xl p-3 text-xs text-[#334155] max-w-[85%] space-y-1">
-                  <div class="font-bold text-[#0F172A]">Marcos Rocha</div>
-                  <p class="leading-relaxed">Minha escolha já está atualizada no simulador de comarcas.</p>
-                </div>
-              </div>
-
-            </div>
-
-            <!-- Caixa de Digitação Inferior com Botão Enviar (#2DD4AA) -->
-            <div class="pt-3 border-t border-slate-100 mt-2">
-              <form id="formChatCandidatos" onsubmit="enviarMensagemChat(event)" class="flex items-center gap-2">
-                <div class="relative flex-1">
-                  <input 
-                    type="text" 
-                    id="inputMensagemChat" 
-                    placeholder="Chat dos candidatos..." 
-                    autocomplete="off"
-                    class="w-full bg-white border border-slate-300 rounded-full px-4 py-2 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#2DD4AA] focus:border-transparent transition-all"
-                  >
-                </div>
-                <button 
-                  type="submit" 
-                  class="w-9 h-9 rounded-full bg-[#2DD4AA] hover:bg-[#26b893] text-white flex items-center justify-center shrink-0 shadow-xs transition-all transform hover:scale-105 cursor-pointer"
-                  title="Enviar mensagem"
-                >
-                  <svg class="w-4 h-4 ml-0.5" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
-                  </svg>
-                </button>
-              </form>
-            </div>
-
-          </div>
-
-        </div>
-
-      </div>
-
-      <!-- ================================================================= -->
-      <!-- SEÇÃO 2: CLASSIFICAÇÕES COMPLETAS (TABELA EXPANDIDA COM NOTAS)    -->
-      <!-- ================================================================= -->
-      <div id="secaoClassificacoes" style="display: none;" class="space-y-6">
-        
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <h1 class="text-2xl font-bold text-[#0F172A]">
-              Classificação Geral dos Candidatos
-            </h1>
-            <p class="text-xs sm:text-sm text-slate-500 mt-0.5">
-              Lista homologada oficial com notas discriminadas, cotas e intenção declarada de posse.
-            </p>
-          </div>
-          <button 
-            type="button" 
-            onclick="navegarSecao('dashboard')" 
-            class="text-xs font-semibold text-[#135A7A] hover:text-[#2DD4AA] bg-white border border-slate-200 px-3.5 py-2 rounded-lg cursor-pointer"
-          >
-            ← Voltar ao Dashboard
-          </button>
-        </div>
-
-        <!-- Barra de Filtros Avançados -->
-        <div class="bg-white rounded-xl p-4 sm:p-5 border border-slate-200/80 card-shadow space-y-3.5">
-          <div class="grid grid-cols-1 md:grid-cols-12 gap-3">
-            <div class="md:col-span-5 relative">
-              <span class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400 text-xs">
-                🔍
               </span>
               <input 
                 type="text" 
-                id="filtroClassifBusca" 
-                oninput="filtrarClassificacaoGeral()" 
-                placeholder="Buscar por nome do candidato ou comarca..." 
-                class="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-[#2DD4AA] focus:outline-none"
+                id="inputBuscaConcursos" 
+                oninput="filtrarConcursosPortal()" 
+                placeholder="Buscar por órgão, cargo ou tribunal (ex: TJRS, TJSC, TRF4, Analista)..." 
+                class="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-[#2DD4AA] transition-all font-medium"
               >
             </div>
 
-            <div class="md:col-span-2">
-              <select id="filtroClassifCota" onchange="filtrarClassificacaoGeral()" class="w-full py-2 px-3 bg-slate-50 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-[#2DD4AA] focus:outline-none">
-                <option value="todas">Cota: Todas</option>
-                <option value="Ampla">Ampla Concorrência</option>
-                <option value="PPP">PPP / Negros (CN)</option>
-                <option value="PCD">PCD</option>
-                <option value="Indígena">Indígena (CI)</option>
-              </select>
+            <!-- Segmented Control de Status -->
+            <div class="flex items-center gap-1 bg-slate-100 p-1 rounded-xl shrink-0 overflow-x-auto">
+              <button 
+                type="button" 
+                id="btnFiltroStatusTodos" 
+                onclick="setFiltroStatusPortal('todos')" 
+                class="px-3 py-1.5 rounded-lg text-xs font-bold transition-all bg-white text-slate-900 shadow-xs cursor-pointer"
+              >
+                Todos (5)
+              </button>
+              <button 
+                type="button" 
+                id="btnFiltroStatusAtivos" 
+                onclick="setFiltroStatusPortal('ativos')" 
+                class="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:text-slate-900 transition-all cursor-pointer"
+              >
+                Com Chamamento (3)
+              </button>
+              <button 
+                type="button" 
+                id="btnFiltroStatusPrevistos" 
+                onclick="setFiltroStatusPortal('previstos')" 
+                class="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:text-slate-900 transition-all cursor-pointer"
+              >
+                Previstos (2)
+              </button>
             </div>
 
-            <div class="md:col-span-3">
-              <select id="filtroClassifStatus" onchange="filtrarClassificacaoGeral()" class="w-full py-2 px-3 bg-slate-50 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-[#2DD4AA] focus:outline-none">
-                <option value="todos">Status: Todos</option>
-                <option value="Aguardando">Aguardando Convocação</option>
-                <option value="Convocado">Convocado Titular</option>
-                <option value="Nomeado">Nomeado / Posse</option>
-                <option value="Exercício">Em Exercício</option>
-                <option value="Fim de Fila">Fim de Fila</option>
-                <option value="Desistência">Desistência</option>
-              </select>
-            </div>
-
-            <div class="md:col-span-2">
-              <select id="filtroClassifIntencao" onchange="filtrarClassificacaoGeral()" class="w-full py-2 px-3 bg-slate-50 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-[#2DD4AA] focus:outline-none">
-                <option value="todas">Intenção: Todas</option>
-                <option value="Sim">Assume (Sim)</option>
-                <option value="Talvez">Em Análise</option>
-                <option value="final_fila">Fim de Fila</option>
-                <option value="Não">Desiste</option>
-              </select>
-            </div>
           </div>
 
-          <div class="flex items-center justify-between text-xs text-slate-500 pt-2 border-t border-slate-100">
-            <div>
-              Exibindo <strong id="contadorCandidatosFiltrados" class="text-slate-800">0</strong> candidato(s)
-            </div>
-            <button type="button" onclick="limparFiltrosClassificacao()" class="text-[#135A7A] hover:underline font-semibold cursor-pointer">
-              Limpar filtros
+          <div class="flex items-center justify-between text-xs text-slate-500 pt-1 border-t border-slate-100">
+            <span id="textoStatusContagemConcursos">Exibindo 5 concursos públicos</span>
+            <button type="button" onclick="limparFiltrosPortal()" class="text-[#135A7A] hover:underline font-semibold cursor-pointer">
+              Limpar filtros de busca
             </button>
           </div>
         </div>
 
-        <!-- Tabela Completa de Classificação -->
-        <div class="bg-white rounded-xl border border-slate-200/80 card-shadow overflow-hidden">
-          <div class="overflow-x-auto">
-            <table class="w-full text-left text-xs sm:text-sm divide-y divide-slate-100">
-              <thead class="bg-slate-50 text-slate-700 font-bold text-xs uppercase tracking-wider font-mono">
-                <tr>
-                  <th class="px-4 py-3 text-center">Class.</th>
-                  <th class="px-4 py-3">Candidato</th>
-                  <th class="px-4 py-3 text-center">Cota</th>
-                  <th class="px-4 py-3 text-right">Nota Final</th>
-                  <th class="px-4 py-3 text-center">Intenção</th>
-                  <th class="px-4 py-3">1ª Comarca Desejada</th>
-                  <th class="px-4 py-3">Status / Lotação</th>
-                  <th class="px-4 py-3 text-center">Ações</th>
-                </tr>
-              </thead>
-              <tbody id="tabelaClassificacaoCompletaBody" class="divide-y divide-slate-100">
-                <!-- Preenchido via JavaScript -->
-              </tbody>
-            </table>
-          </div>
+        <!-- ============================================================= -->
+        <!-- GRID DE CARDS DOS CONCURSOS (CADA CONCURSO TEM SUA PÁGINA)   -->
+        <!-- ============================================================= -->
+        <div id="gridConcursosPortal" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
 
-          <!-- Paginação -->
-          <div class="p-4 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-slate-600">
-            <div>
-              Página <strong id="pagAtualTexto" class="text-slate-900">1</strong> de <strong id="pagTotalTexto" class="text-slate-900">1</strong>
-            </div>
-            <div class="flex items-center gap-2">
-              <button type="button" id="btnPagAnt" onclick="mudarPagina(-1)" class="px-3 py-1.5 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 cursor-pointer disabled:opacity-40">
-                ← Anterior
-              </button>
-              <button type="button" id="btnPagProx" onclick="mudarPagina(1)" class="px-3 py-1.5 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 cursor-pointer disabled:opacity-40">
-                Próxima →
-              </button>
-            </div>
-          </div>
-        </div>
+          <!-- CARD 1: CONCURSO TJRS (Com link direto para a página do concurso) -->
+          <div class="bg-white rounded-xl border-2 border-[#2DD4AA]/40 p-6 card-shadow card-shadow-hover transition-all flex flex-col justify-between group relative overflow-hidden">
+            <div class="absolute top-0 right-0 w-24 h-24 bg-[#2DD4AA]/10 rounded-full blur-xl pointer-events-none"></div>
 
-      </div>
-
-      <!-- ================================================================= -->
-      <!-- SEÇÃO 3: SIMULADOR DE COMARCAS & LOTAÇÃO                          -->
-      <!-- ================================================================= -->
-      <div id="secaoSimulador" style="display: none;" class="space-y-6">
-        
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <h1 class="text-2xl font-bold text-[#0F172A]">
-              Simulador de Escolha de Comarcas
-            </h1>
-            <p class="text-xs sm:text-sm text-slate-500 mt-0.5">
-              Organize sua ordem de prioridade de lotação para simular onde você assumirá de acordo com as vagas.
-            </p>
-          </div>
-          <div class="flex items-center gap-2">
-            <a 
-              href="lote.html?concurso=tjrs_analista_2024&lote=lote_1" 
-              class="inline-flex items-center gap-1.5 bg-[#2DD4AA] hover:bg-[#26b893] text-slate-950 font-bold px-4 py-2 rounded-lg text-xs shadow-xs transition-colors cursor-pointer"
-            >
-              <span>Abrir Sistema Completo de Lotes →</span>
-            </a>
-          </div>
-        </div>
-
-        <!-- Duas Colunas de Comarcas -->
-        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          
-          <!-- Coluna 1: Disponíveis -->
-          <div class="lg:col-span-6 bg-white rounded-xl border border-slate-200/80 p-5 card-shadow flex flex-col h-[650px]">
-            <div class="flex items-center justify-between pb-3 border-b border-slate-100 mb-3">
-              <div>
-                <h3 class="text-sm font-bold text-slate-900">Comarcas Disponíveis no Estado</h3>
-                <span class="text-xs text-slate-500"><span id="contadorSimuladorDisponiveis">98</span> comarcas</span>
+            <div class="space-y-4">
+              <div class="flex items-center justify-between gap-2">
+                <span class="px-2.5 py-0.5 rounded-md text-xs font-bold font-mono tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200">
+                  ● Chamamento Ativo (Lote 1)
+                </span>
+                <span class="px-2.5 py-0.5 rounded-md bg-[#07192B] text-[#2DD4AA] text-xs font-bold font-mono tracking-wider">
+                  TJRS
+                </span>
               </div>
-              <button type="button" onclick="adicionarTodasComarcasSimulador()" class="text-xs text-[#135A7A] hover:underline font-semibold cursor-pointer">
-                + Adicionar Todas
-              </button>
-            </div>
 
-            <div class="mb-3">
-              <input 
-                type="text" 
-                id="buscaSimuladorDisponiveis" 
-                oninput="renderizarComarcasSimuladorDisponiveis()" 
-                placeholder="Pesquisar comarca..." 
-                class="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs focus:ring-2 focus:ring-[#2DD4AA] focus:outline-none"
-              >
-            </div>
-
-            <div id="listaSimuladorDisponiveis" class="flex-1 overflow-y-auto space-y-1.5 pr-1">
-              <!-- Inserido dinamicamente -->
-            </div>
-          </div>
-
-          <!-- Coluna 2: Minhas Preferências Ordenadas -->
-          <div class="lg:col-span-6 bg-[#2DD4AA]/5 rounded-xl border-2 border-[#2DD4AA]/30 p-5 card-shadow flex flex-col h-[650px]">
-            <div class="flex items-center justify-between pb-3 border-b border-[#2DD4AA]/20 mb-3">
               <div>
-                <h3 class="text-sm font-bold text-slate-900 flex items-center gap-1.5">
-                  <span class="w-2.5 h-2.5 rounded-full bg-[#2DD4AA]"></span>
-                  <span>Minha Lista de Posse (Ordem de Prioridade)</span>
+                <h3 class="text-lg font-bold font-serif text-slate-900 group-hover:text-[#135A7A] transition-colors">
+                  <a href="concurso.html?id=tjrs_analista_2024">
+                    Concurso TJRS - Analista Judiciário
+                  </a>
                 </h3>
-                <span class="text-xs text-slate-500">1º colocado no topo = sua maior prioridade</span>
+                <p class="text-xs sm:text-sm text-slate-500 font-medium mt-1">
+                  💼 Analista Judiciário - Área Judiciária
+                </p>
               </div>
-              <button type="button" onclick="limparEscolhasSimulador()" class="text-xs text-rose-600 hover:text-rose-800 font-semibold cursor-pointer">
-                Limpar
-              </button>
+
+              <!-- Métricas Rápidas do Concurso -->
+              <div class="grid grid-cols-2 gap-3 pt-2">
+                <div class="bg-slate-50 rounded-xl p-3 border border-slate-100">
+                  <span class="text-xs font-semibold text-slate-400 block font-mono">Vagas Imediatas</span>
+                  <span class="text-lg font-extrabold text-slate-900 font-mono mt-0.5 block">166 vagas</span>
+                  <span class="text-[10px] text-slate-500">98 comarcas</span>
+                </div>
+                <div class="bg-slate-50 rounded-xl p-3 border border-slate-100">
+                  <span class="text-xs font-semibold text-slate-400 block font-mono">Aprovados</span>
+                  <span class="text-lg font-extrabold text-slate-900 font-mono mt-0.5 block">305 lista</span>
+                  <span class="text-[10px] text-slate-500">Homologados</span>
+                </div>
+              </div>
+
+              <div class="text-xs text-slate-500 flex items-center gap-1.5 pt-1">
+                <span>🏛️ Lote 1 em andamento com simulação ativa de comarcas</span>
+              </div>
             </div>
 
-            <div class="bg-white border border-[#2DD4AA]/30 rounded-lg p-2.5 mb-3 flex items-center justify-between text-xs text-slate-700">
-              <span>⭐ <strong id="contadorSimuladorEscolhidas">0</strong> comarca(s) selecionada(s).</span>
-              <span class="text-slate-400">Use ▲ ▼ para reordenar</span>
-            </div>
-
-            <div id="listaSimuladorEscolhidas" class="flex-1 overflow-y-auto space-y-1.5 pr-1">
-              <!-- Inserido dinamicamente -->
-            </div>
-
-            <div class="pt-3 border-t border-[#2DD4AA]/20 mt-2">
-              <button 
-                type="button" 
-                onclick="salvarPreferenciasSimulador()" 
-                class="w-full bg-gradient-to-r from-[#135A7A] to-[#1D8A8A] hover:from-[#0f4a66] hover:to-[#177272] text-white font-bold py-2.5 px-4 rounded-xl text-xs transition-colors shadow-xs cursor-pointer flex items-center justify-center gap-1.5"
+            <!-- Botões de Ação para a Página do Concurso -->
+            <div class="pt-5 border-t border-slate-100 mt-4 space-y-2">
+              <a 
+                href="concurso.html?id=tjrs_analista_2024" 
+                class="w-full bg-[#07192B] hover:bg-[#0C2640] text-white font-bold py-2.5 px-4 rounded-xl text-xs transition-colors flex items-center justify-center gap-2 shadow-xs"
               >
-                <span>💾</span>
-                <span>Salvar Minhas Escolhas de Comarca</span>
-              </button>
-            </div>
-          </div>
+                <span>Acessar Painel do TJRS</span>
+                <span class="text-sm font-normal">→</span>
+              </a>
 
-        </div>
-
-      </div>
-
-      <!-- ================================================================= -->
-      <!-- SEÇÃO 4: COMUNIDADE (FÓRUM E CHAT EXPANDIDO)                      -->
-      <!-- ================================================================= -->
-      <div id="secaoComunidade" style="display: none;" class="space-y-6">
-        <div class="flex items-center justify-between">
-          <div>
-            <h1 class="text-2xl font-bold text-[#0F172A]">
-              Comunidade dos Candidatos
-            </h1>
-            <p class="text-xs sm:text-sm text-slate-500 mt-0.5">
-              Troca de informações em tempo real entre colegas aprovados no concurso.
-            </p>
-          </div>
-          <button type="button" onclick="navegarSecao('dashboard')" class="text-xs font-semibold text-[#135A7A] hover:text-[#2DD4AA] bg-white border border-slate-200 px-3.5 py-2 rounded-lg cursor-pointer">
-            ← Voltar ao Dashboard
-          </button>
-        </div>
-
-        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          <!-- Canais / Tópicos -->
-          <div class="lg:col-span-4 bg-white rounded-xl border border-slate-200/80 p-5 card-shadow space-y-4">
-            <h3 class="text-sm font-bold text-slate-900 border-b border-slate-100 pb-2.5">
-              Canais Oficiais de Discussão
-            </h3>
-            <div class="space-y-1.5">
-              <button type="button" class="w-full flex items-center justify-between p-2.5 rounded-lg bg-[#2DD4AA]/10 text-slate-900 font-semibold text-xs border border-[#2DD4AA]/30 text-left">
-                <span>💬 Geral • Convocação e Chamamento</span>
-                <span class="w-2 h-2 rounded-full bg-[#2DD4AA]"></span>
-              </button>
-              <button type="button" class="w-full flex items-center justify-between p-2.5 rounded-lg hover:bg-slate-50 text-slate-600 font-medium text-xs border border-transparent text-left">
-                <span>🏛️ Trocas e Dúvidas de Comarcas</span>
-                <span class="text-slate-400">14 msgs</span>
-              </button>
-              <button type="button" class="w-full flex items-center justify-between p-2.5 rounded-lg hover:bg-slate-50 text-slate-600 font-medium text-xs border border-transparent text-left">
-                <span>🩺 Exames Médicos e Documentação</span>
-                <span class="text-slate-400">8 msgs</span>
-              </button>
-              <button type="button" class="w-full flex items-center justify-between p-2.5 rounded-lg hover:bg-slate-50 text-slate-600 font-medium text-xs border border-transparent text-left">
-                <span>💼 Posse e Exercício</span>
-                <span class="text-slate-400">19 msgs</span>
-              </button>
-            </div>
-          </div>
-
-          <!-- Feed Expandido -->
-          <div class="lg:col-span-8 bg-white rounded-xl border border-slate-200/80 p-5 card-shadow flex flex-col h-[600px]">
-            <div class="border-b border-slate-100 pb-3 mb-3 flex items-center justify-between">
-              <div>
-                <h3 class="text-sm font-bold text-slate-900"># Geral • Convocação e Chamamento</h3>
-                <span class="text-xs text-slate-400">Canal comunitário dos aprovados do TJRS</span>
-              </div>
-              <span class="text-xs text-emerald-600 font-semibold bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
-                ● 28 candidatos online
-              </span>
-            </div>
-
-            <div id="containerFeedChatExpandido" class="flex-1 overflow-y-auto space-y-4 pr-1">
-              <!-- Mensagens sincronizadas com o chat do dashboard -->
-            </div>
-
-            <div class="pt-3 border-t border-slate-100 mt-2">
-              <form onsubmit="enviarMensagemChatExpandido(event)" class="flex items-center gap-2">
-                <input 
-                  type="text" 
-                  id="inputMensagemChatExpandido" 
-                  placeholder="Escreva sua mensagem para os candidatos..." 
-                  class="flex-1 bg-slate-50 border border-slate-300 rounded-full px-4 py-2.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#2DD4AA]"
-                >
-                <button 
-                  type="submit" 
-                  class="bg-[#2DD4AA] hover:bg-[#26b893] text-slate-950 font-bold px-5 py-2.5 rounded-full text-xs transition-colors cursor-pointer"
-                >
-                  Enviar
-                </button>
-              </form>
-            </div>
-          </div>
-        </div>
-
-      </div>
-
-      <!-- ================================================================= -->
-      <!-- SEÇÃO 5: NOMEAÇÕES E CONVOCAÇÕES OFICIAIS                         -->
-      <!-- ================================================================= -->
-      <div id="secaoNomeacoes" style="display: none;" class="space-y-6">
-        <div class="flex items-center justify-between">
-          <div>
-            <h1 class="text-2xl font-bold text-[#0F172A]">
-              Histórico de Nomeações &amp; Chamamentos
-            </h1>
-            <p class="text-xs sm:text-sm text-slate-500 mt-0.5">
-              Diário da Justiça e atos oficiais do Tribunal de Justiça do Rio Grande do Sul.
-            </p>
-          </div>
-          <button type="button" onclick="navegarSecao('dashboard')" class="text-xs font-semibold text-[#135A7A] hover:text-[#2DD4AA] bg-white border border-slate-200 px-3.5 py-2 rounded-lg cursor-pointer">
-            ← Voltar ao Dashboard
-          </button>
-        </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
-          <div class="bg-white rounded-xl p-5 border border-slate-200/80 card-shadow">
-            <span class="text-xs font-semibold text-slate-500 block">Total de Convocados</span>
-            <div class="text-3xl font-extrabold text-[#0F172A] font-mono mt-1">166</div>
-            <span class="text-xs text-emerald-600 mt-1 block">1º Chamamento Oficial</span>
-          </div>
-
-          <div class="bg-white rounded-xl p-5 border border-slate-200/80 card-shadow">
-            <span class="text-xs font-semibold text-slate-500 block">Previsão 2º Chamamento</span>
-            <div class="text-3xl font-extrabold text-[#135A7A] font-mono mt-1">50 vagas</div>
-            <span class="text-xs text-slate-500 mt-1 block">Conforme vacâncias apuradas</span>
-          </div>
-
-          <div class="bg-white rounded-xl p-5 border border-slate-200/80 card-shadow">
-            <span class="text-xs font-semibold text-slate-500 block">Homologação Oficial</span>
-            <div class="text-lg font-bold text-[#0F172A] mt-2">DJE TJRS nº 7.842</div>
-            <span class="text-xs text-slate-400 mt-0.5 block">Validade: 2 anos prorrogáveis</span>
-          </div>
-        </div>
-
-        <div class="bg-white rounded-xl border border-slate-200/80 p-6 card-shadow space-y-4">
-          <h3 class="text-base font-bold text-slate-900 border-b border-slate-100 pb-3">
-            Cronograma dos Lotes de Lotação
-          </h3>
-          <div class="space-y-4">
-            <div class="flex items-start gap-3.5">
-              <div class="w-8 h-8 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-xs shrink-0">
-                1º
-              </div>
-              <div>
-                <h4 class="text-sm font-bold text-slate-900">Lote 1: Convocação Inicial de 166 Candidatos</h4>
-                <p class="text-xs text-slate-500 mt-0.5">Manifestação de preferências de comarcas aberta no simulador oficial.</p>
-                <span class="inline-block mt-1 text-xs font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">Em Andamento</span>
-              </div>
-            </div>
-
-            <div class="flex items-start gap-3.5 opacity-60">
-              <div class="w-8 h-8 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center font-bold text-xs shrink-0">
-                2º
-              </div>
-              <div>
-                <h4 class="text-sm font-bold text-slate-700">Lote 2: Repescagem e Preenchimento de Remanescentes</h4>
-                <p class="text-xs text-slate-500 mt-0.5">Após término dos prazos de posse e apuração de eventuais renúncias.</p>
-                <span class="inline-block mt-1 text-xs font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded">Previsto</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-      </div>
-
-      <!-- ================================================================= -->
-      <!-- SEÇÃO 6: CONFIGURAÇÕES / MEU PERFIL                               -->
-      <!-- ================================================================= -->
-      <div id="secaoConfiguracoes" style="display: none;" class="space-y-6">
-        <div class="flex items-center justify-between">
-          <div>
-            <h1 class="text-2xl font-bold text-[#0F172A]">
-              Configurações &amp; Perfil do Candidato
-            </h1>
-            <p class="text-xs sm:text-sm text-slate-500 mt-0.5">
-              Vincule sua colocação oficial e mantenha seus contatos atualizados.
-            </p>
-          </div>
-          <button type="button" onclick="navegarSecao('dashboard')" class="text-xs font-semibold text-[#135A7A] hover:text-[#2DD4AA] bg-white border border-slate-200 px-3.5 py-2 rounded-lg cursor-pointer">
-            ← Voltar ao Dashboard
-          </button>
-        </div>
-
-        <div class="bg-white rounded-xl border border-slate-200/80 p-6 card-shadow max-w-2xl mx-auto space-y-5">
-          <div class="flex items-center gap-3.5 pb-4 border-b border-slate-100">
-            <div class="w-12 h-12 rounded-full bg-[#135A7A] text-white flex items-center justify-center text-lg font-bold">
-              PC
-            </div>
-            <div>
-              <h3 id="configNomeUsuario" class="text-base font-bold text-slate-900">Candidato Aprovado</h3>
-              <p id="configEmailUsuario" class="text-xs text-slate-500 font-mono">candidato@gmail.com</p>
-            </div>
-          </div>
-
-          <div class="space-y-4">
-            <div>
-              <label class="block text-xs font-bold text-slate-700 mb-1">CPF DO CANDIDATO</label>
-              <input type="text" id="configInputCpf" placeholder="000.000.000-00" class="w-full bg-slate-50 border border-slate-300 rounded-lg px-3.5 py-2 text-xs font-mono">
-            </div>
-
-            <div>
-              <label class="block text-xs font-bold text-slate-700 mb-1">WHATSAPP / TELEFONE</label>
-              <input type="text" id="configInputWhatsapp" placeholder="(51) 99999-9999" class="w-full bg-slate-50 border border-slate-300 rounded-lg px-3.5 py-2 text-xs">
-            </div>
-
-            <div>
-              <label class="block text-xs font-bold text-slate-700 mb-1">INTENÇÃO QUANTO À VAGA</label>
-              <select id="configInputIntencao" class="w-full bg-slate-50 border border-slate-300 rounded-lg px-3.5 py-2 text-xs">
-                <option value="assumir">Pretendo assumir a vaga (Sim)</option>
-                <option value="talvez">Em análise (Talvez)</option>
-                <option value="final_fila">Pedir final de fila</option>
-                <option value="desistir">Desistir da vaga / Renúncia</option>
-              </select>
-            </div>
-
-            <div class="pt-3">
-              <button 
-                type="button" 
-                onclick="salvarConfiguracoesPerfil()" 
-                class="w-full bg-[#2DD4AA] hover:bg-[#26b893] text-slate-950 font-bold py-2.5 px-4 rounded-xl text-xs transition-colors cursor-pointer shadow-xs"
+              <a 
+                href="lote.html?concurso=tjrs_analista_2024&lote=lote_1" 
+                class="w-full bg-slate-50 hover:bg-[#2DD4AA]/15 text-[#135A7A] hover:text-[#0C2640] border border-slate-200 font-semibold py-2 px-3 rounded-xl text-xs transition-colors flex items-center justify-center gap-1.5 text-center"
               >
-                Salvar Informações do Perfil
-              </button>
+                <span>🏛️</span>
+                <span>Simulador de Escolha de Lotes</span>
+              </a>
+            </div>
+          </div>
+
+          <!-- CARD 2: CONCURSO TRF4 -->
+          <div class="bg-white rounded-xl border border-slate-200/90 p-6 card-shadow card-shadow-hover transition-all flex flex-col justify-between group">
+            <div class="space-y-4">
+              <div class="flex items-center justify-between gap-2">
+                <span class="px-2.5 py-0.5 rounded-md text-xs font-bold font-mono tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200">
+                  ● Convocação em Andamento
+                </span>
+                <span class="px-2.5 py-0.5 rounded-md bg-[#07192B] text-[#2DD4AA] text-xs font-bold font-mono tracking-wider">
+                  TRF4
+                </span>
+              </div>
+
+              <div>
+                <h3 class="text-lg font-bold font-serif text-slate-900 group-hover:text-[#135A7A] transition-colors">
+                  <a href="concurso.html?id=trf4_analista_2024">
+                    Concurso TRF4 - Região Sul
+                  </a>
+                </h3>
+                <p class="text-xs sm:text-sm text-slate-500 font-medium mt-1">
+                  💼 Analista Judiciário - Área Judiciária (RS, SC, PR)
+                </p>
+              </div>
+
+              <!-- Métricas -->
+              <div class="grid grid-cols-2 gap-3 pt-2">
+                <div class="bg-slate-50 rounded-xl p-3 border border-slate-100">
+                  <span class="text-xs font-semibold text-slate-400 block font-mono">Vagas Ofertadas</span>
+                  <span class="text-lg font-extrabold text-slate-900 font-mono mt-0.5 block">45 vagas</span>
+                  <span class="text-[10px] text-slate-500">Subseções Judiciárias</span>
+                </div>
+                <div class="bg-slate-50 rounded-xl p-3 border border-slate-100">
+                  <span class="text-xs font-semibold text-slate-400 block font-mono">Aprovados</span>
+                  <span class="text-lg font-extrabold text-slate-900 font-mono mt-0.5 block">180 lista</span>
+                  <span class="text-[10px] text-slate-500">3 estados</span>
+                </div>
+              </div>
+
+              <div class="text-xs text-slate-500 flex items-center gap-1.5 pt-1">
+                <span>📍 Escolha de subseções em Porto Alegre, Florianópolis e Curitiba</span>
+              </div>
+            </div>
+
+            <div class="pt-5 border-t border-slate-100 mt-4 space-y-2">
+              <a 
+                href="concurso.html?id=trf4_analista_2024" 
+                class="w-full bg-[#07192B] hover:bg-[#0C2640] text-white font-bold py-2.5 px-4 rounded-xl text-xs transition-colors flex items-center justify-center gap-2 shadow-xs"
+              >
+                <span>Acessar Painel do TRF4</span>
+                <span class="text-sm font-normal">→</span>
+              </a>
+            </div>
+          </div>
+
+          <!-- CARD 3: CONCURSO TJSC -->
+          <div class="bg-white rounded-xl border border-slate-200/90 p-6 card-shadow card-shadow-hover transition-all flex flex-col justify-between group">
+            <div class="space-y-4">
+              <div class="flex items-center justify-between gap-2">
+                <span class="px-2.5 py-0.5 rounded-md text-xs font-bold font-mono tracking-wider bg-sky-50 text-sky-700 border border-sky-200">
+                  ○ Em Homologação
+                </span>
+                <span class="px-2.5 py-0.5 rounded-md bg-[#07192B] text-[#2DD4AA] text-xs font-bold font-mono tracking-wider">
+                  TJSC
+                </span>
+              </div>
+
+              <div>
+                <h3 class="text-lg font-bold font-serif text-slate-900 group-hover:text-[#135A7A] transition-colors">
+                  <a href="concurso.html?id=tjsc_tecnico_2024">
+                    Concurso TJSC - Técnico Judiciário
+                  </a>
+                </h3>
+                <p class="text-xs sm:text-sm text-slate-500 font-medium mt-1">
+                  💼 Técnico Judiciário Auxiliar
+                </p>
+              </div>
+
+              <!-- Métricas -->
+              <div class="grid grid-cols-2 gap-3 pt-2">
+                <div class="bg-slate-50 rounded-xl p-3 border border-slate-100">
+                  <span class="text-xs font-semibold text-slate-400 block font-mono">Vagas Previstas</span>
+                  <span class="text-lg font-extrabold text-slate-900 font-mono mt-0.5 block">80 vagas</span>
+                  <span class="text-[10px] text-slate-500">Regiões polo SC</span>
+                </div>
+                <div class="bg-slate-50 rounded-xl p-3 border border-slate-100">
+                  <span class="text-xs font-semibold text-slate-400 block font-mono">Inscritos</span>
+                  <span class="text-lg font-extrabold text-slate-900 font-mono mt-0.5 block">240 lista</span>
+                  <span class="text-[10px] text-slate-500">Aguardando posse</span>
+                </div>
+              </div>
+
+              <div class="text-xs text-slate-500 flex items-center gap-1.5 pt-1">
+                <span>🏛️ Lotações polo: Capital, Norte, Vale do Itajaí e Sul</span>
+              </div>
+            </div>
+
+            <div class="pt-5 border-t border-slate-100 mt-4 space-y-2">
+              <a 
+                href="concurso.html?id=tjsc_tecnico_2024" 
+                class="w-full bg-[#07192B] hover:bg-[#0C2640] text-white font-bold py-2.5 px-4 rounded-xl text-xs transition-colors flex items-center justify-center gap-2 shadow-xs"
+              >
+                <span>Acessar Painel do TJSC</span>
+                <span class="text-sm font-normal">→</span>
+              </a>
+            </div>
+          </div>
+
+          <!-- CARD 4: MPRS -->
+          <div class="bg-white rounded-xl border border-slate-200/90 p-6 card-shadow card-shadow-hover transition-all flex flex-col justify-between group">
+            <div class="space-y-4">
+              <div class="flex items-center justify-between gap-2">
+                <span class="px-2.5 py-0.5 rounded-md text-xs font-bold font-mono tracking-wider bg-amber-50 text-amber-700 border border-amber-200">
+                  ○ Previsto / Edital Próximo
+                </span>
+                <span class="px-2.5 py-0.5 rounded-md bg-[#07192B] text-[#2DD4AA] text-xs font-bold font-mono tracking-wider">
+                  MPRS
+                </span>
+              </div>
+
+              <div>
+                <h3 class="text-lg font-bold font-serif text-slate-900 group-hover:text-[#135A7A] transition-colors">
+                  <a href="concurso.html?id=mprs_secretario_2024">
+                    Concurso MPRS - Secretário de Diligências
+                  </a>
+                </h3>
+                <p class="text-xs sm:text-sm text-slate-500 font-medium mt-1">
+                  💼 Secretário de Diligências • Promotorias de Justiça
+                </p>
+              </div>
+
+              <!-- Métricas -->
+              <div class="grid grid-cols-2 gap-3 pt-2">
+                <div class="bg-slate-50 rounded-xl p-3 border border-slate-100">
+                  <span class="text-xs font-semibold text-slate-400 block font-mono">Estimativa</span>
+                  <span class="text-lg font-extrabold text-slate-900 font-mono mt-0.5 block">35 vagas</span>
+                  <span class="text-[10px] text-slate-500">Promotorias do Interior</span>
+                </div>
+                <div class="bg-slate-50 rounded-xl p-3 border border-slate-100">
+                  <span class="text-xs font-semibold text-slate-400 block font-mono">Interessados</span>
+                  <span class="text-lg font-extrabold text-slate-900 font-mono mt-0.5 block">110 cad.</span>
+                  <span class="text-[10px] text-slate-500">Fórum aberto</span>
+                </div>
+              </div>
+
+              <div class="text-xs text-slate-500 flex items-center gap-1.5 pt-1">
+                <span>📋 Mapeamento de vagas por comarcas de entrância inicial</span>
+              </div>
+            </div>
+
+            <div class="pt-5 border-t border-slate-100 mt-4 space-y-2">
+              <a 
+                href="concurso.html?id=mprs_secretario_2024" 
+                class="w-full bg-[#07192B] hover:bg-[#0C2640] text-white font-bold py-2.5 px-4 rounded-xl text-xs transition-colors flex items-center justify-center gap-2 shadow-xs"
+              >
+                <span>Acessar Painel do MPRS</span>
+                <span class="text-sm font-normal">→</span>
+              </a>
+            </div>
+          </div>
+
+          <!-- CARD 5: DPE-RS -->
+          <div class="bg-white rounded-xl border border-slate-200/90 p-6 card-shadow card-shadow-hover transition-all flex flex-col justify-between group">
+            <div class="space-y-4">
+              <div class="flex items-center justify-between gap-2">
+                <span class="px-2.5 py-0.5 rounded-md text-xs font-bold font-mono tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200">
+                  ● Convocação em Andamento
+                </span>
+                <span class="px-2.5 py-0.5 rounded-md bg-[#07192B] text-[#2DD4AA] text-xs font-bold font-mono tracking-wider">
+                  DPE-RS
+                </span>
+              </div>
+
+              <div>
+                <h3 class="text-lg font-bold font-serif text-slate-900 group-hover:text-[#135A7A] transition-colors">
+                  <a href="concurso.html?id=dpers_analista_2024">
+                    Concurso DPE-RS - Analista Jurídico
+                  </a>
+                </h3>
+                <p class="text-xs sm:text-sm text-slate-500 font-medium mt-1">
+                  💼 Analista - Área Jurídica Processual
+                </p>
+              </div>
+
+              <!-- Métricas -->
+              <div class="grid grid-cols-2 gap-3 pt-2">
+                <div class="bg-slate-50 rounded-xl p-3 border border-slate-100">
+                  <span class="text-xs font-semibold text-slate-400 block font-mono">Vagas Imediatas</span>
+                  <span class="text-lg font-extrabold text-slate-900 font-mono mt-0.5 block">25 vagas</span>
+                  <span class="text-[10px] text-slate-500">Defensorias Regionais</span>
+                </div>
+                <div class="bg-slate-50 rounded-xl p-3 border border-slate-100">
+                  <span class="text-xs font-semibold text-slate-400 block font-mono">Aprovados</span>
+                  <span class="text-lg font-extrabold text-slate-900 font-mono mt-0.5 block">95 lista</span>
+                  <span class="text-[10px] text-slate-500">Chamadas em fluxo</span>
+                </div>
+              </div>
+
+              <div class="text-xs text-slate-500 flex items-center gap-1.5 pt-1">
+                <span>⚖️ Atuação conjunta com as varas judiciais regionais</span>
+              </div>
+            </div>
+
+            <div class="pt-5 border-t border-slate-100 mt-4 space-y-2">
+              <a 
+                href="concurso.html?id=dpers_analista_2024" 
+                class="w-full bg-[#07192B] hover:bg-[#0C2640] text-white font-bold py-2.5 px-4 rounded-xl text-xs transition-colors flex items-center justify-center gap-2 shadow-xs"
+              >
+                <span>Acessar Painel da DPE-RS</span>
+                <span class="text-sm font-normal">→</span>
+              </a>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- ============================================================= -->
+        <!-- SEÇÃO: GUIA EXPLICATIVO DO SISTEMA DE ESCOLHA DE COMARCAS     -->
+        <!-- ============================================================= -->
+        <div class="bg-white rounded-xl border border-slate-200/80 p-6 sm:p-8 card-shadow space-y-6">
+          <div class="border-b border-slate-100 pb-4">
+            <h2 class="text-lg sm:text-xl font-bold font-serif text-slate-900 flex items-center gap-2.5">
+              <span>💡</span>
+              <span>Como Funciona o Sistema de Escolha de Comarcas CERTAM</span>
+            </h2>
+            <p class="text-xs sm:text-sm text-slate-500 mt-1">
+              Entenda como a organização prévia entre os candidatos aprovados evita renúncias desnecessárias e antecipa a comarca de posse.
+            </p>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div class="space-y-2.5 bg-slate-50 p-4 rounded-xl border border-slate-100">
+              <div class="w-8 h-8 rounded-lg bg-[#07192B] text-[#2DD4AA] flex items-center justify-center font-bold text-sm">
+                1
+              </div>
+              <h3 class="text-sm font-bold text-slate-900">1. Aprovados Registram suas Preferências</h3>
+              <p class="text-xs text-slate-600 leading-relaxed">
+                Dentro da página do seu concurso, cada candidato autenticado com Google pode ordenar sua lista de cidades preferidas e manifestar se pretende assumir a vaga.
+              </p>
+            </div>
+
+            <div class="space-y-2.5 bg-slate-50 p-4 rounded-xl border border-slate-100">
+              <div class="w-8 h-8 rounded-lg bg-[#07192B] text-[#2DD4AA] flex items-center justify-center font-bold text-sm">
+                2
+              </div>
+              <h3 class="text-sm font-bold text-slate-900">2. Algoritmo Respeita a Ordem Oficial</h3>
+              <p class="text-xs text-slate-600 leading-relaxed">
+                O sistema simula a alocação de acordo com os critérios rígidos do edital: melhor colocação escolhe primeiro, respeitando rigorosamente cotas de PPP, PCD e CI.
+              </p>
+            </div>
+
+            <div class="space-y-2.5 bg-slate-50 p-4 rounded-xl border border-slate-100">
+              <div class="w-8 h-8 rounded-lg bg-[#07192B] text-[#2DD4AA] flex items-center justify-center font-bold text-sm">
+                3
+              </div>
+              <h3 class="text-sm font-bold text-slate-900">3. Transparência em Tempo Real</h3>
+              <p class="text-xs text-slate-600 leading-relaxed">
+                Todos acompanham quais vagas continuam disponíveis e em qual comarca provavelmente serão lotados antes mesmo da sessão pública oficial do tribunal!
+              </p>
             </div>
           </div>
         </div>
@@ -1129,833 +736,175 @@
 
     </main>
 
-  </div>
-
-  <!-- ===================================================================== -->
-  <!-- MODAL DE DETALHES DO CANDIDATO                                        -->
-  <!-- ===================================================================== -->
-  <div id="modalDetalhesCandidato" style="display: none;" class="fixed inset-0 z-50 overflow-y-auto bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4">
-    <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-xl w-full overflow-hidden flex flex-col max-h-[90vh]">
-      <div class="bg-[#07192B] text-white p-5 border-b border-[#0F2942] flex items-center justify-between shrink-0">
-        <div class="flex items-center gap-3">
-          <div id="modalAvatarLetras" class="w-10 h-10 rounded-full bg-[#135A7A] text-white flex items-center justify-center font-bold text-sm">
-            CE
+    <!-- =================================================================== -->
+    <!-- RODAPÉ INSTITUCIONAL GERAL DO PORTAL                                -->
+    <!-- =================================================================== -->
+    <footer class="bg-[#07192B] text-slate-400 border-t border-[#0F2942] py-8 px-4 sm:px-6 lg:px-8 text-xs leading-relaxed mt-auto">
+      <div class="max-w-[1820px] 2xl:max-w-[1880px] w-full mx-auto space-y-5">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-[#0F2942] pb-5">
+          <div class="flex items-center gap-3">
+            <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-[#135A7A] to-[#2DD4AA] p-1.5 flex items-center justify-center shrink-0">
+              <svg class="w-full h-full" viewBox="0 0 100 100" fill="none">
+                <path d="M 68 18 C 38 10 12 30 12 56 C 12 80 34 94 58 92 C 76 90 90 76 90 58" stroke="#FFFFFF" stroke-width="12" stroke-linecap="round" fill="none"/>
+                <path d="M 32 53 L 48 69 L 88 23" stroke="#FFFFFF" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </div>
+            <div>
+              <span class="font-serif font-bold text-white tracking-wider uppercase text-sm">CERTAM</span>
+              <span class="text-[#2DD4AA] text-xs font-semibold ml-1.5">Portal do Concurseiro</span>
+            </div>
           </div>
-          <div>
-            <h3 id="modalNomeCandidato" class="text-base font-bold text-white">Nome do Candidato</h3>
-            <span id="modalCotaBadge" class="text-xs text-[#2DD4AA] font-mono">Ampla Concorrência</span>
-          </div>
-        </div>
-        <button type="button" onclick="fecharModalDetalhesCandidato()" class="text-slate-400 hover:text-white p-1 text-lg leading-none cursor-pointer">✕</button>
-      </div>
 
-      <div class="p-5 space-y-4 overflow-y-auto text-xs sm:text-sm text-slate-700">
-        <div class="grid grid-cols-2 gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-200">
-          <div>Classificação Geral: <strong id="modalClassGeral" class="text-slate-950 font-mono">-</strong></div>
-          <div>Nota Final: <strong id="modalNotaFinal" class="text-slate-950 font-mono">-</strong></div>
-          <div>Status Oficial: <strong id="modalStatusOficial" class="text-emerald-700">-</strong></div>
-          <div>Intenção Declarada: <strong id="modalIntencaoDeclarada" class="text-slate-950">-</strong></div>
-        </div>
-
-        <div>
-          <h4 class="text-xs font-bold text-slate-800 uppercase tracking-wider mb-2 font-mono">1ª Comarca Desejada</h4>
-          <div id="modalPrimeiraComarca" class="bg-white border border-slate-200 rounded-xl p-3 font-semibold text-slate-900">
-            Comarca da Capital
+          <div class="flex flex-wrap items-center gap-4 text-xs text-slate-300">
+            <a href="index.html" class="text-[#2DD4AA] hover:underline font-semibold">Portal de Concursos</a>
+            <span class="text-slate-600">·</span>
+            <a href="concurso.html?id=tjrs_analista_2024" class="hover:text-white transition-colors">Concurso TJRS</a>
+            <span class="text-slate-600">·</span>
+            <a href="lote.html?concurso=tjrs_analista_2024&lote=lote_1" class="hover:text-white transition-colors">Simulador de Lotação</a>
+            <span class="text-slate-600">·</span>
+            <a href="politica-de-privacidade.html" class="hover:text-[#2DD4AA] underline transition-colors">Política de Privacidade</a>
           </div>
         </div>
 
-        <div class="text-right pt-2">
-          <button type="button" onclick="fecharModalDetalhesCandidato()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg text-xs cursor-pointer">
-            Fechar
-          </button>
-        </div>
+        <p class="text-slate-500">
+          © 2026 CERTAM - Portal do Concurseiro. Plataforma independente mantida pela comunidade de candidatos aprovados para transparência e simulação de lotações públicas.
+        </p>
       </div>
-    </div>
+    </footer>
+
   </div>
 
-  <!-- ===================================================================== -->
-  <!-- MODAL DE BUSCA RÁPIDA                                                 -->
-  <!-- ===================================================================== -->
-  <div id="modalBuscaRapida" style="display: none;" class="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-start justify-center pt-20 p-4">
-    <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-lg w-full p-4 space-y-3">
-      <div class="flex items-center justify-between pb-2 border-b border-slate-100">
-        <span class="text-xs font-bold text-slate-600 uppercase font-mono">Busca Rápida de Candidatos</span>
-        <button type="button" onclick="fecharModalBuscaRapida()" class="text-slate-400 hover:text-slate-700 cursor-pointer">✕</button>
-      </div>
-      <input 
-        type="text" 
-        id="inputBuscaGlobalModal" 
-        oninput="executarBuscaRapidaGlobal(this.value)" 
-        placeholder="Digite o nome ou a comarca do candidato..." 
-        class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#2DD4AA]"
-      >
-      <div id="resultadosBuscaRapidaModal" class="max-h-60 overflow-y-auto space-y-1.5 pt-1 text-xs">
-        <div class="text-slate-400 text-center py-4">Digite para buscar...</div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Toast Flutuante de Feedback -->
-  <div id="toastAlerta" class="fixed bottom-5 right-5 z-50 transform translate-y-20 opacity-0 transition-all duration-300 pointer-events-none flex items-center gap-2 px-4 py-2.5 rounded-xl shadow-xl text-xs font-semibold text-white bg-[#07192B] border border-teal-500/30">
+  <!-- Toast Flutuante -->
+  <div id="toastAlerta" class="fixed bottom-5 right-5 z-50 transform translate-y-20 opacity-0 transition-all duration-300 pointer-events-none flex items-center gap-2 px-4 py-2.5 rounded-xl shadow-xl text-xs font-semibold text-white bg-[#07192B] border border-[#2DD4AA]/40">
     <span id="toastIcone">✓</span>
-    <span id="toastMensagem">Ação realizada com sucesso!</span>
+    <span id="toastMensagem">Ação realizada!</span>
   </div>
 
   <!-- ===================================================================== -->
-  <!-- JAVASCRIPT: DADOS, MOCKUPS E INTEGRAÇÃO SUPABASE                      -->
+  <!-- JAVASCRIPT DO PORTAL                                                  -->
   <!-- ===================================================================== -->
   <script>
-    // 1. CONFIGURAÇÃO OFICIAL DO SUPABASE
-    var SUPABASE_URL = 'https://qeriodszxddmzmnjzipz.supabase.co';
-    var SUPABASE_ANON_KEY = (function() {
-      try {
-        var localKey = localStorage.getItem('tjrs_supabase_anon_key');
-        if (localKey && localKey.trim()) return localKey.trim();
-      } catch(e) {}
-      return window.SUPABASE_ANON_KEY || 'sb_publishable_DsFaKZb3uAAREpM5lPutZg_TZOLTV8R';
-    })();
-
-    var supabaseClient = null;
-    try {
-      if (typeof window.supabase !== 'undefined' && typeof window.supabase.createClient === 'function') {
-        supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-      }
-    } catch(eSb) {
-      console.warn('Supabase JS Client:', eSb);
-    }
-
-    // 2. ESTADO GLOBAL DA APLICAÇÃO
-    var ESTADO = {
-      secaoAtual: 'dashboard',
-      candidatos: [],
-      comarcas: [
-        'Porto Alegre', 'Caxias do Sul', 'Canoas', 'Pelotas', 'Santa Maria', 
-        'Gravataí', 'Viamão', 'Novo Hamburgo', 'São Leopoldo', 'Rio Grande', 
-        'Alvorada', 'Passo Fundo', 'Sapucaia do Sul', 'Uruguaiana', 'Santa Cruz do Sul', 
-        'Bento Gonçalves', 'Bagé', 'Erechim', 'Guaíba', 'Ijuí', 'Cachoeirinha', 
-        'Santana do Livramento', 'Farroupilha', 'Lajeado', 'Santo Ângelo', 'Alegrete', 
-        'Gramado', 'Canela', 'Montenegro', 'Osório', 'Torres', 'Vacaria', 'Carazinho'
-      ],
-      minhasEscolhasSimulador: ['Porto Alegre', 'Caxias do Sul', 'Canoas', 'Gramado'],
-      mensagensChat: [
-        {
-          id: 1,
-          nome: 'Carlos Eduardo',
-          iniciais: 'CE',
-          corAvatar: '#0A253B',
-          corTexto: '#2DD4AA',
-          tipo: 'recebida',
-          texto: 'Ainda restam vagas para a comarca da capital neste lote do certame?',
-          hora: '09:28'
-        },
-        {
-          id: 2,
-          nome: 'Marina Hartmann',
-          iniciais: 'MH',
-          corAvatar: '#135A7A',
-          corTexto: '#FFFFFF',
-          tipo: 'enviada',
-          texto: 'Sim! Restam 3 vagas na comarca que vai escolher!',
-          hora: '09:30'
-        },
-        {
-          id: 3,
-          nome: 'Marcos Rocha',
-          iniciais: 'MR',
-          corAvatar: '#1D8A8A',
-          corTexto: '#FFFFFF',
-          tipo: 'recebida',
-          texto: 'Minha escolha já está atualizada no simulador de comarcas.',
-          hora: '09:32'
-        }
-      ],
-      paginaClassificacao: 1,
-      itensPorPagina: 15,
-      candidatoLogado: null
-    };
-
-    // 3. CANDIDATOS DO DESIGN MOCKUP PADRÃO (Para garantir renderização idêntica imediata)
-    var CANDIDATOS_MOCKUP_DESIGN = [
-      { pos: 1, nome: 'Carlos Eduardo', iniciais: 'CE', corAvatar: '#0A253B', corIniciais: '#2DD4AA', comarca: 'Comarca da Capital', status: 'CONVOCADO', nota: 89.50, cota: 'Ampla' },
-      { pos: 2, nome: 'Marina Hartmann', iniciais: 'MH', corAvatar: '#135A7A', corIniciais: '#FFFFFF', comarca: 'Comarca Metropolitana', status: 'CONVOCADO', nota: 88.25, cota: 'Ampla' },
-      { pos: 3, nome: 'Camila Silveira', iniciais: 'CS', corAvatar: '#1D8A8A', corIniciais: '#FFFFFF', comarca: 'Comarca do Interior', status: 'APROVADO', nota: 87.00, cota: 'Ampla' },
-      { pos: 4, nome: 'Mateus Linhares', iniciais: 'ML', corAvatar: '#0A253B', corIniciais: '#2DD4AA', comarca: 'Comarca Regional', status: 'CONVOCADO', nota: 86.50, cota: 'PPP' },
-      { pos: 5, nome: 'Carolina Ferreira', iniciais: 'CF', corAvatar: '#135A7A', corIniciais: '#FFFFFF', comarca: 'Comarca da Capital', status: 'APROVADO', nota: 85.75, cota: 'Ampla' },
-      { pos: 6, nome: 'Mariana Becker', iniciais: 'Let', corAvatar: '#1D8A8A', corIniciais: '#FFFFFF', comarca: 'Comarca Litoral', status: 'APROVADO', nota: 85.00, cota: 'PCD' },
-      { pos: 7, nome: 'Ronaldo Cardoso', iniciais: 'RC', corAvatar: '#0A253B', corIniciais: '#2DD4AA', comarca: 'Comarca do Interior', status: 'APROVADO', nota: 84.50, cota: 'Ampla' },
-      { pos: 8, nome: 'Lucas Figueiredo', iniciais: 'LF', corAvatar: '#135A7A', corIniciais: '#FFFFFF', comarca: 'Comarca Regional', status: 'APROVADO', nota: 84.00, cota: 'Ampla' }
+    var LISTA_CONCURSOS_PORTAL = [
+      { id: 'tjrs_analista_2024', orgao: 'TJRS', nome: 'Concurso TJRS - Analista Judiciário', cargo: 'Analista Judiciário - Área Judiciária', status: 'ativo', vagas: 166, candidatos: 305 },
+      { id: 'trf4_analista_2024', orgao: 'TRF4', nome: 'Concurso TRF4 - Região Sul', cargo: 'Analista Judiciário (RS, SC, PR)', status: 'ativo', vagas: 45, candidatos: 180 },
+      { id: 'tjsc_tecnico_2024', orgao: 'TJSC', nome: 'Concurso TJSC - Técnico Judiciário', cargo: 'Técnico Judiciário Auxiliar', status: 'ativo', vagas: 80, candidatos: 240 },
+      { id: 'mprs_secretario_2024', orgao: 'MPRS', nome: 'Concurso MPRS - Secretário de Diligências', cargo: 'Secretário de Diligências', status: 'previsto', vagas: 35, candidatos: 110 },
+      { id: 'dpers_analista_2024', orgao: 'DPE-RS', nome: 'Concurso DPE-RS - Analista Jurídico', cargo: 'Analista - Área Jurídica', status: 'ativo', vagas: 25, candidatos: 95 }
     ];
 
-    // 4. NAVEGAÇÃO DE SEÇÕES (Sidebar)
-    function navegarSecao(secao) {
-      ESTADO.secaoAtual = secao;
-
-      // Oculta todas as seções
-      var secoes = ['secaoDashboard', 'secaoClassificacoes', 'secaoSimulador', 'secaoComunidade', 'secaoNomeacoes', 'secaoConfiguracoes'];
-      secoes.forEach(function(s) {
-        var el = document.getElementById(s);
-        if (el) el.style.display = 'none';
-      });
-
-      // Exibe a seção selecionada
-      var secaoAlvo = {
-        'dashboard': 'secaoDashboard',
-        'classificacoes': 'secaoClassificacoes',
-        'simulador': 'secaoSimulador',
-        'comunidade': 'secaoComunidade',
-        'nomeacoes': 'secaoNomeacoes',
-        'configuracoes': 'secaoConfiguracoes'
-      }[secao] || 'secaoDashboard';
-
-      var elAlvo = document.getElementById(secaoAlvo);
-      if (elAlvo) elAlvo.style.display = 'block';
-
-      // Atualiza estilo dos botões na sidebar
-      var botoes = {
-        'dashboard': 'navItemDashboard',
-        'classificacoes': 'navItemClassificacoes',
-        'simulador': 'navItemSimulador',
-        'comunidade': 'navItemComunidade',
-        'nomeacoes': 'navItemNomeacoes',
-        'configuracoes': 'navItemConfiguracoes'
-      };
-
-      Object.keys(botoes).forEach(function(k) {
-        var btn = document.getElementById(botoes[k]);
-        if (!btn) return;
-        if (k === secao) {
-          btn.className = 'w-full flex items-center gap-3.5 px-6 py-3 text-sm font-semibold text-[#2DD4AA] bg-[#0C2640] border-l-4 border-[#2DD4AA] transition-all cursor-pointer text-left';
-        } else {
-          btn.className = 'w-full flex items-center gap-3.5 px-6 py-3 text-sm font-medium text-[#94A3B8] hover:text-white hover:bg-[#0C2640]/50 border-l-4 border-transparent transition-all cursor-pointer text-left';
-        }
-      });
-
-      // Fecha sidebar no mobile
-      toggleSidebarMobile(false);
-
-      // Renderizações específicas de seção
-      if (secao === 'classificacoes') {
-        renderizarTabelaClassificacaoCompleta();
-      } else if (secao === 'simulador') {
-        renderizarSistemaSimulador();
-      } else if (secao === 'comunidade') {
-        sincronizarChatExpandido();
-      }
-
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
+    var filtroStatusAtual = 'todos';
 
     function toggleSidebarMobile(abrir) {
-      var sidebar = document.getElementById('sidebarPrincipal');
-      var backdrop = document.getElementById('sidebarBackdrop');
-      if (!sidebar) return;
-
+      var s = document.getElementById('sidebarPrincipal');
+      var b = document.getElementById('sidebarBackdrop');
+      if (!s) return;
       if (abrir) {
-        sidebar.classList.remove('-translate-x-full');
-        if (backdrop) backdrop.classList.remove('hidden');
+        s.classList.remove('-translate-x-full');
+        if (b) b.classList.remove('hidden');
       } else {
-        sidebar.classList.add('-translate-x-full');
-        if (backdrop) backdrop.classList.add('hidden');
+        s.classList.add('-translate-x-full');
+        if (b) b.classList.add('hidden');
       }
     }
 
-    // 5. RENDERIZAÇÃO DA TABELA DO DASHBOARD (COLUNA 2)
-    function renderizarTabelaDashboard(lista) {
-      var tbody = document.getElementById('tabelaClassificacaoDashboardBody');
-      if (!tbody) return;
+    function navegarPortal(secao) {
+      toggleSidebarMobile(false);
+      if (secao === 'concursos') {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } else if (secao === 'chamamentos') {
+        mostrarToast('Redirecionando para chamamentos abertos...', 'info');
+        window.location.href = 'concurso.html?id=tjrs_analista_2024';
+      } else if (secao === 'guia') {
+        var el = document.querySelector('h2');
+        if (el) el.scrollIntoView({ behavior: 'smooth' });
+      } else if (secao === 'comunidade') {
+        window.location.href = 'concurso.html?id=tjrs_analista_2024#comunidade';
+      }
+    }
 
-      var dados = lista || CANDIDATOS_MOCKUP_DESIGN;
-      var html = '';
+    function setFiltroStatusPortal(status) {
+      filtroStatusAtual = status;
+      var btnTodos = document.getElementById('btnFiltroStatusTodos');
+      var btnAtivos = document.getElementById('btnFiltroStatusAtivos');
+      var btnPrevistos = document.getElementById('btnFiltroStatusPrevistos');
 
-      dados.slice(0, 8).forEach(function(c, idx) {
-        var pos = c.pos || (idx + 1);
-        var nome = c.nome || 'Candidato';
-        var iniciais = c.iniciais || extrairIniciais(nome);
-        var corBg = c.corAvatar || (idx % 2 === 0 ? '#0A253B' : '#135A7A');
-        var corTxt = c.corIniciais || (corBg === '#0A253B' ? '#2DD4AA' : '#FFFFFF');
-        var comarca = c.comarca || c.comarca_preferencia || 'Comarca da Capital';
-        var status = (c.status || c.status_nomeacao || 'APROVADO').toUpperCase();
-        
-        var isConvocado = status.includes('CONVOCADO') || status.includes('NOMEADO') || status.includes('EXERCÍCIO');
-        var badgeCor = isConvocado ? 'bg-[#2DD4AA] text-white' : 'bg-[#60A5FA] text-white';
-
-        html += `
-          <tr class="hover:bg-slate-50 transition-colors cursor-pointer group" onclick="abrirModalDetalhesCandidatoObj('${escapeHtml(nome)}')">
-            <td class="py-2.5 pr-2 text-xs font-semibold text-slate-700">
-              ${pos}
-            </td>
-            <td class="py-2.5 px-2">
-              <div class="flex items-center gap-2">
-                <div class="w-6 h-6 rounded-full flex items-center justify-center font-bold text-[10px] shrink-0" style="background-color: ${corBg}; color: ${corTxt};">
-                  ${iniciais}
-                </div>
-                <span class="font-semibold text-xs text-slate-900 group-hover:text-[#135A7A] transition-colors whitespace-nowrap">
-                  ${escapeHtml(nome)}
-                </span>
-              </div>
-            </td>
-            <td class="py-2.5 px-2 text-xs text-slate-600 whitespace-nowrap">
-              ${escapeHtml(comarca)}
-            </td>
-            <td class="py-2.5 pl-2 text-center whitespace-nowrap">
-              <span class="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wider ${badgeCor}">
-                ${status.includes('CONVOCADO') ? 'CONVOCADO' : 'APROVADO'}
-              </span>
-            </td>
-          </tr>
-        `;
+      var btns = [btnTodos, btnAtivos, btnPrevistos];
+      btns.forEach(function(b) {
+        if (!b) return;
+        b.className = 'px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:text-slate-900 transition-all cursor-pointer';
       });
 
-      tbody.innerHTML = html;
-      var contador = document.getElementById('contadorClassifDashboard');
+      if (status === 'todos' && btnTodos) {
+        btnTodos.className = 'px-3 py-1.5 rounded-lg text-xs font-bold transition-all bg-white text-slate-900 shadow-xs cursor-pointer';
+      } else if (status === 'ativos' && btnAtivos) {
+        btnAtivos.className = 'px-3 py-1.5 rounded-lg text-xs font-bold transition-all bg-white text-slate-900 shadow-xs cursor-pointer';
+      } else if (status === 'previstos' && btnPrevistos) {
+        btnPrevistos.className = 'px-3 py-1.5 rounded-lg text-xs font-bold transition-all bg-white text-slate-900 shadow-xs cursor-pointer';
+      }
+
+      filtrarConcursosPortal();
+    }
+
+    function filtrarConcursosPortal() {
+      var busca = (document.getElementById('inputBuscaConcursos').value || '').toLowerCase().trim();
+      var cards = document.querySelectorAll('#gridConcursosPortal > div');
+      var visiveis = 0;
+
+      cards.forEach(function(card) {
+        var textoCard = card.innerText.toLowerCase();
+        var matchesBusca = !busca || textoCard.includes(busca);
+        var isAtivo = textoCard.includes('chamamento ativo') || textoCard.includes('convocação em andamento');
+        var isPrevisto = textoCard.includes('previsto') || textoCard.includes('homologação');
+
+        var matchesStatus = true;
+        if (filtroStatusAtual === 'ativos') matchesStatus = isAtivo;
+        if (filtroStatusAtual === 'previstos') matchesStatus = isPrevisto;
+
+        if (matchesBusca && matchesStatus) {
+          card.style.display = 'flex';
+          visiveis++;
+        } else {
+          card.style.display = 'none';
+        }
+      });
+
+      var contador = document.getElementById('textoStatusContagemConcursos');
       if (contador) {
-        contador.textContent = 'Exibindo ' + Math.min(8, dados.length) + ' de ' + (ESTADO.candidatos.length > 0 ? ESTADO.candidatos.length : 305) + ' candidatos';
+        contador.textContent = 'Exibindo ' + visiveis + ' de 5 concursos públicos';
       }
     }
 
-    function extrairIniciais(nome) {
-      if (!nome) return 'CD';
-      var partes = nome.trim().split(/\s+/);
-      if (partes.length === 1) return partes[0].substring(0, 2).toUpperCase();
-      return (partes[0][0] + partes[partes.length - 1][0]).toUpperCase();
+    function limparFiltrosPortal() {
+      document.getElementById('inputBuscaConcursos').value = '';
+      setFiltroStatusPortal('todos');
     }
 
-    // 6. INTERAÇÃO DO MAPA REGIONAL (COLUNA 1)
-    function selecionarRegiaoNoMapa(regiaoNome, corHex) {
-      // Remove classe ativa de todos os paths
-      var paths = document.querySelectorAll('.map-region');
-      paths.forEach(function(p) { p.classList.remove('active-region'); });
-
-      // Atualiza texto e métricas
-      var texto = document.getElementById('textoRegiaoDestaque');
-      var vagas = document.getElementById('vagasRegiaoDestaque');
-      var cands = document.getElementById('candidatosRegiaoDestaque');
-
-      if (texto) texto.textContent = 'Região ' + regiaoNome;
-
-      // Filtra tabela do dashboard conforme a região
-      var termoBusca = regiaoNome.toLowerCase();
-      var filtrados = ESTADO.candidatos.length > 0 ? ESTADO.candidatos : CANDIDATOS_MOCKUP_DESIGN;
-      
-      if (termoBusca.includes('capital') || termoBusca.includes('metropolitana')) {
-        filtrados = filtrados.filter(function(c) {
-          var cm = (c.comarca || c.comarca_preferencia || '').toLowerCase();
-          return cm.includes('capital') || cm.includes('porto alegre') || cm.includes('metropolitana') || cm.includes('canoas');
-        });
-        if (vagas) vagas.textContent = '48';
-        if (cands) cands.textContent = '95';
-      } else if (termoBusca.includes('serra') || termoBusca.includes('nordeste')) {
-        filtrados = filtrados.filter(function(c) {
-          var cm = (c.comarca || c.comarca_preferencia || '').toLowerCase();
-          return cm.includes('caxias') || cm.includes('bento') || cm.includes('serra') || cm.includes('gramado');
-        });
-        if (vagas) vagas.textContent = '32';
-        if (cands) cands.textContent = '58';
-      } else {
-        if (vagas) vagas.textContent = '86';
-        if (cands) cands.textContent = '152';
-      }
-
-      renderizarTabelaDashboard(filtrados);
-      mostrarToast('Filtro aplicado: Região ' + regiaoNome, 'info');
-    }
-
-    function filtrarPorRegiao(val) {
-      if (val === 'todas') {
-        document.getElementById('textoRegiaoDestaque').textContent = 'Todas as Comarcas do Estado (98)';
-        document.getElementById('vagasRegiaoDestaque').textContent = '166';
-        document.getElementById('candidatosRegiaoDestaque').textContent = '305';
-        renderizarTabelaDashboard(ESTADO.candidatos.length > 0 ? ESTADO.candidatos : CANDIDATOS_MOCKUP_DESIGN);
-      } else {
-        selecionarRegiaoNoMapa(val, '#2DD4AA');
-      }
-    }
-
-    function filtrarClassificacaoDashboard(filtro) {
-      var base = ESTADO.candidatos.length > 0 ? ESTADO.candidatos : CANDIDATOS_MOCKUP_DESIGN;
-      if (filtro === 'todos') {
-        renderizarTabelaDashboard(base);
-        return;
-      }
-
-      var filtrados = base.filter(function(c) {
-        var st = (c.status || c.status_nomeacao || '').toLowerCase();
-        var cm = (c.comarca || c.comarca_preferencia || '').toLowerCase();
-        if (filtro === 'convocados') return st.includes('convocado') || st.includes('nomeado');
-        if (filtro === 'aprovados') return !st.includes('convocado') && !st.includes('desist');
-        if (filtro === 'Capital') return cm.includes('capital') || cm.includes('porto alegre');
-        if (filtro === 'Metropolitana') return cm.includes('metropolitana') || cm.includes('canoas') || cm.includes('viamão');
-        if (filtro === 'Interior') return cm.includes('interior') || cm.includes('passo fundo') || cm.includes('santa maria');
-        return true;
-      });
-
-      renderizarTabelaDashboard(filtrados);
-    }
-
-    // 7. CHAT DOS CANDIDATOS INTERATIVO (COLUNA 3)
-    function renderizarMensagensChat() {
-      var container = document.getElementById('containerFeedChat');
-      if (!container) return;
-
-      var html = '';
-      ESTADO.mensagensChat.forEach(function(msg) {
-        if (msg.tipo === 'enviada') {
-          html += `
-            <div class="flex items-start justify-end gap-2.5">
-              <div class="bg-[#2DD4AA] text-white rounded-2xl p-3 text-xs max-w-[85%] space-y-1 shadow-2xs">
-                <p class="leading-relaxed font-medium">${escapeHtml(msg.texto)}</p>
-                <div class="text-[9px] text-white/80 text-right">${escapeHtml(msg.hora)}</div>
-              </div>
-              <div class="w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs" style="background-color: ${msg.corAvatar}; color: ${msg.corTexto};">
-                ${msg.iniciais}
-              </div>
-            </div>
-          `;
-        } else {
-          html += `
-            <div class="flex items-start gap-2.5">
-              <div class="w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs" style="background-color: ${msg.corAvatar}; color: ${msg.corTexto};">
-                ${msg.iniciais}
-              </div>
-              <div class="bg-[#F1F5F9] rounded-2xl p-3 text-xs text-[#334155] max-w-[85%] space-y-1">
-                <div class="font-bold text-[#0F172A]">${escapeHtml(msg.nome)}</div>
-                <p class="leading-relaxed">${escapeHtml(msg.texto)}</p>
-              </div>
-            </div>
-          `;
-        }
-      });
-
-      container.innerHTML = html;
-      container.scrollTop = container.scrollHeight;
-    }
-
-    function enviarMensagemChat(e) {
-      if (e) e.preventDefault();
-      var input = document.getElementById('inputMensagemChat');
-      if (!input) return;
-      var texto = input.value.trim();
-      if (!texto) return;
-
-      var agora = new Date();
-      var horaFormatada = String(agora.getHours()).padStart(2, '0') + ':' + String(agora.getMinutes()).padStart(2, '0');
-
-      ESTADO.mensagensChat.push({
-        id: Date.now(),
-        nome: (ESTADO.candidatoLogado && ESTADO.candidatoLogado.nome) || 'Você',
-        iniciais: 'VC',
-        corAvatar: '#135A7A',
-        corTexto: '#FFFFFF',
-        tipo: 'enviada',
-        texto: texto,
-        hora: horaFormatada
-      });
-
-      input.value = '';
-      renderizarMensagensChat();
-      sincronizarChatExpandido();
-      mostrarToast('Mensagem enviada no chat comunitário!', 'sucesso');
-    }
-
-    function sincronizarChatExpandido() {
-      var containerExp = document.getElementById('containerFeedChatExpandido');
-      if (!containerExp) return;
-      containerExp.innerHTML = document.getElementById('containerFeedChat').innerHTML;
-      containerExp.scrollTop = containerExp.scrollHeight;
-    }
-
-    function enviarMensagemChatExpandido(e) {
-      if (e) e.preventDefault();
-      var input = document.getElementById('inputMensagemChatExpandido');
-      if (!input) return;
-      var texto = input.value.trim();
-      if (!texto) return;
-
-      var agora = new Date();
-      var horaFormatada = String(agora.getHours()).padStart(2, '0') + ':' + String(agora.getMinutes()).padStart(2, '0');
-
-      ESTADO.mensagensChat.push({
-        id: Date.now(),
-        nome: (ESTADO.candidatoLogado && ESTADO.candidatoLogado.nome) || 'Você',
-        iniciais: 'VC',
-        corAvatar: '#135A7A',
-        corTexto: '#FFFFFF',
-        tipo: 'enviada',
-        texto: texto,
-        hora: horaFormatada
-      });
-
-      input.value = '';
-      renderizarMensagensChat();
-      sincronizarChatExpandido();
-    }
-
-    // 8. SEÇÃO 2: CLASSIFICAÇÃO COMPLETA
-    function renderizarTabelaClassificacaoCompleta() {
-      var tbody = document.getElementById('tabelaClassificacaoCompletaBody');
-      if (!tbody) return;
-
-      var lista = ESTADO.candidatos.length > 0 ? ESTADO.candidatos : CANDIDATOS_MOCKUP_DESIGN;
-      var inicio = (ESTADO.paginaClassificacao - 1) * ESTADO.itensPorPagina;
-      var fim = inicio + ESTADO.itensPorPagina;
-      var pagItens = lista.slice(inicio, fim);
-
-      var totalPags = Math.ceil(lista.length / ESTADO.itensPorPagina) || 1;
-      document.getElementById('pagAtualTexto').textContent = ESTADO.paginaClassificacao;
-      document.getElementById('pagTotalTexto').textContent = totalPags;
-      document.getElementById('contadorCandidatosFiltrados').textContent = lista.length;
-
-      document.getElementById('btnPagAnt').disabled = (ESTADO.paginaClassificacao <= 1);
-      document.getElementById('btnPagProx').disabled = (ESTADO.paginaClassificacao >= totalPags);
-
-      var html = '';
-      pagItens.forEach(function(c, idx) {
-        var pos = c.pos || (inicio + idx + 1);
-        var nome = c.nome || 'Candidato';
-        var cota = c.cota || 'Ampla';
-        var nota = (typeof c.nota === 'number') ? c.nota.toFixed(2) : (c.nota_final || '85.00');
-        var comarca = c.comarca || c.comarca_preferencia || 'Comarca da Capital';
-        var status = c.status || c.status_nomeacao || 'Aguardando';
-
-        html += `
-          <tr class="hover:bg-slate-50 transition-colors">
-            <td class="px-4 py-3 text-center font-mono font-bold text-slate-800">${pos}º</td>
-            <td class="px-4 py-3 font-semibold text-slate-900">${escapeHtml(nome)}</td>
-            <td class="px-4 py-3 text-center text-xs font-semibold">
-              <span class="px-2 py-0.5 rounded bg-slate-100 text-slate-700">${escapeHtml(cota)}</span>
-            </td>
-            <td class="px-4 py-3 text-right font-mono font-bold text-slate-900">${nota}</td>
-            <td class="px-4 py-3 text-center">
-              <span class="px-2 py-0.5 rounded text-xs font-semibold bg-emerald-50 text-emerald-800">Assume</span>
-            </td>
-            <td class="px-4 py-3 text-slate-700">${escapeHtml(comarca)}</td>
-            <td class="px-4 py-3">
-              <span class="px-2.5 py-0.5 rounded-full text-xs font-bold ${status.includes('CONVOCADO') ? 'bg-[#2DD4AA] text-white' : 'bg-[#60A5FA] text-white'}">
-                ${escapeHtml(status)}
-              </span>
-            </td>
-            <td class="px-4 py-3 text-center">
-              <button 
-                type="button" 
-                onclick="abrirModalDetalhesCandidatoObj('${escapeHtml(nome)}')" 
-                class="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-[#2DD4AA]/10 text-slate-700 hover:text-slate-900 font-semibold text-xs transition-colors cursor-pointer"
-              >
-                Detalhes
-              </button>
-            </td>
-          </tr>
-        `;
-      });
-
-      tbody.innerHTML = html;
-    }
-
-    function mudarPagina(delta) {
-      ESTADO.paginaClassificacao += delta;
-      renderizarTabelaClassificacaoCompleta();
-    }
-
-    function filtrarClassificacaoGeral() {
-      var busca = (document.getElementById('filtroClassifBusca').value || '').toLowerCase().trim();
-      var cota = document.getElementById('filtroClassifCota').value;
-      var status = document.getElementById('filtroClassifStatus').value;
-
-      var base = ESTADO.candidatos.length > 0 ? ESTADO.candidatos : CANDIDATOS_MOCKUP_DESIGN;
-      var filtrados = base.filter(function(c) {
-        if (busca) {
-          var nome = (c.nome || '').toLowerCase();
-          var cm = (c.comarca || c.comarca_preferencia || '').toLowerCase();
-          if (!nome.includes(busca) && !cm.includes(busca)) return false;
-        }
-        if (cota !== 'todas') {
-          var cCota = (c.cota || '').toLowerCase();
-          if (!cCota.includes(cota.toLowerCase())) return false;
-        }
-        if (status !== 'todos') {
-          var st = (c.status || c.status_nomeacao || '').toLowerCase();
-          if (!st.includes(status.toLowerCase())) return false;
-        }
-        return true;
-      });
-
-      ESTADO.paginaClassificacao = 1;
-      ESTADO.candidatos = filtrados;
-      renderizarTabelaClassificacaoCompleta();
-    }
-
-    function limparFiltrosClassificacao() {
-      document.getElementById('filtroClassifBusca').value = '';
-      document.getElementById('filtroClassifCota').value = 'todas';
-      document.getElementById('filtroClassifStatus').value = 'todos';
-      document.getElementById('filtroClassifIntencao').value = 'todas';
-      carregarCandidatosSupabase();
-    }
-
-    // 9. SEÇÃO 3: SIMULADOR DE COMARCAS
-    function renderizarSistemaSimulador() {
-      renderizarComarcasSimuladorDisponiveis();
-      renderizarComarcasSimuladorEscolhidas();
-    }
-
-    function renderizarComarcasSimuladorDisponiveis() {
-      var container = document.getElementById('listaSimuladorDisponiveis');
-      var busca = (document.getElementById('buscaSimuladorDisponiveis').value || '').toLowerCase().trim();
-      var contador = document.getElementById('contadorSimuladorDisponiveis');
-      if (!container) return;
-
-      var disponiveis = ESTADO.comarcas.filter(function(cm) {
-        if (ESTADO.minhasEscolhasSimulador.includes(cm)) return false;
-        if (busca && !cm.toLowerCase().includes(busca)) return false;
-        return true;
-      });
-
-      if (contador) contador.textContent = disponiveis.length;
-
-      var html = '';
-      disponiveis.forEach(function(cm) {
-        html += `
-          <div class="flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-200 hover:border-[#2DD4AA] transition-colors">
-            <span class="text-xs font-semibold text-slate-800">${escapeHtml(cm)}</span>
-            <button 
-              type="button" 
-              onclick="adicionarComarcaSimulador('${escapeHtml(cm)}')" 
-              class="text-xs bg-[#2DD4AA]/15 text-[#135A7A] hover:bg-[#2DD4AA] hover:text-slate-950 font-bold px-2.5 py-1 rounded-md transition-colors cursor-pointer"
-            >
-              + Adicionar
-            </button>
-          </div>
-        `;
-      });
-      container.innerHTML = html;
-    }
-
-    function renderizarComarcasSimuladorEscolhidas() {
-      var container = document.getElementById('listaSimuladorEscolhidas');
-      var contador = document.getElementById('contadorSimuladorEscolhidas');
-      if (!container) return;
-
-      var escolhidas = ESTADO.minhasEscolhasSimulador;
-      if (contador) contador.textContent = escolhidas.length;
-
-      if (escolhidas.length === 0) {
-        container.innerHTML = '<div class="text-xs text-slate-400 text-center py-8">Nenhuma comarca selecionada.<br>Clique em "+ Adicionar" na coluna da esquerda.</div>';
-        return;
-      }
-
-      var html = '';
-      escolhidas.forEach(function(cm, idx) {
-        html += `
-          <div class="flex items-center justify-between p-2 rounded-lg bg-white border border-slate-200 shadow-2xs">
-            <div class="flex items-center gap-2">
-              <span class="w-5 h-5 rounded bg-[#135A7A] text-white flex items-center justify-center font-mono font-bold text-[10px]">
-                ${idx + 1}º
-              </span>
-              <span class="text-xs font-bold text-slate-900">${escapeHtml(cm)}</span>
-            </div>
-            <div class="flex items-center gap-1">
-              <button type="button" onclick="moverComarcaSimulador(${idx}, -1)" class="w-5 h-5 rounded bg-slate-100 text-slate-700 text-xs font-bold flex items-center justify-center cursor-pointer">▲</button>
-              <button type="button" onclick="moverComarcaSimulador(${idx}, 1)" class="w-5 h-5 rounded bg-slate-100 text-slate-700 text-xs font-bold flex items-center justify-center cursor-pointer">▼</button>
-              <button type="button" onclick="removerComarcaSimulador(${idx})" class="w-5 h-5 rounded bg-rose-50 text-rose-600 text-xs font-bold flex items-center justify-center cursor-pointer ml-1">✕</button>
-            </div>
-          </div>
-        `;
-      });
-      container.innerHTML = html;
-    }
-
-    function adicionarComarcaSimulador(cm) {
-      if (!ESTADO.minhasEscolhasSimulador.includes(cm)) {
-        ESTADO.minhasEscolhasSimulador.push(cm);
-        renderizarSistemaSimulador();
-      }
-    }
-
-    function removerComarcaSimulador(idx) {
-      ESTADO.minhasEscolhasSimulador.splice(idx, 1);
-      renderizarSistemaSimulador();
-    }
-
-    function moverComarcaSimulador(idx, delta) {
-      var novoIdx = idx + delta;
-      if (novoIdx < 0 || novoIdx >= ESTADO.minhasEscolhasSimulador.length) return;
-      var item = ESTADO.minhasEscolhasSimulador.splice(idx, 1)[0];
-      ESTADO.minhasEscolhasSimulador.splice(novoIdx, 0, item);
-      renderizarSistemaSimulador();
-    }
-
-    function adicionarTodasComarcasSimulador() {
-      ESTADO.comarcas.forEach(function(cm) {
-        if (!ESTADO.minhasEscolhasSimulador.includes(cm)) {
-          ESTADO.minhasEscolhasSimulador.push(cm);
-        }
-      });
-      renderizarSistemaSimulador();
-      mostrarToast('Todas as comarcas foram adicionadas à sua lista de prioridades!', 'sucesso');
-    }
-
-    function limparEscolhasSimulador() {
-      ESTADO.minhasEscolhasSimulador = [];
-      renderizarSistemaSimulador();
-    }
-
-    function salvarPreferenciasSimulador() {
-      localStorage.setItem('tjrs_minhas_escolhas_simulador', JSON.stringify(ESTADO.minhasEscolhasSimulador));
-      mostrarToast('Ranking de preferências salvo com sucesso no navegador e sincronizado!', 'sucesso');
-    }
-
-    // 10. MODAL DE DETALHES DO CANDIDATO
-    function abrirModalDetalhesCandidatoObj(nome) {
-      var cand = (ESTADO.candidatos.length > 0 ? ESTADO.candidatos : CANDIDATOS_MOCKUP_DESIGN).find(function(c) {
-        return c.nome === nome;
-      }) || { nome: nome, pos: 1, cota: 'Ampla', nota: 89.50, status: 'CONVOCADO', comarca: 'Comarca da Capital' };
-
-      document.getElementById('modalNomeCandidato').textContent = cand.nome;
-      document.getElementById('modalAvatarLetras').textContent = cand.iniciais || extrairIniciais(cand.nome);
-      document.getElementById('modalCotaBadge').textContent = cand.cota || 'Ampla Concorrência';
-      document.getElementById('modalClassGeral').textContent = (cand.pos || 1) + 'º Lugar';
-      document.getElementById('modalNotaFinal').textContent = (typeof cand.nota === 'number' ? cand.nota.toFixed(2) : (cand.nota_final || '89.50'));
-      document.getElementById('modalStatusOficial').textContent = cand.status || cand.status_nomeacao || 'CONVOCADO';
-      document.getElementById('modalIntencaoDeclarada').textContent = 'Assume a vaga (Sim)';
-      document.getElementById('modalPrimeiraComarca').textContent = cand.comarca || cand.comarca_preferencia || 'Comarca da Capital';
-
-      document.getElementById('modalDetalhesCandidato').style.display = 'flex';
-    }
-
-    function fecharModalDetalhesCandidato() {
-      document.getElementById('modalDetalhesCandidato').style.display = 'none';
-    }
-
-    // 11. BUSCA RÁPIDA GLOBAL
-    function abrirModalBuscaRapida() {
-      document.getElementById('modalBuscaRapida').style.display = 'flex';
-      var inp = document.getElementById('inputBuscaGlobalModal');
-      if (inp) {
-        inp.value = '';
-        inp.focus();
-      }
-    }
-
-    function fecharModalBuscaRapida() {
-      document.getElementById('modalBuscaRapida').style.display = 'none';
-    }
-
-    function executarBuscaRapidaGlobal(termo) {
-      var container = document.getElementById('resultadosBuscaRapidaModal');
-      if (!container) return;
-
-      var t = (termo || '').toLowerCase().trim();
-      if (!t) {
-        container.innerHTML = '<div class="text-slate-400 text-center py-4">Digite para buscar...</div>';
-        return;
-      }
-
-      var base = ESTADO.candidatos.length > 0 ? ESTADO.candidatos : CANDIDATOS_MOCKUP_DESIGN;
-      var matches = base.filter(function(c) {
-        var n = (c.nome || '').toLowerCase();
-        var cm = (c.comarca || c.comarca_preferencia || '').toLowerCase();
-        return n.includes(t) || cm.includes(t);
-      });
-
-      if (matches.length === 0) {
-        container.innerHTML = '<div class="text-slate-400 text-center py-3">Nenhum resultado encontrado.</div>';
-        return;
-      }
-
-      var html = '';
-      matches.slice(0, 6).forEach(function(c) {
-        html += `
-          <div class="flex items-center justify-between p-2 rounded-lg bg-slate-50 hover:bg-[#2DD4AA]/15 cursor-pointer transition-colors" onclick="fecharModalBuscaRapida(); abrirModalDetalhesCandidatoObj('${escapeHtml(c.nome)}')">
-            <span class="font-semibold text-slate-800">${escapeHtml(c.nome)}</span>
-            <span class="text-xs text-slate-500">${escapeHtml(c.comarca || c.comarca_preferencia || 'Capital')}</span>
-          </div>
-        `;
-      });
-      container.innerHTML = html;
-    }
-
-    function abrirNotificacoes() {
-      mostrarToast('🔔 3 novas convocações registradas no 1º chamamento!', 'info');
-    }
-
-    // 12. CARREGAMENTO DE DADOS SUPABASE
-    async function carregarCandidatosSupabase() {
-      try {
-        if (!supabaseClient) {
-          renderizarTabelaDashboard(CANDIDATOS_MOCKUP_DESIGN);
-          return;
-        }
-
-        var res = await supabaseClient
-          .from('candidatos_base')
-          .select('*')
-          .order('classificacao_ampla', { ascending: true })
-          .limit(300);
-
-        if (res.data && res.data.length > 0) {
-          ESTADO.candidatos = res.data.map(function(d, idx) {
-            return {
-              pos: d.classificacao_ampla || (idx + 1),
-              nome: d.nome,
-              iniciais: extrairIniciais(d.nome),
-              corAvatar: idx % 3 === 0 ? '#0A253B' : (idx % 3 === 1 ? '#135A7A' : '#1D8A8A'),
-              corIniciais: idx % 3 === 0 ? '#2DD4AA' : '#FFFFFF',
-              comarca: d.comarca_preferencia || d.lotacao_assumida || (idx % 2 === 0 ? 'Comarca da Capital' : 'Comarca Metropolitana'),
-              status: d.status_nomeacao || (idx < 38 ? 'CONVOCADO' : 'APROVADO'),
-              nota: d.nota_final || 85.00,
-              cota: d.cota || d.tipo || 'Ampla'
-            };
-          });
-          renderizarTabelaDashboard(ESTADO.candidatos);
-        } else {
-          renderizarTabelaDashboard(CANDIDATOS_MOCKUP_DESIGN);
-        }
-      } catch(err) {
-        console.warn('Fallback para mock do design:', err);
-        renderizarTabelaDashboard(CANDIDATOS_MOCKUP_DESIGN);
-      }
-    }
-
-    function recarregarDadosComFeedback() {
-      carregarCandidatosSupabase();
-      mostrarToast('Dados do certame atualizados em tempo real!', 'sucesso');
-    }
-
-    // 13. AUTENTICAÇÃO E PERFIL
     function ativarModoAdminPreview(comAlerta) {
       localStorage.setItem('tjrs_preview_modo_teste', 'admin');
       localStorage.setItem('tjrs_usuario_email', 'rafasms0@hotmail.com');
-      ESTADO.candidatoLogado = { nome: 'Rafael Santos (Admin)', email: 'rafasms0@hotmail.com' };
-      
-      var avatar = document.getElementById('avatarCandidatoHeader');
+      var avatar = document.getElementById('avatarUsuarioHeader');
       if (avatar) avatar.textContent = 'RS';
-      var nome = document.getElementById('nomePainelCandidatoHeader');
+      var nome = document.getElementById('nomeUsuarioHeader');
       if (nome) nome.textContent = 'Rafael Santos (Admin)';
-
       if (comAlerta) {
-        mostrarToast('⚡ Conectado como Administrador no Dashboard!', 'sucesso');
+        mostrarToast('⚡ Conectado como Administrador no Portal!', 'sucesso');
       }
     }
 
     function fazerLogout() {
       localStorage.removeItem('tjrs_preview_modo_teste');
       localStorage.removeItem('tjrs_usuario_email');
-      ESTADO.candidatoLogado = null;
-      var avatar = document.getElementById('avatarCandidatoHeader');
+      var avatar = document.getElementById('avatarUsuarioHeader');
       if (avatar) avatar.textContent = 'PC';
-      var nome = document.getElementById('nomePainelCandidatoHeader');
+      var nome = document.getElementById('nomeUsuarioHeader');
       if (nome) nome.textContent = 'Painel do Candidato';
       mostrarToast('Sessão encerrada.', 'info');
     }
 
-    function salvarConfiguracoesPerfil() {
-      mostrarToast('Informações de perfil salvas com sucesso!', 'sucesso');
-    }
-
-    // 14. UTILITÁRIOS
     function mostrarToast(msg, tipo) {
       var toast = document.getElementById('toastAlerta');
-      var icone = document.getElementById('toastIcone');
       var txt = document.getElementById('toastMensagem');
+      var icone = document.getElementById('toastIcone');
       if (!toast || !txt) return;
 
       txt.textContent = msg;
@@ -1967,29 +916,7 @@
       }, 3500);
     }
 
-    function escapeHtml(str) {
-      if (!str) return '';
-      return String(str)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#039;');
-    }
-
-    // 15. INICIALIZAÇÃO COMPLETA
     document.addEventListener('DOMContentLoaded', function() {
-      renderizarTabelaDashboard(CANDIDATOS_MOCKUP_DESIGN);
-      renderizarMensagensChat();
-      carregarCandidatosSupabase();
-      
-      // Carrega escolhas salvas
-      try {
-        var salvas = localStorage.getItem('tjrs_minhas_escolhas_simulador');
-        if (salvas) ESTADO.minhasEscolhasSimulador = JSON.parse(salvas);
-      } catch(e) {}
-
-      // Se admin ativo no localStorage
       if (localStorage.getItem('tjrs_preview_modo_teste') === 'admin' || window.location.search.includes('admin=1')) {
         ativarModoAdminPreview(false);
       }
