@@ -134,7 +134,7 @@
       <!-- 3. Painel Admin / Gestão de Concursos e Cargos -->
       <a 
         id="navItemAdmin" 
-        href="lote.html?admin=1&subaba=concursos" 
+        href="admin.html" 
         class="w-full flex items-center gap-3.5 px-6 py-3 text-sm font-medium text-[#94A3B8] hover:text-amber-300 hover:bg-[#0C2640]/50 border-l-4 border-transparent transition-all cursor-pointer text-left"
         title="Cadastrar e organizar concursos e cargos"
       >
@@ -206,12 +206,12 @@
         
         <!-- Botão Admin Preview Rápido -->
         <a 
-          href="lote.html?admin=1&subaba=concursos" 
+          href="admin.html" 
           class="inline-flex items-center gap-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold px-3 py-1.5 rounded-lg text-xs shadow-xs transition-all border border-amber-500/50"
           title="Abrir o painel para cadastrar novos concursos e cargos"
         >
           <span>⚙️</span>
-          <span>Gerenciar Concursos</span>
+          <span>Painel Admin</span>
         </a>
 
         <!-- Widget: Painel do Candidato -->
@@ -254,7 +254,7 @@
           <!-- Botão para o Admin Cadastrar Concurso -->
           <div class="flex items-center gap-2 shrink-0">
             <a 
-              href="lote.html?admin=1&subaba=concursos" 
+              href="admin.html" 
               class="inline-flex items-center gap-2 bg-[#07192B] hover:bg-[#0C2640] text-white font-bold px-4 py-2 rounded-xl text-xs shadow-xs transition-colors"
             >
               <span>➕</span>
@@ -418,7 +418,7 @@
           <div class="flex flex-wrap items-center gap-4 text-xs text-slate-300">
             <a href="index.html" class="text-[#2DD4AA] hover:underline font-semibold">Portal de Concursos</a>
             <span class="text-slate-600">·</span>
-            <a href="lote.html?admin=1&subaba=concursos" class="hover:text-white transition-colors">Painel Admin de Concursos</a>
+            <a href="admin.html" class="hover:text-white transition-colors">Painel Admin de Concursos</a>
             <span class="text-slate-600">·</span>
             <a href="politica-de-privacidade.html" class="hover:text-[#2DD4AA] underline transition-colors">Política de Privacidade</a>
           </div>
@@ -529,13 +529,13 @@
             <div class="w-16 h-16 mx-auto rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center text-3xl">
               🏛️
             </div>
-            <h3 class="text-lg sm:text-xl font-bold font-serif text-slate-900">Nenhum concurso cadastrado ainda</h3>
+            <h3 class="text-lg sm:text-xl font-bold font-serif text-slate-900">Nenhum concurso exibido</h3>
             <p class="text-xs sm:text-sm text-slate-500 max-w-md mx-auto">
               Utilize o Painel Admin para cadastrar seu primeiro concurso e configurar os cargos desejados.
             </p>
             <div class="pt-2">
               <a 
-                href="lote.html?admin=1&subaba=concursos" 
+                href="admin.html" 
                 class="inline-flex items-center gap-2 bg-[#07192B] hover:bg-[#0C2640] text-white font-bold px-5 py-2.5 rounded-xl text-xs shadow-xs"
               >
                 <span>➕</span>
@@ -551,14 +551,30 @@
       var html = '';
       lista.forEach(function(c) {
         var cargos = Array.isArray(c.cargos) ? c.cargos : [];
-        var statusTexto = c.status === 'ativo' ? '● Concurso Ativo' : '○ Previsto';
-        var statusBadgeClass = c.status === 'ativo' 
+        var st = (c.status || '').toLowerCase();
+        var ehAtivo = (st === 'ativo' || st.includes('andamento') || st.includes('homologado') || st.includes('convocando') || st.includes('inscri') || !st);
+        var statusTexto = ehAtivo ? '● Concurso Ativo' : '○ ' + (c.status || 'Previsto');
+        var statusBadgeClass = ehAtivo 
           ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
-          : 'bg-amber-50 text-amber-700 border-amber-200';
+          : 'bg-slate-100 text-slate-600 border-slate-200';
+
+        var urlConcursoGeral = 'concurso.html?id=' + encodeURIComponent(c.id);
 
         var htmlCargos = '';
         if (cargos.length === 0) {
-          htmlCargos = '<p class="text-xs text-slate-400 italic">Nenhum cargo estruturado ainda para este concurso.</p>';
+          htmlCargos = `
+            <div class="p-3.5 rounded-xl bg-slate-50 border border-dashed border-slate-200 text-center space-y-2">
+              <p class="text-xs text-slate-500">Nenhum cargo específico cadastrado ainda.</p>
+              <div class="flex items-center justify-center gap-2 flex-wrap">
+                <a href="${urlConcursoGeral}" class="px-3 py-1.5 rounded-lg bg-[#07192B] hover:bg-[#0C2640] text-white text-xs font-semibold transition-colors">
+                  Acessar Concurso →
+                </a>
+                <a href="admin.html" class="px-3 py-1.5 rounded-lg bg-teal-50 hover:bg-teal-100 text-teal-800 text-xs font-bold border border-teal-200 transition-colors">
+                  + Adicionar Cargo
+                </a>
+              </div>
+            </div>
+          `;
         } else {
           cargos.forEach(function(cg) {
             var urlConcursoCargo = 'concurso.html?id=' + encodeURIComponent(c.id) + '&cargo=' + encodeURIComponent(cg.id);
@@ -612,7 +628,9 @@
 
               <div>
                 <h3 class="text-base sm:text-lg font-bold font-serif text-slate-900 group-hover:text-[#135A7A] transition-colors leading-snug">
-                  ${escapeHtml(c.nome)}
+                  <a href="${urlConcursoGeral}" class="hover:underline">
+                    ${escapeHtml(c.nome)}
+                  </a>
                 </h3>
                 <p class="text-xs text-slate-500 mt-1 line-clamp-2">
                   ${escapeHtml(c.descricao || 'Concurso oficial acompanhado pelo CERTAM.')}
@@ -632,9 +650,14 @@
             <!-- Rodapé do Card do Concurso -->
             <div class="pt-4 border-t border-slate-100 mt-4 flex items-center justify-between text-2xs text-slate-400">
               <span>Edital: <strong>${escapeHtml(c.edital || 'Oficial')}</strong></span>
-              <a href="lote.html?admin=1&subaba=concursos" class="text-teal-700 hover:text-teal-900 font-semibold hover:underline">
-                Gerenciar cargos ⚙️
-              </a>
+              <div class="flex items-center gap-3">
+                <a href="${urlConcursoGeral}" class="text-slate-700 hover:text-slate-900 font-semibold hover:underline">
+                  Abrir Concurso ↗
+                </a>
+                <a href="admin.html" class="text-teal-700 hover:text-teal-900 font-semibold hover:underline">
+                  Gerenciar cargos ⚙️
+                </a>
+              </div>
             </div>
           </div>
         `;
@@ -649,16 +672,18 @@
     function filtrarConcursosPortal() {
       var busca = (document.getElementById('inputBuscaConcursos').value || '').toLowerCase().trim();
       var filtrados = concursosCarregados.filter(function(c) {
-        var matchStatus = (filtroStatusAtual === 'todos') || (c.status === 'ativo');
+        var st = (c.status || '').toLowerCase();
+        var ehAtivo = (st === 'ativo' || st.includes('andamento') || st.includes('homologado') || st.includes('convocando') || st.includes('inscri') || !st);
+        var matchStatus = (filtroStatusAtual === 'todos') || ehAtivo;
         if (!matchStatus) return false;
 
         if (!busca) return true;
-        var textoConc = (c.nome + ' ' + (c.orgao || '') + ' ' + (c.descricao || '')).toLowerCase();
+        var textoConc = (c.nome + ' ' + (c.orgao || '') + ' ' + (c.descricao || '') + ' ' + (c.id || '')).toLowerCase();
         if (textoConc.includes(busca)) return true;
 
         if (Array.isArray(c.cargos)) {
           var temCargo = c.cargos.some(function(cg) {
-            return cg.nome.toLowerCase().includes(busca);
+            return cg.nome.toLowerCase().includes(busca) || cg.id.toLowerCase().includes(busca);
           });
           if (temCargo) return true;
         }
@@ -672,6 +697,27 @@
     function limparFiltrosPortal() {
       document.getElementById('inputBuscaConcursos').value = '';
       setFiltroStatusPortal('todos');
+    }
+
+    async function carregarConcursosDoStore() {
+      if (typeof window.CertamStore !== 'undefined') {
+        concursosCarregados = window.CertamStore.getConcursos();
+        atualizarMetricasPortal();
+        renderizarGridConcursos(concursosCarregados);
+
+        try {
+          var remotos = await window.CertamStore.carregarDeSupabase();
+          if (remotos && Array.isArray(remotos) && remotos.length > 0) {
+            concursosCarregados = remotos;
+            atualizarMetricasPortal();
+            renderizarGridConcursos(concursosCarregados);
+          }
+        } catch(e) {}
+      } else {
+        concursosCarregados = [];
+        atualizarMetricasPortal();
+        renderizarGridConcursos(concursosCarregados);
+      }
     }
 
     function fazerLogout() {
@@ -709,9 +755,26 @@
         .replace(/'/g, '&#039;');
     }
 
+    window.addEventListener('certam_concursos_updated', function(e) {
+      if (e && e.detail) {
+        concursosCarregados = e.detail;
+        atualizarMetricasPortal();
+        renderizarGridConcursos(concursosCarregados);
+      } else {
+        carregarConcursosDoStore();
+      }
+    });
+
+    window.addEventListener('storage', function(e) {
+      if (e && e.key === 'certam_concursos_cargos') {
+        carregarConcursosDoStore();
+      }
+    });
+
     document.addEventListener('DOMContentLoaded', function() {
       carregarConcursosDoStore();
     });
+  </script>
   </script>
 </body>
 </html>
