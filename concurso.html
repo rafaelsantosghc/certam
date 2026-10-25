@@ -210,7 +210,7 @@
         </a>
 
         <a 
-          href="lote.html?admin=1&subaba=concursos" 
+          href="admin.html" 
           class="flex items-center gap-2 px-3 py-2 rounded-xl text-2xs font-semibold text-amber-300 hover:text-amber-200 bg-amber-950/40 hover:bg-amber-950/60 border border-amber-500/30 transition-all"
         >
           <span>⚙️</span>
@@ -294,7 +294,7 @@
 
         <!-- Botão Admin Preview (Acesso Rápido) -->
         <a 
-          href="lote.html?admin=1&subaba=concursos" 
+          href="admin.html" 
           class="hidden sm:flex items-center gap-1.5 bg-gradient-to-r from-amber-400 to-amber-300 hover:from-amber-300 hover:to-amber-200 text-slate-950 font-black px-3 py-1.5 rounded-lg text-xs shadow-xs transition-all cursor-pointer border border-amber-500/50" 
           title="Abrir Gestão de Concursos e Cargos"
         >
@@ -348,7 +348,7 @@
 
       <div class="flex items-center gap-2 shrink-0">
         <a 
-          href="lote.html?admin=1&subaba=concursos" 
+          href="admin.html" 
           class="text-2xs text-amber-300 hover:text-white font-semibold flex items-center gap-1 bg-white/5 hover:bg-white/10 px-2.5 py-1 rounded-lg border border-white/10 transition-colors"
           title="Adicionar ou editar cargos deste concurso"
         >
@@ -979,7 +979,7 @@
         <div class="flex flex-wrap items-center gap-4 text-xs">
           <a href="index.html" class="text-slate-600 hover:text-slate-900">Portal de Concursos</a>
           <span class="text-slate-300">·</span>
-          <a href="lote.html?admin=1&subaba=concursos" class="text-amber-700 font-semibold hover:underline">Painel Admin (Concursos &amp; Cargos)</a>
+          <a href="admin.html" class="text-amber-700 font-semibold hover:underline">Painel Admin (Concursos &amp; Cargos)</a>
         </div>
       </div>
     </footer>
@@ -1086,13 +1086,20 @@
       mensagensChat: []
     };
 
-    function inicializarEstruturaConcursoECargo() {
+    async function inicializarEstruturaConcursoECargo() {
       if (typeof window.CertamStore === 'undefined') return;
 
       var conc = window.CertamStore.getConcurso(ESTADO.concursoId);
+      if (!conc && typeof window.CertamStore.carregarDeSupabase === 'function') {
+        try {
+          await window.CertamStore.carregarDeSupabase();
+          conc = window.CertamStore.getConcurso(ESTADO.concursoId);
+        } catch(e) {}
+      }
+
       if (!conc) {
         var lista = window.CertamStore.getConcursos();
-        conc = lista[0] || null;
+        conc = lista.find(function(c) { return c.id === ESTADO.concursoId; }) || lista[0] || null;
       }
 
       if (!conc) {
