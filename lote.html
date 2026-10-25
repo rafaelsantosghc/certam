@@ -11315,7 +11315,7 @@
     }
 
     function normTxtImportador(t) {
-      return (t || '').toString().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+      return (t || '').toString().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[\r\n]+/g, ' ').replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim();
     }
 
     function parseNumeroImportador(val) {
@@ -11335,44 +11335,18 @@
     }
 
     function formatarDataImportador(val) {
-      if (!val && val !== 0) return null;
-  
-      // 1. Se for um número serial do Excel (ex: 34390)
+      if (!val) return '';
+      if (val instanceof Date) {
+        return val.toLocaleDateString('pt-BR');
+      }
       if (typeof val === 'number') {
-          // Converte o número serial do Excel para uma data JS válida (Ajuste de época do Excel 1899/1900)
-          const msPorDia = 24 * 60 * 60 * 1000;
-          const dataExcel = new Date((val - (val > 60 ? 25569 : 25568)) * msPorDia);
-          if (!isNaN(dataExcel)) {
-              const ano = dataExcel.getUTCFullYear();
-              const mes = String(dataExcel.getUTCMonth() + 1).padStart(2, '0');
-              const dia = String(dataExcel.getUTCDate()).padStart(2, '0');
-              return `${ano}-${mes}-${dia}`;
-          }
+        try {
+          var dataJs = new Date(Math.round((val - 25569) * 86400 * 1000));
+          return dataJs.toLocaleDateString('pt-BR');
+        } catch(e) {}
       }
-  
-      // 2. Se o SheetJS já interpretou como objeto Date do JavaScript:
-      if (val instanceof Date && !isNaN(val)) {
-          const ano = val.getFullYear();
-          const mes = String(val.getMonth() + 1).padStart(2, '0');
-          const dia = String(val.getDate()).padStart(2, '0');
-          return `${ano}-${mes}-${dia}`;
-      }
-  
-      // 3. Se a célula veio como string no formato brasileiro (DD/MM/YYYY):
-      if (typeof val === 'string' && val.includes('/')) {
-          const partes = val.split('/');
-          if (partes.length === 3) {
-              return `${partes[2]}-${partes[1].padStart(2, '0')}-${partes[0].padStart(2, '0')}`;
-          }
-      }
-  
-      // 4. Se já estiver no formato YYYY-MM-DD:
-      if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(val)) {
-          return val;
-      }
-  
-      return null;
-  }
+      return String(val).trim();
+    }
 
     function aoSelecionarArquivoExcel(e) {
       var file = e.target.files && e.target.files[0];
@@ -11411,7 +11385,7 @@
           IMPORTADOR_ESTADO.abaGeralNome = nomeAbaGeral;
           IMPORTADOR_ESTADO.abaNomeacaoNome = nomeAbaNomeacao || '';
 
-          // 2. Lê a aba 'Lista geral' com detecção dinâmica do cabeçalho
+          // 2. Lê a aba 'Lista geral' com detecção dinâmica do cabeçalho por pontuação
           var wsGeral = workbook.Sheets[nomeAbaGeral];
           var rawRowsGeral = XLSX.utils.sheet_to_json(wsGeral, { header: 1 });
 
@@ -11420,17 +11394,25 @@
             return;
           }
 
-          // Localiza dinamicamente a linha que contém o cabeçalho (analisa até as 6 primeiras linhas)
+          // Localiza dinamicamente a linha que contém o cabeçalho oficial (analisa até as 10 primeiras linhas por pontuação)
           var idxHeader = 0;
-          for (var h = 0; h < Math.min(6, rawRowsGeral.length); h++) {
+          var maiorScore = 0;
+          for (var h = 0; h < Math.min(10, rawRowsGeral.length); h++) {
             var rowH = rawRowsGeral[h] || [];
-            var achou = rowH.some(function(cell) {
-              var cNorm = normTxtImportador(cell);
-              return cNorm.includes('nome') || cNorm.includes('candidato') || cNorm.includes('inscricao') || (cNorm.includes('class') && !cNorm.includes('turma'));
-            });
-            if (achou) {
+            var score = 0;
+            for (var c = 0; c < rowH.length; c++) {
+              var cNorm = normTxtImportador(rowH[c]);
+              if (cNorm === 'nome' || cNorm === 'candidato' || cNorm === 'nome do candidato') score += 4;
+              else if (cNorm === 'class' || cNorm === 'classificacao' || cNorm === 'class ampla' || cNorm === 'class por vaga') score += 3;
+              else if (cNorm === 'inscricao' || cNorm === 'inscr') score += 3;
+              else if (cNorm === 'nota' || cNorm === 'pontos' || cNorm === 'nota final') score += 2;
+              else if (cNorm === 'cota' || cNorm === 'tipo' || cNorm === 'modalidade') score += 2;
+              else if (cNorm.includes('assumir') || cNorm.includes('assumira') || cNorm.includes('intenc')) score += 2;
+              else if (cNorm === 'port' || cNorm === 'leg' || cNorm === 'info') score += 1;
+            }
+            if (score > maiorScore) {
+              maiorScore = score;
               idxHeader = h;
-              break;
             }
           }
 
@@ -11443,6 +11425,8 @@
           var colCpf = -1, colEmail = -1, colWhats = -1, colNasc = -1;
           var colLoteCham = -1, colDataConv = -1, colStatus = -1, colLotacao = -1, colDataNom = -1;
           var colIntencao = -1;
+          var colComarcaPref = -1, colRegiao = -1, colOutrosConcursos = -1;
+          var colRegFuncional = -1, colCargo = -1, colPossuiFg = -1, colComarcaAtual = -1, colUnidadeAtual = -1;
 
           headerRow.forEach(function(h, idx) {
             var ht = normTxtImportador(h);
@@ -11450,59 +11434,75 @@
               colId = idx;
             } else if (ht === 'concurso_id' || (ht.includes('concurso') && ht.includes('id'))) {
               colConcursoId = idx;
-            } else if (colClass === -1 && (ht === 'classificacao_ampla' || ht === 'class. ampla' || ht.includes('class') || ht === 'pos' || ht === 'ordem' || ht === 'posicao')) {
+            } else if (colClass === -1 && (ht === 'class' || ht === 'classificacao' || ht === 'classificacao ampla' || ht === 'class ampla' || ht === 'pos' || ht === 'ordem' || ht === 'posicao')) {
               colClass = idx;
+            } else if (colVagaChamada === -1 && (ht === 'class por vaga' || ht === 'vaga chamada' || ht === 'vaga_chamada' || ht.includes('por vaga') || ht.includes('vaga chamada'))) {
+              colVagaChamada = idx;
             } else if (colInscricao === -1 && (ht.includes('inscr') || ht.includes('insc'))) {
               colInscricao = idx;
-            } else if (colNome === -1 && (ht.includes('nome') || ht.includes('candidato'))) {
+            } else if (colNome === -1 && (ht === 'nome' || ht === 'candidato' || ht === 'nome do candidato' || (ht.includes('nome') && !ht.includes('nomeacao') && !ht.includes('nomeacoes')))) {
               colNome = idx;
-            } else if (colClassCota === -1 && (ht === 'classificacao_cota' || (ht.includes('cota') && (ht.includes('class') || ht.includes('pos'))))) {
+            } else if (colClassCota === -1 && (ht === 'classificacao_cota' || ht === 'class cota' || (ht.includes('cota') && (ht.includes('class') || ht.includes('pos'))))) {
               colClassCota = idx;
-            } else if (colCota === -1 && (ht === 'cota' || ht === 'tipo' || ht.includes('vaga') || ht.includes('modalidade'))) {
+            } else if (colCota === -1 && (ht === 'cota' || ht === 'tipo' || ht === 'modalidade')) {
               colCota = idx;
-            } else if (colOrdemNom === -1 && (ht === 'ordem_nomeacao' || ht.includes('ordem_nom') || ht.includes('ordem nomeacao'))) {
+            } else if (colOrdemNom === -1 && (ht === 'ordem_nomeacao' || ht === 'ordem nomeacao' || ht.includes('ordem_nom'))) {
               colOrdemNom = idx;
-            } else if (colVagaChamada === -1 && (ht === 'vaga_chamada' || ht.includes('vaga chamada'))) {
-              colVagaChamada = idx;
-            } else if (colNotaFinal === -1 && (ht === 'nota_final' || ht.includes('final') || ht.includes('total') || ht === 'nota' || ht.includes('pontos'))) {
+            } else if (colNotaFinal === -1 && (ht === 'nota' || ht === 'nota final' || ht === 'nota_final' || ht === 'total' || ht.includes('pontos'))) {
               colNotaFinal = idx;
-            } else if (colNotaPort === -1 && (ht === 'nota_port' || ht.includes('port') || ht === 'lp' || ht.includes('lingua'))) {
+            } else if (colNotaPort === -1 && (ht === 'port' || ht === 'nota port' || ht === 'nota_port' || ht === 'lp' || ht.includes('lingua'))) {
               colNotaPort = idx;
-            } else if (colNotaLeg === -1 && (ht === 'nota_leg' || ht.includes('leg') || ht.includes('dir'))) {
+            } else if (colNotaLeg === -1 && (ht === 'leg' || ht === 'nota leg' || ht === 'nota_leg' || ht.includes('legislacao'))) {
               colNotaLeg = idx;
-            } else if (colNotaInfo === -1 && (ht === 'nota_info' || ht.includes('info') || ht === 'ti')) {
+            } else if (colNotaInfo === -1 && (ht === 'info' || ht === 'nota info' || ht === 'nota_info' || ht === 'ti' || ht.includes('informatica'))) {
               colNotaInfo = idx;
-            } else if (colNotaComum === -1 && (ht === 'nota_comum' || ht.includes('comum'))) {
+            } else if (colNotaComum === -1 && (ht === 'comum' || ht === 'nota comum' || ht === 'nota_comum')) {
               colNotaComum = idx;
-            } else if (colNotaConst === -1 && (ht === 'nota_const' || ht.includes('const'))) {
+            } else if (colNotaConst === -1 && (ht === 'const' || ht === 'nota const' || ht === 'nota_const' || ht.includes('constitucional'))) {
               colNotaConst = idx;
-            } else if (colNotaAdm === -1 && (ht === 'nota_adm' || ht.includes('adm'))) {
+            } else if (colNotaAdm === -1 && (ht === 'adm' || ht === 'nota adm' || ht === 'nota_adm' || ht.includes('administrativo'))) {
               colNotaAdm = idx;
-            } else if (colNotaCivil === -1 && (ht === 'nota_civil' || ht.includes('civil'))) {
+            } else if (colNotaCivil === -1 && (ht === 'civil' || ht === 'nota civil' || ht === 'nota_civil')) {
               colNotaCivil = idx;
-            } else if (colNotaPenal === -1 && (ht === 'nota_penal' || ht.includes('penal'))) {
+            } else if (colNotaPenal === -1 && (ht === 'penal' || ht === 'nota penal' || ht === 'nota_penal')) {
               colNotaPenal = idx;
-            } else if (colNotaEspec === -1 && (ht === 'nota_espec' || ht.includes('espec') || ht === 'ce')) {
+            } else if (colNotaEspec === -1 && (ht === 'espec' || ht === 'nota espec' || ht === 'nota_espec' || ht === 'ce')) {
               colNotaEspec = idx;
-            } else if (colLoteCham === -1 && (ht === 'lote_chamada' || (ht.includes('lote') && ht.includes('cham')))) {
-              colLoteCham = idx;
-            } else if (colDataConv === -1 && (ht === 'data_convocacao' || ht.includes('convocacao'))) {
-              colDataConv = idx;
-            } else if (colStatus === -1 && (ht === 'status_nomeacao' || ht.includes('status') || ht.includes('situacao'))) {
-              colStatus = idx;
-            } else if (colLotacao === -1 && (ht === 'lotacao_assumida' || ht.includes('lotacao') || ht.includes('comarca'))) {
-              colLotacao = idx;
-            } else if (colDataNom === -1 && (ht === 'data_nomeacao' || (ht.includes('data') && ht.includes('nom')))) {
-              colDataNom = idx;
-            } else if (colIntencao === -1 && (ht === 'intencao' || ht === 'intencao_assumir' || ht.includes('intenc') || ht.includes('manifest') || ht.includes('interesse') || ht.includes('opcao') || ht.includes('opção'))) {
+            } else if (colIntencao === -1 && (ht.includes('assumir') || ht.includes('assumira') || ht.includes('intenc') || ht.includes('manifest') || ht.includes('interesse') || ht.includes('opcao'))) {
               colIntencao = idx;
+            } else if (colStatus === -1 && (ht === 'status' || ht === 'status_nomeacao' || ht === 'situacao' || ht.includes('status nomeacao'))) {
+              colStatus = idx;
+            } else if (colLotacao === -1 && (ht === 'lotacao assumida' || ht === 'lotacao_assumida' || (ht.includes('lotacao') && !ht.includes('atual')))) {
+              colLotacao = idx;
+            } else if (colComarcaPref === -1 && (ht.includes('comarca de preferencia') || ht.includes('comarca pref') || ht.includes('comarca pretendida'))) {
+              colComarcaPref = idx;
+            } else if (colRegiao === -1 && (ht.includes('regiao de preferencia') || ht.includes('regiao pref') || ht.includes('regiao pretendida') || ht === 'regiao')) {
+              colRegiao = idx;
+            } else if (colLoteCham === -1 && (ht === 'lote' || ht === 'lote_chamada' || ht.includes('lote'))) {
+              colLoteCham = idx;
+            } else if (colDataConv === -1 && (ht.includes('data da convocacao') || ht.includes('data convocacao') || ht === 'data_convocacao')) {
+              colDataConv = idx;
+            } else if (colDataNom === -1 && (ht.includes('data da nomeacao') || ht.includes('data nomeacao') || ht === 'data_nomeacao')) {
+              colDataNom = idx;
+            } else if (colRegFuncional === -1 && (ht.includes('reg funcional') || ht.includes('registro funcional') || ht.includes('matricula'))) {
+              colRegFuncional = idx;
+            } else if (colCargo === -1 && (ht === 'cargo' || ht.includes('cargo'))) {
+              colCargo = idx;
+            } else if (colPossuiFg === -1 && (ht.includes('possui fg') || ht.includes('fg cc') || ht === 'fg')) {
+              colPossuiFg = idx;
+            } else if (colComarcaAtual === -1 && (ht.includes('comarca atual') || ht.includes('comarca lotada'))) {
+              colComarcaAtual = idx;
+            } else if (colUnidadeAtual === -1 && (ht.includes('unidade atual') || ht.includes('vara atual'))) {
+              colUnidadeAtual = idx;
+            } else if (colOutrosConcursos === -1 && (ht.includes('outros concursos') || ht.includes('concursos aprovado'))) {
+              colOutrosConcursos = idx;
+            } else if (colEmail === -1 && (ht.includes('email') || ht.includes('e mail') || ht.includes('mail'))) {
+              colEmail = idx;
             } else if (colCpf === -1 && ht.includes('cpf')) {
               colCpf = idx;
-            } else if (colEmail === -1 && (ht.includes('email') || ht.includes('mail'))) {
-              colEmail = idx;
             } else if (colWhats === -1 && (ht.includes('whats') || ht.includes('tel') || ht.includes('cel') || ht.includes('fone'))) {
               colWhats = idx;
-            } else if (colNasc === -1 && (ht.includes('nasc') || ht.includes('data_nasc'))) {
+            } else if (colNasc === -1 && (ht.includes('nasc') || ht.includes('data nasc'))) {
               colNasc = idx;
             }
           });
@@ -11510,11 +11510,11 @@
           // Se cabeçalho não foi encontrado por nomes conhecidos, adota colunas posicionais padrão
           var inicioDados = idxHeader + 1;
           if (colNome === -1) {
-            colClass = 0;
-            colInscricao = 1;
-            colNome = 2;
-            colCota = 3;
-            colNotaFinal = 4;
+            colClass = 1;
+            colVagaChamada = 2;
+            colNome = 3;
+            colInscricao = 5;
+            colNotaFinal = 18;
           }
 
           var candidatos = [];
@@ -11531,36 +11531,57 @@
             var classAmpla = rawClass ? Math.round(rawClass) : contadorGeralSeq;
             contadorGeralSeq++;
 
-            var rawCota = (colCota !== -1 && r[colCota]) ? r[colCota] : 'Ampla';
-            var cotaNormalizada = normalizarCotaImportador(rawCota);
+            // 1. Cota e Vaga
+            var rawCota = (colCota !== -1 && r[colCota]) ? String(r[colCota]).trim() : '';
+            var candVagaChamada = (colVagaChamada !== -1 && r[colVagaChamada]) ? String(r[colVagaChamada]).trim() : null;
+            if (!rawCota && candVagaChamada) {
+              var vcLow = candVagaChamada.toLowerCase();
+              if (vcLow.includes('ppp') || vcLow.includes('negro')) rawCota = 'PPP';
+              else if (vcLow.includes('pcd') || vcLow.includes('defic')) rawCota = 'PCD';
+              else if (vcLow.includes('indig')) rawCota = 'Indígena';
+              else rawCota = 'Ampla';
+            }
+            var cotaNormalizada = normalizarCotaImportador(rawCota || 'Ampla');
 
             var candId = (colId !== -1 && r[colId]) ? String(r[colId]).trim() : '';
             var candConcId = (colConcursoId !== -1 && r[colConcursoId]) ? String(r[colConcursoId]).trim() : '';
             var candOrdemNom = (colOrdemNom !== -1 && r[colOrdemNom] !== undefined) ? parseNumeroImportador(r[colOrdemNom]) : null;
-            var candVagaChamada = (colVagaChamada !== -1 && r[colVagaChamada]) ? String(r[colVagaChamada]).trim() : null;
             var candStatus = (colStatus !== -1 && r[colStatus]) ? String(r[colStatus]).trim() : 'Aguardando';
+            if (!candStatus) candStatus = 'Aguardando';
+
             var candLotacao = (colLotacao !== -1 && r[colLotacao]) ? String(r[colLotacao]).trim() : null;
             var candLoteCham = (colLoteCham !== -1 && r[colLoteCham]) ? String(r[colLoteCham]).trim() : null;
             var candDataConv = (colDataConv !== -1 && r[colDataConv]) ? formatarDataImportador(r[colDataConv]) : null;
             var candDataNom = (colDataNom !== -1 && r[colDataNom]) ? formatarDataImportador(r[colDataNom]) : null;
             var rawIntencao = (colIntencao !== -1 && r[colIntencao]) ? String(r[colIntencao]).trim() : '';
 
+            var candComarcaPref = (colComarcaPref !== -1 && r[colComarcaPref]) ? String(r[colComarcaPref]).trim() : '';
+            var candRegiao = (colRegiao !== -1 && r[colRegiao]) ? String(r[colRegiao]).trim() : '';
+            var candOutros = (colOutrosConcursos !== -1 && r[colOutrosConcursos]) ? String(r[colOutrosConcursos]).trim() : '';
+            var candRegFunc = (colRegFuncional !== -1 && r[colRegFuncional]) ? String(r[colRegFuncional]).trim() : '';
+            var candCargo = (colCargo !== -1 && r[colCargo]) ? String(r[colCargo]).trim() : '';
+            var candPossuiFg = (colPossuiFg !== -1 && r[colPossuiFg]) ? String(r[colPossuiFg]).trim() : '';
+            var candComarcaAtual = (colComarcaAtual !== -1 && r[colComarcaAtual]) ? String(r[colComarcaAtual]).trim() : '';
+            var candUnidadeAtual = (colUnidadeAtual !== -1 && r[colUnidadeAtual]) ? String(r[colUnidadeAtual]).trim() : '';
+
             // Normaliza a intenção sem forçar "assumir"
             var candIntencao = 'indefinido';
-            var intNorm = (rawIntencao || '').toLowerCase().trim();
-            var stNorm = (candStatus || '').toLowerCase().trim();
+            var intNorm = normTxtImportador(rawIntencao);
+            var stNorm = normTxtImportador(candStatus);
 
             if (intNorm === 'sim' || intNorm === 'assumir' || intNorm === 'interesse' || intNorm.includes('pretende assumir') || intNorm === 'titular') {
               candIntencao = 'assumir';
-            } else if (intNorm === 'não' || intNorm === 'nao' || intNorm === 'desistir' || intNorm === 'desiste' || intNorm.includes('desist') || intNorm.includes('renún') || intNorm.includes('renun')) {
+            } else if (intNorm === 'talvez' || intNorm.includes('analise')) {
+              candIntencao = 'talvez';
+            } else if (intNorm === 'nao' || intNorm === 'desistir' || intNorm === 'desiste' || intNorm.includes('desist') || intNorm.includes('renun')) {
               candIntencao = 'desistir';
             } else if (intNorm.includes('fim') || intNorm.includes('final') || intNorm.includes('fila') || intNorm.includes('lista')) {
               candIntencao = 'final_fila';
             } else if (stNorm.includes('final de lista') || stNorm.includes('fim de fila')) {
               candIntencao = 'final_fila';
-            } else if (stNorm.includes('desist') || stNorm.includes('renún') || stNorm.includes('renun')) {
+            } else if (stNorm.includes('desist') || stNorm.includes('renun')) {
               candIntencao = 'desistir';
-            } else if (stNorm.includes('convocado titular') || stNorm.includes('nomeado') || stNorm.includes('posse') || stNorm.includes('exercício')) {
+            } else if (stNorm.includes('convocado titular') || stNorm.includes('nomeado') || stNorm.includes('posse') || stNorm.includes('exercicio')) {
               candIntencao = 'assumir';
             } else if (stNorm.includes('suplente') && candLotacao) {
               candIntencao = 'assumir';
@@ -11596,7 +11617,16 @@
               lotacao_assumida: candLotacao,
               data_nomeacao: candDataNom,
               intencao: candIntencao,
-              escolhas: candLotacao ? [candLotacao] : []
+              escolhas: candLotacao ? [candLotacao] : (candComarcaPref ? [candComarcaPref] : []),
+              comarca_preferencia: candComarcaPref,
+              regiao_preferencia: candRegiao,
+              outros_concursos: candOutros,
+              cargo: candCargo,
+              possui_fg_cc: candPossuiFg,
+              fg_cc_comarca_atual: candComarcaAtual,
+              fg_cc_unidade_atual: candUnidadeAtual,
+              fg_cc_registro_funcional: candRegFunc,
+              ja_e_servidor: candPossuiFg === 'Sim' || (candCargo && candCargo.length > 0)
             };
 
             candidatos.push(cand);
@@ -11922,6 +11952,15 @@
               nota_final: c.nota_final || null,
               status_nomeacao: c.status_nomeacao || 'Aguardando',
               lotacao_assumida: c.lotacao_assumida || null,
+              intencao: c.intencao || 'indefinido',
+              comarca_preferencia: c.comarca_preferencia || '',
+              regiao_preferencia: c.regiao_preferencia || '',
+              outros_concursos: c.outros_concursos || '',
+              cargo: c.cargo || '',
+              possui_fg_cc: c.possui_fg_cc || '',
+              fg_cc_comarca_atual: c.fg_cc_comarca_atual || '',
+              fg_cc_unidade_atual: c.fg_cc_unidade_atual || '',
+              fg_cc_registro_funcional: c.fg_cc_registro_funcional || '',
               suplente: c.status_nomeacao !== 'Convocado Titular'
             };
           });
