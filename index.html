@@ -20,6 +20,9 @@
   <!-- Supabase JS Client v2 Oficial -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
+  <!-- Armazenamento Central de Concursos e Cargos Cadastrados -->
+  <script src="concursos-store.js"></script>
+
   <style>
     body {
       font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -109,27 +112,10 @@
             <rect x="3" y="14" width="7" height="7" rx="1.5" />
           </svg>
         </span>
-        <span>Todos os Concursos</span>
+        <span>Concursos Cadastrados</span>
       </button>
 
-      <!-- 2. Chamamentos & Lotes -->
-      <button 
-        type="button" 
-        id="navItemChamamentos" 
-        onclick="navegarPortal('chamamentos')" 
-        class="w-full flex items-center gap-3.5 px-6 py-3 text-sm font-medium text-[#94A3B8] hover:text-white hover:bg-[#0C2640]/50 border-l-4 border-transparent transition-all cursor-pointer text-left"
-      >
-        <span class="w-5 h-5 flex items-center justify-center">
-          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-            <line x1="18" y1="20" x2="18" y2="10" />
-            <line x1="12" y1="20" x2="12" y2="4" />
-            <line x1="6" y1="20" x2="6" y2="14" />
-          </svg>
-        </span>
-        <span>Chamamentos &amp; Lotes</span>
-      </button>
-
-      <!-- 3. Guia de Lotação -->
+      <!-- 2. Guia de Escolha de Comarcas -->
       <button 
         type="button" 
         id="navItemGuia" 
@@ -139,34 +125,18 @@
         <span class="w-5 h-5 flex items-center justify-center">
           <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="12" cy="12" r="9" />
-            <path d="M12 16v-4M12 8h.01" />
+            <path d="M12 8v4l3 3" />
           </svg>
         </span>
-        <span>Guia de Escolha</span>
+        <span>Como Funciona a Escolha</span>
       </button>
 
-      <!-- 4. Comunidade Geral -->
-      <button 
-        type="button" 
-        id="navItemComunidade" 
-        onclick="navegarPortal('comunidade')" 
-        class="w-full flex items-center gap-3.5 px-6 py-3 text-sm font-medium text-[#94A3B8] hover:text-white hover:bg-[#0C2640]/50 border-l-4 border-transparent transition-all cursor-pointer text-left"
-      >
-        <span class="w-5 h-5 flex items-center justify-center">
-          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="3" y="4" width="18" height="13" rx="2.5" />
-            <path d="M7 17 L7 20 L11 17 Z" fill="currentColor" />
-          </svg>
-        </span>
-        <span>Comunidade Geral</span>
-      </button>
-
-      <!-- 5. Painel Admin -->
+      <!-- 3. Painel Admin / Gestão de Concursos e Cargos -->
       <a 
         id="navItemAdmin" 
-        href="lote.html?admin=1" 
+        href="lote.html?admin=1&subaba=concursos" 
         class="w-full flex items-center gap-3.5 px-6 py-3 text-sm font-medium text-[#94A3B8] hover:text-amber-300 hover:bg-[#0C2640]/50 border-l-4 border-transparent transition-all cursor-pointer text-left"
-        title="Painel de Administração e Gestão de Lotes"
+        title="Cadastrar e organizar concursos e cargos"
       >
         <span class="w-5 h-5 flex items-center justify-center">
           <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -174,7 +144,7 @@
             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
           </svg>
         </span>
-        <span>Painel Admin</span>
+        <span class="text-amber-300 font-semibold">⚙️ Painel Admin (Concursos)</span>
       </a>
 
     </nav>
@@ -206,9 +176,7 @@
   <!-- ===================================================================== -->
   <div class="flex-1 flex flex-col min-w-0 lg:pl-64">
     
-    <!-- =================================================================== -->
-    <!-- TOP HEADER (#FFFFFF com shadow-xs)                                  -->
-    <!-- =================================================================== -->
+    <!-- TOP HEADER (#FFFFFF) -->
     <header class="h-[68px] bg-white border-b border-slate-200/80 sticky top-0 z-30 flex items-center justify-between px-4 sm:px-6 lg:px-8 card-shadow">
       
       <!-- Esquerda: Hamburger Mobile & Contexto do Portal -->
@@ -229,40 +197,22 @@
         <div class="hidden sm:flex items-center gap-2">
           <span class="text-xs font-bold text-slate-900 tracking-wider font-serif uppercase">CERTAM</span>
           <span class="text-slate-300">·</span>
-          <span class="text-xs font-medium text-slate-500">Portal Nacional de Concursos e Escolha de Lotação</span>
+          <span class="text-xs font-medium text-slate-500">Portal de Concursos Públicos e Escolha de Lotação</span>
         </div>
       </div>
 
-      <!-- Direita: Busca, Notificações, Admin e Perfil -->
+      <!-- Direita: Ações, Admin e Perfil -->
       <div class="flex items-center gap-3 sm:gap-4">
         
-        <!-- Notificações com Badge Dot -->
-        <button 
-          type="button" 
-          onclick="mostrarToast('🔔 Novos chamamentos abertos no TJRS e TRF4!', 'info')" 
-          class="p-2 text-slate-600 hover:text-slate-900 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer relative"
-          title="Notificações de chamamentos"
-        >
-          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-            <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-          </svg>
-          <span class="absolute top-1.5 right-1.5 w-2.5 h-2.5 rounded-full bg-[#EF4444] border-2 border-white"></span>
-        </button>
-
-        <div class="h-6 w-px bg-slate-200"></div>
-
         <!-- Botão Admin Preview Rápido -->
-        <button 
-          id="btnAdminPreviewHeader" 
-          type="button" 
-          onclick="ativarModoAdminPreview(true)" 
-          class="hidden sm:inline-flex items-center gap-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold px-3 py-1.5 rounded-lg text-xs shadow-xs transition-all cursor-pointer border border-amber-500/50"
-          title="Entrar como Administrador no Preview"
+        <a 
+          href="lote.html?admin=1&subaba=concursos" 
+          class="inline-flex items-center gap-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold px-3 py-1.5 rounded-lg text-xs shadow-xs transition-all border border-amber-500/50"
+          title="Abrir o painel para cadastrar novos concursos e cargos"
         >
-          <span>⚡</span>
-          <span>Admin</span>
-        </button>
+          <span>⚙️</span>
+          <span>Gerenciar Concursos</span>
+        </a>
 
         <!-- Widget: Painel do Candidato -->
         <div class="flex items-center gap-2.5 pl-1">
@@ -278,13 +228,11 @@
 
     </header>
 
-    <!-- =================================================================== -->
-    <!-- ÁREA DE CONTEÚDO PRINCIPAL (PORTAL DE CONCURSOS GENÉRICO)           -->
-    <!-- =================================================================== -->
+    <!-- ÁREA DE CONTEÚDO PRINCIPAL -->
     <main class="flex-1 p-4 sm:p-6 lg:p-8 space-y-8">
 
       <!-- =============================================================== -->
-      <!-- SEÇÃO 1: VISÃO GERAL DO PORTAL E CATÁLOGO DE CERTAMES           -->
+      <!-- SEÇÃO 1: VISÃO GERAL DO PORTAL E CATÁLOGO                       -->
       <!-- =============================================================== -->
       <div id="secaoCatalogoConcursos" class="space-y-8">
         
@@ -293,86 +241,86 @@
           <div>
             <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#2DD4AA]/15 text-[#135A7A] text-xs font-semibold mb-2">
               <span>🏛️</span>
-              <span>Portal de Acompanhamento e Escolha de Lotação</span>
+              <span>Portal de Concursos Cadastrados</span>
             </div>
             <h1 class="text-2xl sm:text-3xl font-bold text-[#0F172A] tracking-tight">
-              Concursos Públicos Acompanhados
+              Concursos &amp; Cargos Disponíveis
             </h1>
             <p class="text-xs sm:text-sm text-slate-500 mt-1 max-w-3xl leading-relaxed">
-              Selecione o concurso desejado para acessar seu dashboard exclusivo, consultar a lista oficial de classificação, conferir notas e manifestar suas prioridades de posse no simulador de comarcas.
+              Cada concurso é dividido em seus cargos respectivos. Selecione o cargo desejado para acessar sua lista de classificação exclusiva, fórum próprio e simulação de lotações.
             </p>
           </div>
 
+          <!-- Botão para o Admin Cadastrar Concurso -->
           <div class="flex items-center gap-2 shrink-0">
-            <span class="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200">
-              <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              <span>Base Oficial Conectada</span>
-            </span>
+            <a 
+              href="lote.html?admin=1&subaba=concursos" 
+              class="inline-flex items-center gap-2 bg-[#07192B] hover:bg-[#0C2640] text-white font-bold px-4 py-2 rounded-xl text-xs shadow-xs transition-colors"
+            >
+              <span>➕</span>
+              <span>Cadastrar Novo Concurso</span>
+            </a>
           </div>
         </div>
 
-        <!-- ============================================================= -->
-        <!-- 4 KPI CARDS GERAIS DO PORTAL (Linha Superior)                -->
-        <!-- ============================================================= -->
+        <!-- 4 KPI CARDS GERAIS (Calculados dinamicamente com dados reais!) -->
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
           
           <div class="bg-white rounded-xl p-5 border border-slate-200/80 card-shadow card-shadow-hover transition-all">
-            <span class="text-xs font-semibold text-[#475569] block">Concursos Monitorados</span>
-            <div class="text-3xl font-extrabold text-[#0F172A] font-mono mt-1">12</div>
-            <span class="text-xs text-[#2DD4AA] font-semibold mt-1 block">Tribunais e Órgãos de Justiça</span>
+            <span class="text-xs font-semibold text-[#475569] block">Concursos Cadastrados</span>
+            <div id="kpiTotalConcursos" class="text-3xl font-extrabold text-[#0F172A] font-mono mt-1">1</div>
+            <span class="text-xs text-[#2DD4AA] font-semibold mt-1 block">Certames ativos no sistema</span>
           </div>
 
           <div class="bg-white rounded-xl p-5 border border-slate-200/80 card-shadow card-shadow-hover transition-all">
-            <span class="text-xs font-semibold text-[#475569] block">Candidatos Cadastrados</span>
-            <div class="text-3xl font-extrabold text-[#0F172A] font-mono mt-1">1.480+</div>
-            <span class="text-xs text-[#94A3B8] mt-1 block">Aprovados nas listas homologadas</span>
+            <span class="text-xs font-semibold text-[#475569] block">Cargos Estruturados</span>
+            <div id="kpiTotalCargos" class="text-3xl font-extrabold text-[#0F172A] font-mono mt-1">2</div>
+            <span class="text-xs text-[#94A3B8] mt-1 block">Carreiras com listas independentes</span>
           </div>
 
           <div class="bg-white rounded-xl p-5 border border-slate-200/80 card-shadow card-shadow-hover transition-all">
-            <span class="text-xs font-semibold text-[#475569] block">Vagas em Simulação</span>
-            <div class="text-3xl font-extrabold text-[#0F172A] font-mono mt-1">450+</div>
-            <span class="text-xs text-[#94A3B8] mt-1 block">Comarcas e cidades de lotação</span>
+            <span class="text-xs font-semibold text-[#475569] block">Vagas Imediatas</span>
+            <div id="kpiTotalVagas" class="text-3xl font-extrabold text-[#0F172A] font-mono mt-1">38</div>
+            <span class="text-xs text-[#94A3B8] mt-1 block">Convocação inicial homologada</span>
           </div>
 
           <div class="bg-white rounded-xl p-5 border border-slate-200/80 card-shadow card-shadow-hover transition-all">
-            <span class="text-xs font-semibold text-[#475569] block">Chamamentos Ativos</span>
-            <div class="text-3xl font-extrabold text-[#0F172A] font-mono mt-1">04</div>
-            <span class="text-xs text-emerald-600 font-semibold mt-1 block">Escolha de comarcas em aberto</span>
+            <span class="text-xs font-semibold text-[#475569] block">Chamamentos / Lotes</span>
+            <div id="kpiChamamentosAtivos" class="text-3xl font-extrabold text-[#0F172A] font-mono mt-1">01</div>
+            <span class="text-xs text-emerald-600 font-semibold mt-1 block">Simulação de lotação ativa</span>
           </div>
 
         </div>
 
-        <!-- ============================================================= -->
-        <!-- BARRA DE FILTROS E BUSCA DE CONCURSOS                         -->
-        <!-- ============================================================= -->
+        <!-- BARRA DE FILTROS E BUSCA -->
         <div class="bg-white rounded-xl p-4 sm:p-5 border border-slate-200/80 card-shadow space-y-4">
           <div class="flex flex-col md:flex-row gap-3">
             
-            <!-- Campo de Busca em Tempo Real -->
             <div class="relative flex-1">
               <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="11" cy="11" r="8" />
+                  <line x1="21" y1="21" x2="16.65" y2="16.65" />
                 </svg>
               </span>
               <input 
                 type="text" 
                 id="inputBuscaConcursos" 
                 oninput="filtrarConcursosPortal()" 
-                placeholder="Buscar por órgão, cargo ou tribunal (ex: TJRS, TJSC, TRF4, Analista)..." 
-                class="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-[#2DD4AA] transition-all font-medium"
+                placeholder="Pesquisar por órgão, concurso ou cargo cadastrado..." 
+                class="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#2DD4AA]"
               >
             </div>
 
-            <!-- Segmented Control de Status -->
-            <div class="flex items-center gap-1 bg-slate-100 p-1 rounded-xl shrink-0 overflow-x-auto">
+            <!-- Filtros por Status -->
+            <div class="flex items-center gap-1.5 p-1 bg-slate-100 rounded-xl border border-slate-200/60 overflow-x-auto">
               <button 
                 type="button" 
                 id="btnFiltroStatusTodos" 
                 onclick="setFiltroStatusPortal('todos')" 
                 class="px-3 py-1.5 rounded-lg text-xs font-bold transition-all bg-white text-slate-900 shadow-xs cursor-pointer"
               >
-                Todos (5)
+                Todos
               </button>
               <button 
                 type="button" 
@@ -380,22 +328,14 @@
                 onclick="setFiltroStatusPortal('ativos')" 
                 class="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:text-slate-900 transition-all cursor-pointer"
               >
-                Com Chamamento (3)
-              </button>
-              <button 
-                type="button" 
-                id="btnFiltroStatusPrevistos" 
-                onclick="setFiltroStatusPortal('previstos')" 
-                class="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:text-slate-900 transition-all cursor-pointer"
-              >
-                Previstos (2)
+                Ativos
               </button>
             </div>
 
           </div>
 
           <div class="flex items-center justify-between text-xs text-slate-500 pt-1 border-t border-slate-100">
-            <span id="textoStatusContagemConcursos">Exibindo 5 concursos públicos</span>
+            <span id="textoStatusContagemConcursos">Carregando concursos cadastrados...</span>
             <button type="button" onclick="limparFiltrosPortal()" class="text-[#135A7A] hover:underline font-semibold cursor-pointer">
               Limpar filtros de busca
             </button>
@@ -403,299 +343,21 @@
         </div>
 
         <!-- ============================================================= -->
-        <!-- GRID DE CARDS DOS CONCURSOS (CADA CONCURSO TEM SUA PÁGINA)   -->
+        <!-- GRID DE CARDS DOS CONCURSOS (RENDERIZADO DINAMICAMENTE!)      -->
         <!-- ============================================================= -->
         <div id="gridConcursosPortal" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-
-          <!-- CARD 1: CONCURSO TJRS (Com link direto para a página do concurso) -->
-          <div class="bg-white rounded-xl border-2 border-[#2DD4AA]/40 p-6 card-shadow card-shadow-hover transition-all flex flex-col justify-between group relative overflow-hidden">
-            <div class="absolute top-0 right-0 w-24 h-24 bg-[#2DD4AA]/10 rounded-full blur-xl pointer-events-none"></div>
-
-            <div class="space-y-4">
-              <div class="flex items-center justify-between gap-2">
-                <span class="px-2.5 py-0.5 rounded-md text-xs font-bold font-mono tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200">
-                  ● Chamamento Ativo (Lote 1)
-                </span>
-                <span class="px-2.5 py-0.5 rounded-md bg-[#07192B] text-[#2DD4AA] text-xs font-bold font-mono tracking-wider">
-                  TJRS
-                </span>
-              </div>
-
-              <div>
-                <h3 class="text-lg font-bold font-serif text-slate-900 group-hover:text-[#135A7A] transition-colors">
-                  <a href="concurso.html?id=tjrs_analista_2024">
-                    Concurso TJRS - Analista Judiciário
-                  </a>
-                </h3>
-                <p class="text-xs sm:text-sm text-slate-500 font-medium mt-1">
-                  💼 Analista Judiciário - Área Judiciária
-                </p>
-              </div>
-
-              <!-- Métricas Rápidas do Concurso -->
-              <div class="grid grid-cols-2 gap-3 pt-2">
-                <div class="bg-slate-50 rounded-xl p-3 border border-slate-100">
-                  <span class="text-xs font-semibold text-slate-400 block font-mono">Vagas Imediatas</span>
-                  <span class="text-lg font-extrabold text-slate-900 font-mono mt-0.5 block">166 vagas</span>
-                  <span class="text-[10px] text-slate-500">98 comarcas</span>
-                </div>
-                <div class="bg-slate-50 rounded-xl p-3 border border-slate-100">
-                  <span class="text-xs font-semibold text-slate-400 block font-mono">Aprovados</span>
-                  <span class="text-lg font-extrabold text-slate-900 font-mono mt-0.5 block">305 lista</span>
-                  <span class="text-[10px] text-slate-500">Homologados</span>
-                </div>
-              </div>
-
-              <div class="text-xs text-slate-500 flex items-center gap-1.5 pt-1">
-                <span>🏛️ Lote 1 em andamento com simulação ativa de comarcas</span>
-              </div>
-            </div>
-
-            <!-- Botões de Ação para a Página do Concurso -->
-            <div class="pt-5 border-t border-slate-100 mt-4 space-y-2">
-              <a 
-                href="concurso.html?id=tjrs_analista_2024" 
-                class="w-full bg-[#07192B] hover:bg-[#0C2640] text-white font-bold py-2.5 px-4 rounded-xl text-xs transition-colors flex items-center justify-center gap-2 shadow-xs"
-              >
-                <span>Acessar Painel do TJRS</span>
-                <span class="text-sm font-normal">→</span>
-              </a>
-
-              <a 
-                href="lote.html?concurso=tjrs_analista_2024&lote=lote_1" 
-                class="w-full bg-slate-50 hover:bg-[#2DD4AA]/15 text-[#135A7A] hover:text-[#0C2640] border border-slate-200 font-semibold py-2 px-3 rounded-xl text-xs transition-colors flex items-center justify-center gap-1.5 text-center"
-              >
-                <span>🏛️</span>
-                <span>Simulador de Escolha de Lotes</span>
-              </a>
-            </div>
-          </div>
-
-          <!-- CARD 2: CONCURSO TRF4 -->
-          <div class="bg-white rounded-xl border border-slate-200/90 p-6 card-shadow card-shadow-hover transition-all flex flex-col justify-between group">
-            <div class="space-y-4">
-              <div class="flex items-center justify-between gap-2">
-                <span class="px-2.5 py-0.5 rounded-md text-xs font-bold font-mono tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200">
-                  ● Convocação em Andamento
-                </span>
-                <span class="px-2.5 py-0.5 rounded-md bg-[#07192B] text-[#2DD4AA] text-xs font-bold font-mono tracking-wider">
-                  TRF4
-                </span>
-              </div>
-
-              <div>
-                <h3 class="text-lg font-bold font-serif text-slate-900 group-hover:text-[#135A7A] transition-colors">
-                  <a href="concurso.html?id=trf4_analista_2024">
-                    Concurso TRF4 - Região Sul
-                  </a>
-                </h3>
-                <p class="text-xs sm:text-sm text-slate-500 font-medium mt-1">
-                  💼 Analista Judiciário - Área Judiciária (RS, SC, PR)
-                </p>
-              </div>
-
-              <!-- Métricas -->
-              <div class="grid grid-cols-2 gap-3 pt-2">
-                <div class="bg-slate-50 rounded-xl p-3 border border-slate-100">
-                  <span class="text-xs font-semibold text-slate-400 block font-mono">Vagas Ofertadas</span>
-                  <span class="text-lg font-extrabold text-slate-900 font-mono mt-0.5 block">45 vagas</span>
-                  <span class="text-[10px] text-slate-500">Subseções Judiciárias</span>
-                </div>
-                <div class="bg-slate-50 rounded-xl p-3 border border-slate-100">
-                  <span class="text-xs font-semibold text-slate-400 block font-mono">Aprovados</span>
-                  <span class="text-lg font-extrabold text-slate-900 font-mono mt-0.5 block">180 lista</span>
-                  <span class="text-[10px] text-slate-500">3 estados</span>
-                </div>
-              </div>
-
-              <div class="text-xs text-slate-500 flex items-center gap-1.5 pt-1">
-                <span>📍 Escolha de subseções em Porto Alegre, Florianópolis e Curitiba</span>
-              </div>
-            </div>
-
-            <div class="pt-5 border-t border-slate-100 mt-4 space-y-2">
-              <a 
-                href="concurso.html?id=trf4_analista_2024" 
-                class="w-full bg-[#07192B] hover:bg-[#0C2640] text-white font-bold py-2.5 px-4 rounded-xl text-xs transition-colors flex items-center justify-center gap-2 shadow-xs"
-              >
-                <span>Acessar Painel do TRF4</span>
-                <span class="text-sm font-normal">→</span>
-              </a>
-            </div>
-          </div>
-
-          <!-- CARD 3: CONCURSO TJSC -->
-          <div class="bg-white rounded-xl border border-slate-200/90 p-6 card-shadow card-shadow-hover transition-all flex flex-col justify-between group">
-            <div class="space-y-4">
-              <div class="flex items-center justify-between gap-2">
-                <span class="px-2.5 py-0.5 rounded-md text-xs font-bold font-mono tracking-wider bg-sky-50 text-sky-700 border border-sky-200">
-                  ○ Em Homologação
-                </span>
-                <span class="px-2.5 py-0.5 rounded-md bg-[#07192B] text-[#2DD4AA] text-xs font-bold font-mono tracking-wider">
-                  TJSC
-                </span>
-              </div>
-
-              <div>
-                <h3 class="text-lg font-bold font-serif text-slate-900 group-hover:text-[#135A7A] transition-colors">
-                  <a href="concurso.html?id=tjsc_tecnico_2024">
-                    Concurso TJSC - Técnico Judiciário
-                  </a>
-                </h3>
-                <p class="text-xs sm:text-sm text-slate-500 font-medium mt-1">
-                  💼 Técnico Judiciário Auxiliar
-                </p>
-              </div>
-
-              <!-- Métricas -->
-              <div class="grid grid-cols-2 gap-3 pt-2">
-                <div class="bg-slate-50 rounded-xl p-3 border border-slate-100">
-                  <span class="text-xs font-semibold text-slate-400 block font-mono">Vagas Previstas</span>
-                  <span class="text-lg font-extrabold text-slate-900 font-mono mt-0.5 block">80 vagas</span>
-                  <span class="text-[10px] text-slate-500">Regiões polo SC</span>
-                </div>
-                <div class="bg-slate-50 rounded-xl p-3 border border-slate-100">
-                  <span class="text-xs font-semibold text-slate-400 block font-mono">Inscritos</span>
-                  <span class="text-lg font-extrabold text-slate-900 font-mono mt-0.5 block">240 lista</span>
-                  <span class="text-[10px] text-slate-500">Aguardando posse</span>
-                </div>
-              </div>
-
-              <div class="text-xs text-slate-500 flex items-center gap-1.5 pt-1">
-                <span>🏛️ Lotações polo: Capital, Norte, Vale do Itajaí e Sul</span>
-              </div>
-            </div>
-
-            <div class="pt-5 border-t border-slate-100 mt-4 space-y-2">
-              <a 
-                href="concurso.html?id=tjsc_tecnico_2024" 
-                class="w-full bg-[#07192B] hover:bg-[#0C2640] text-white font-bold py-2.5 px-4 rounded-xl text-xs transition-colors flex items-center justify-center gap-2 shadow-xs"
-              >
-                <span>Acessar Painel do TJSC</span>
-                <span class="text-sm font-normal">→</span>
-              </a>
-            </div>
-          </div>
-
-          <!-- CARD 4: MPRS -->
-          <div class="bg-white rounded-xl border border-slate-200/90 p-6 card-shadow card-shadow-hover transition-all flex flex-col justify-between group">
-            <div class="space-y-4">
-              <div class="flex items-center justify-between gap-2">
-                <span class="px-2.5 py-0.5 rounded-md text-xs font-bold font-mono tracking-wider bg-amber-50 text-amber-700 border border-amber-200">
-                  ○ Previsto / Edital Próximo
-                </span>
-                <span class="px-2.5 py-0.5 rounded-md bg-[#07192B] text-[#2DD4AA] text-xs font-bold font-mono tracking-wider">
-                  MPRS
-                </span>
-              </div>
-
-              <div>
-                <h3 class="text-lg font-bold font-serif text-slate-900 group-hover:text-[#135A7A] transition-colors">
-                  <a href="concurso.html?id=mprs_secretario_2024">
-                    Concurso MPRS - Secretário de Diligências
-                  </a>
-                </h3>
-                <p class="text-xs sm:text-sm text-slate-500 font-medium mt-1">
-                  💼 Secretário de Diligências • Promotorias de Justiça
-                </p>
-              </div>
-
-              <!-- Métricas -->
-              <div class="grid grid-cols-2 gap-3 pt-2">
-                <div class="bg-slate-50 rounded-xl p-3 border border-slate-100">
-                  <span class="text-xs font-semibold text-slate-400 block font-mono">Estimativa</span>
-                  <span class="text-lg font-extrabold text-slate-900 font-mono mt-0.5 block">35 vagas</span>
-                  <span class="text-[10px] text-slate-500">Promotorias do Interior</span>
-                </div>
-                <div class="bg-slate-50 rounded-xl p-3 border border-slate-100">
-                  <span class="text-xs font-semibold text-slate-400 block font-mono">Interessados</span>
-                  <span class="text-lg font-extrabold text-slate-900 font-mono mt-0.5 block">110 cad.</span>
-                  <span class="text-[10px] text-slate-500">Fórum aberto</span>
-                </div>
-              </div>
-
-              <div class="text-xs text-slate-500 flex items-center gap-1.5 pt-1">
-                <span>📋 Mapeamento de vagas por comarcas de entrância inicial</span>
-              </div>
-            </div>
-
-            <div class="pt-5 border-t border-slate-100 mt-4 space-y-2">
-              <a 
-                href="concurso.html?id=mprs_secretario_2024" 
-                class="w-full bg-[#07192B] hover:bg-[#0C2640] text-white font-bold py-2.5 px-4 rounded-xl text-xs transition-colors flex items-center justify-center gap-2 shadow-xs"
-              >
-                <span>Acessar Painel do MPRS</span>
-                <span class="text-sm font-normal">→</span>
-              </a>
-            </div>
-          </div>
-
-          <!-- CARD 5: DPE-RS -->
-          <div class="bg-white rounded-xl border border-slate-200/90 p-6 card-shadow card-shadow-hover transition-all flex flex-col justify-between group">
-            <div class="space-y-4">
-              <div class="flex items-center justify-between gap-2">
-                <span class="px-2.5 py-0.5 rounded-md text-xs font-bold font-mono tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200">
-                  ● Convocação em Andamento
-                </span>
-                <span class="px-2.5 py-0.5 rounded-md bg-[#07192B] text-[#2DD4AA] text-xs font-bold font-mono tracking-wider">
-                  DPE-RS
-                </span>
-              </div>
-
-              <div>
-                <h3 class="text-lg font-bold font-serif text-slate-900 group-hover:text-[#135A7A] transition-colors">
-                  <a href="concurso.html?id=dpers_analista_2024">
-                    Concurso DPE-RS - Analista Jurídico
-                  </a>
-                </h3>
-                <p class="text-xs sm:text-sm text-slate-500 font-medium mt-1">
-                  💼 Analista - Área Jurídica Processual
-                </p>
-              </div>
-
-              <!-- Métricas -->
-              <div class="grid grid-cols-2 gap-3 pt-2">
-                <div class="bg-slate-50 rounded-xl p-3 border border-slate-100">
-                  <span class="text-xs font-semibold text-slate-400 block font-mono">Vagas Imediatas</span>
-                  <span class="text-lg font-extrabold text-slate-900 font-mono mt-0.5 block">25 vagas</span>
-                  <span class="text-[10px] text-slate-500">Defensorias Regionais</span>
-                </div>
-                <div class="bg-slate-50 rounded-xl p-3 border border-slate-100">
-                  <span class="text-xs font-semibold text-slate-400 block font-mono">Aprovados</span>
-                  <span class="text-lg font-extrabold text-slate-900 font-mono mt-0.5 block">95 lista</span>
-                  <span class="text-[10px] text-slate-500">Chamadas em fluxo</span>
-                </div>
-              </div>
-
-              <div class="text-xs text-slate-500 flex items-center gap-1.5 pt-1">
-                <span>⚖️ Atuação conjunta com as varas judiciais regionais</span>
-              </div>
-            </div>
-
-            <div class="pt-5 border-t border-slate-100 mt-4 space-y-2">
-              <a 
-                href="concurso.html?id=dpers_analista_2024" 
-                class="w-full bg-[#07192B] hover:bg-[#0C2640] text-white font-bold py-2.5 px-4 rounded-xl text-xs transition-colors flex items-center justify-center gap-2 shadow-xs"
-              >
-                <span>Acessar Painel da DPE-RS</span>
-                <span class="text-sm font-normal">→</span>
-              </a>
-            </div>
-          </div>
-
+          <!-- Renderizado via JavaScript a partir do CertamStore -->
         </div>
 
-        <!-- ============================================================= -->
-        <!-- SEÇÃO: GUIA EXPLICATIVO DO SISTEMA DE ESCOLHA DE COMARCAS     -->
-        <!-- ============================================================= -->
+        <!-- SEÇÃO: GUIA DE ESCOLHA DE COMARCAS -->
         <div class="bg-white rounded-xl border border-slate-200/80 p-6 sm:p-8 card-shadow space-y-6">
           <div class="border-b border-slate-100 pb-4">
             <h2 class="text-lg sm:text-xl font-bold font-serif text-slate-900 flex items-center gap-2.5">
               <span>💡</span>
-              <span>Como Funciona o Sistema de Escolha de Comarcas CERTAM</span>
+              <span>Como Funciona o Sistema CERTAM para Cada Cargo</span>
             </h2>
             <p class="text-xs sm:text-sm text-slate-500 mt-1">
-              Entenda como a organização prévia entre os candidatos aprovados evita renúncias desnecessárias e antecipa a comarca de posse.
+              Cada cargo possui sua própria lista oficial de homologação, simulador e fórum. Nada se mistura.
             </p>
           </div>
 
@@ -704,9 +366,9 @@
               <div class="w-8 h-8 rounded-lg bg-[#07192B] text-[#2DD4AA] flex items-center justify-center font-bold text-sm">
                 1
               </div>
-              <h3 class="text-sm font-bold text-slate-900">1. Aprovados Registram suas Preferências</h3>
+              <h3 class="text-sm font-bold text-slate-900">Listas Isoladas por Cargo</h3>
               <p class="text-xs text-slate-600 leading-relaxed">
-                Dentro da página do seu concurso, cada candidato autenticado com Google pode ordenar sua lista de cidades preferidas e manifestar se pretende assumir a vaga.
+                As notas, convocações e critérios de cada carreira são gerenciados em painéis separados para total fidelidade ao edital.
               </p>
             </div>
 
@@ -714,9 +376,9 @@
               <div class="w-8 h-8 rounded-lg bg-[#07192B] text-[#2DD4AA] flex items-center justify-center font-bold text-sm">
                 2
               </div>
-              <h3 class="text-sm font-bold text-slate-900">2. Algoritmo Respeita a Ordem Oficial</h3>
+              <h3 class="text-sm font-bold text-slate-900">Fórum &amp; Comunidade Própria</h3>
               <p class="text-xs text-slate-600 leading-relaxed">
-                O sistema simula a alocação de acordo com os critérios rígidos do edital: melhor colocação escolhe primeiro, respeitando rigorosamente cotas de PPP, PCD e CI.
+                Os candidatos aprovados conversam diretamente com colegas do seu próprio cargo sobre desistências e preferências de cidades.
               </p>
             </div>
 
@@ -724,9 +386,9 @@
               <div class="w-8 h-8 rounded-lg bg-[#07192B] text-[#2DD4AA] flex items-center justify-center font-bold text-sm">
                 3
               </div>
-              <h3 class="text-sm font-bold text-slate-900">3. Transparência em Tempo Real</h3>
+              <h3 class="text-sm font-bold text-slate-900">Gestão Fácil no Painel Admin</h3>
               <p class="text-xs text-slate-600 leading-relaxed">
-                Todos acompanham quais vagas continuam disponíveis e em qual comarca provavelmente serão lotados antes mesmo da sessão pública oficial do tribunal!
+                O administrador cadastra e gerencia novos concursos, novos cargos e importa as planilhas oficiais com um clique.
               </p>
             </div>
           </div>
@@ -736,17 +398,15 @@
 
     </main>
 
-    <!-- =================================================================== -->
-    <!-- RODAPÉ INSTITUCIONAL GERAL DO PORTAL                                -->
-    <!-- =================================================================== -->
-    <footer class="bg-[#07192B] text-slate-400 border-t border-[#0F2942] py-8 px-4 sm:px-6 lg:px-8 text-xs leading-relaxed mt-auto">
-      <div class="max-w-[1820px] 2xl:max-w-[1880px] w-full mx-auto space-y-5">
-        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-[#0F2942] pb-5">
-          <div class="flex items-center gap-3">
-            <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-[#135A7A] to-[#2DD4AA] p-1.5 flex items-center justify-center shrink-0">
-              <svg class="w-full h-full" viewBox="0 0 100 100" fill="none">
-                <path d="M 68 18 C 38 10 12 30 12 56 C 12 80 34 94 58 92 C 76 90 90 76 90 58" stroke="#FFFFFF" stroke-width="12" stroke-linecap="round" fill="none"/>
-                <path d="M 32 53 L 48 69 L 88 23" stroke="#FFFFFF" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- FOOTER INSTITUCIONAL -->
+    <footer class="bg-[#07192B] text-slate-400 py-8 px-4 sm:px-6 lg:px-8 text-xs border-t border-[#0F2942]">
+      <div class="max-w-[1820px] mx-auto space-y-4">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#0F2942] pb-4">
+          <div class="flex items-center gap-2">
+            <div class="w-7 h-7 rounded-lg bg-gradient-to-br from-[#135A7A] to-[#2DD4AA] p-1 flex items-center justify-center">
+              <svg class="w-full h-full text-white" viewBox="0 0 100 100" fill="none">
+                <path d="M 68 18 C 38 10 12 30 12 56 C 12 80 34 94 58 92 C 76 90 90 76 90 58" stroke="currentColor" stroke-width="12" stroke-linecap="round" fill="none"/>
+                <path d="M 32 53 L 48 69 L 88 23" stroke="currentColor" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
             </div>
             <div>
@@ -758,16 +418,14 @@
           <div class="flex flex-wrap items-center gap-4 text-xs text-slate-300">
             <a href="index.html" class="text-[#2DD4AA] hover:underline font-semibold">Portal de Concursos</a>
             <span class="text-slate-600">·</span>
-            <a href="concurso.html?id=tjrs_analista_2024" class="hover:text-white transition-colors">Concurso TJRS</a>
-            <span class="text-slate-600">·</span>
-            <a href="lote.html?concurso=tjrs_analista_2024&lote=lote_1" class="hover:text-white transition-colors">Simulador de Lotação</a>
+            <a href="lote.html?admin=1&subaba=concursos" class="hover:text-white transition-colors">Painel Admin de Concursos</a>
             <span class="text-slate-600">·</span>
             <a href="politica-de-privacidade.html" class="hover:text-[#2DD4AA] underline transition-colors">Política de Privacidade</a>
           </div>
         </div>
 
         <p class="text-slate-500">
-          © 2026 CERTAM - Portal do Concurseiro. Plataforma independente mantida pela comunidade de candidatos aprovados para transparência e simulação de lotações públicas.
+          © 2026 CERTAM - Portal do Concurseiro. Plataforma de transparência e simulação de lotações públicas para concursos cadastrados.
         </p>
       </div>
     </footer>
@@ -781,18 +439,11 @@
   </div>
 
   <!-- ===================================================================== -->
-  <!-- JAVASCRIPT DO PORTAL                                                  -->
+  <!-- JAVASCRIPT DINÂMICO DO PORTAL                                         -->
   <!-- ===================================================================== -->
   <script>
-    var LISTA_CONCURSOS_PORTAL = [
-      { id: 'tjrs_analista_2024', orgao: 'TJRS', nome: 'Concurso TJRS - Analista Judiciário', cargo: 'Analista Judiciário - Área Judiciária', status: 'ativo', vagas: 166, candidatos: 305 },
-      { id: 'trf4_analista_2024', orgao: 'TRF4', nome: 'Concurso TRF4 - Região Sul', cargo: 'Analista Judiciário (RS, SC, PR)', status: 'ativo', vagas: 45, candidatos: 180 },
-      { id: 'tjsc_tecnico_2024', orgao: 'TJSC', nome: 'Concurso TJSC - Técnico Judiciário', cargo: 'Técnico Judiciário Auxiliar', status: 'ativo', vagas: 80, candidatos: 240 },
-      { id: 'mprs_secretario_2024', orgao: 'MPRS', nome: 'Concurso MPRS - Secretário de Diligências', cargo: 'Secretário de Diligências', status: 'previsto', vagas: 35, candidatos: 110 },
-      { id: 'dpers_analista_2024', orgao: 'DPE-RS', nome: 'Concurso DPE-RS - Analista Jurídico', cargo: 'Analista - Área Jurídica', status: 'ativo', vagas: 25, candidatos: 95 }
-    ];
-
     var filtroStatusAtual = 'todos';
+    var concursosCarregados = [];
 
     function toggleSidebarMobile(abrir) {
       var s = document.getElementById('sidebarPrincipal');
@@ -811,14 +462,9 @@
       toggleSidebarMobile(false);
       if (secao === 'concursos') {
         window.scrollTo({ top: 0, behavior: 'smooth' });
-      } else if (secao === 'chamamentos') {
-        mostrarToast('Redirecionando para chamamentos abertos...', 'info');
-        window.location.href = 'concurso.html?id=tjrs_analista_2024';
       } else if (secao === 'guia') {
         var el = document.querySelector('h2');
         if (el) el.scrollIntoView({ behavior: 'smooth' });
-      } else if (secao === 'comunidade') {
-        window.location.href = 'concurso.html?id=tjrs_analista_2024#comunidade';
       }
     }
 
@@ -826,69 +472,206 @@
       filtroStatusAtual = status;
       var btnTodos = document.getElementById('btnFiltroStatusTodos');
       var btnAtivos = document.getElementById('btnFiltroStatusAtivos');
-      var btnPrevistos = document.getElementById('btnFiltroStatusPrevistos');
 
-      var btns = [btnTodos, btnAtivos, btnPrevistos];
-      btns.forEach(function(b) {
-        if (!b) return;
-        b.className = 'px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:text-slate-900 transition-all cursor-pointer';
-      });
+      if (btnTodos) btnTodos.className = 'px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:text-slate-900 transition-all cursor-pointer';
+      if (btnAtivos) btnAtivos.className = 'px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:text-slate-900 transition-all cursor-pointer';
 
       if (status === 'todos' && btnTodos) {
         btnTodos.className = 'px-3 py-1.5 rounded-lg text-xs font-bold transition-all bg-white text-slate-900 shadow-xs cursor-pointer';
       } else if (status === 'ativos' && btnAtivos) {
         btnAtivos.className = 'px-3 py-1.5 rounded-lg text-xs font-bold transition-all bg-white text-slate-900 shadow-xs cursor-pointer';
-      } else if (status === 'previstos' && btnPrevistos) {
-        btnPrevistos.className = 'px-3 py-1.5 rounded-lg text-xs font-bold transition-all bg-white text-slate-900 shadow-xs cursor-pointer';
       }
 
       filtrarConcursosPortal();
     }
 
-    function filtrarConcursosPortal() {
-      var busca = (document.getElementById('inputBuscaConcursos').value || '').toLowerCase().trim();
-      var cards = document.querySelectorAll('#gridConcursosPortal > div');
-      var visiveis = 0;
+    function carregarConcursosDoStore() {
+      if (typeof window.CertamStore !== 'undefined') {
+        concursosCarregados = window.CertamStore.getConcursos();
+      } else {
+        concursosCarregados = [];
+      }
+      atualizarMetricasPortal();
+      renderizarGridConcursos(concursosCarregados);
+    }
 
-      cards.forEach(function(card) {
-        var textoCard = card.innerText.toLowerCase();
-        var matchesBusca = !busca || textoCard.includes(busca);
-        var isAtivo = textoCard.includes('chamamento ativo') || textoCard.includes('convocação em andamento');
-        var isPrevisto = textoCard.includes('previsto') || textoCard.includes('homologação');
+    function atualizarMetricasPortal() {
+      var totalConc = concursosCarregados.length;
+      var totalCargos = 0;
+      var totalVagas = 0;
 
-        var matchesStatus = true;
-        if (filtroStatusAtual === 'ativos') matchesStatus = isAtivo;
-        if (filtroStatusAtual === 'previstos') matchesStatus = isPrevisto;
-
-        if (matchesBusca && matchesStatus) {
-          card.style.display = 'flex';
-          visiveis++;
-        } else {
-          card.style.display = 'none';
+      concursosCarregados.forEach(function(c) {
+        if (Array.isArray(c.cargos)) {
+          totalCargos += c.cargos.length;
+          c.cargos.forEach(function(cg) {
+            totalVagas += (parseInt(cg.vagas_imediatas) || 0);
+          });
         }
       });
 
+      var elConc = document.getElementById('kpiTotalConcursos');
+      var elCargos = document.getElementById('kpiTotalCargos');
+      var elVagas = document.getElementById('kpiTotalVagas');
+
+      if (elConc) elConc.textContent = totalConc;
+      if (elCargos) elCargos.textContent = totalCargos;
+      if (elVagas) elVagas.textContent = totalVagas;
+    }
+
+    function renderizarGridConcursos(lista) {
+      var grid = document.getElementById('gridConcursosPortal');
       var contador = document.getElementById('textoStatusContagemConcursos');
-      if (contador) {
-        contador.textContent = 'Exibindo ' + visiveis + ' de 5 concursos públicos';
+      if (!grid) return;
+
+      if (!lista || lista.length === 0) {
+        grid.innerHTML = `
+          <div class="col-span-full bg-white rounded-2xl p-8 sm:p-12 text-center border border-slate-200 card-shadow space-y-4">
+            <div class="w-16 h-16 mx-auto rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center text-3xl">
+              🏛️
+            </div>
+            <h3 class="text-lg sm:text-xl font-bold font-serif text-slate-900">Nenhum concurso cadastrado ainda</h3>
+            <p class="text-xs sm:text-sm text-slate-500 max-w-md mx-auto">
+              Utilize o Painel Admin para cadastrar seu primeiro concurso e configurar os cargos desejados.
+            </p>
+            <div class="pt-2">
+              <a 
+                href="lote.html?admin=1&subaba=concursos" 
+                class="inline-flex items-center gap-2 bg-[#07192B] hover:bg-[#0C2640] text-white font-bold px-5 py-2.5 rounded-xl text-xs shadow-xs"
+              >
+                <span>➕</span>
+                <span>Cadastrar Concurso no Painel Admin</span>
+              </a>
+            </div>
+          </div>
+        `;
+        if (contador) contador.textContent = 'Nenhum concurso exibido';
+        return;
       }
+
+      var html = '';
+      lista.forEach(function(c) {
+        var cargos = Array.isArray(c.cargos) ? c.cargos : [];
+        var statusTexto = c.status === 'ativo' ? '● Concurso Ativo' : '○ Previsto';
+        var statusBadgeClass = c.status === 'ativo' 
+          ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+          : 'bg-amber-50 text-amber-700 border-amber-200';
+
+        var htmlCargos = '';
+        if (cargos.length === 0) {
+          htmlCargos = '<p class="text-xs text-slate-400 italic">Nenhum cargo estruturado ainda para este concurso.</p>';
+        } else {
+          cargos.forEach(function(cg) {
+            var urlConcursoCargo = 'concurso.html?id=' + encodeURIComponent(c.id) + '&cargo=' + encodeURIComponent(cg.id);
+            var urlLoteCargo = 'lote.html?concurso=' + encodeURIComponent(c.id) + '&cargo=' + encodeURIComponent(cg.id);
+            var vagasTxt = cg.vagas_imediatas ? (cg.vagas_imediatas + ' vagas') : 'Cadastro Reserva';
+
+            htmlCargos += `
+              <div class="p-3 rounded-xl bg-slate-50 border border-slate-100 hover:border-[#2DD4AA]/40 transition-colors space-y-2">
+                <div class="flex items-center justify-between gap-2">
+                  <div class="flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-[#2DD4AA]"></span>
+                    <span class="font-bold text-xs text-slate-900">${escapeHtml(cg.nome)}</span>
+                  </div>
+                  <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-white text-slate-700 border border-slate-200 font-semibold shrink-0">
+                    ${vagasTxt}
+                  </span>
+                </div>
+
+                <div class="flex items-center gap-2 pt-1">
+                  <a 
+                    href="${urlConcursoCargo}" 
+                    class="flex-1 bg-[#07192B] hover:bg-[#0C2640] text-white font-semibold py-1.5 px-3 rounded-lg text-xs transition-colors text-center flex items-center justify-center gap-1 shadow-2xs"
+                  >
+                    <span>Classificação &amp; Chat</span>
+                    <span class="text-teal-400">→</span>
+                  </a>
+                  <a 
+                    href="${urlLoteCargo}" 
+                    class="bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 font-medium py-1.5 px-2.5 rounded-lg text-xs transition-colors shrink-0" 
+                    title="Simulação de Lotação deste Cargo"
+                  >
+                    🏛️ Lotes
+                  </a>
+                </div>
+              </div>
+            `;
+          });
+        }
+
+        html += `
+          <div class="bg-white rounded-xl border border-slate-200/90 p-6 card-shadow card-shadow-hover transition-all flex flex-col justify-between group relative overflow-hidden">
+            <div class="space-y-4">
+              <div class="flex items-center justify-between gap-2">
+                <span class="px-2.5 py-0.5 rounded-md text-xs font-bold font-mono tracking-wider border ${statusBadgeClass}">
+                  ${statusTexto}
+                </span>
+                <span class="px-2.5 py-0.5 rounded-md bg-[#07192B] text-[#2DD4AA] text-xs font-bold font-mono tracking-wider uppercase">
+                  ${escapeHtml(c.orgao || 'ÓRGÃO')}
+                </span>
+              </div>
+
+              <div>
+                <h3 class="text-base sm:text-lg font-bold font-serif text-slate-900 group-hover:text-[#135A7A] transition-colors leading-snug">
+                  ${escapeHtml(c.nome)}
+                </h3>
+                <p class="text-xs text-slate-500 mt-1 line-clamp-2">
+                  ${escapeHtml(c.descricao || 'Concurso oficial acompanhado pelo CERTAM.')}
+                </p>
+              </div>
+
+              <!-- Lista de Cargos Deste Concurso -->
+              <div class="space-y-2 pt-1">
+                <div class="flex items-center justify-between text-2xs font-bold uppercase tracking-wider text-slate-400 font-mono">
+                  <span>Cargos e Carreiras (${cargos.length})</span>
+                  <span>Acesso Individual</span>
+                </div>
+                ${htmlCargos}
+              </div>
+            </div>
+
+            <!-- Rodapé do Card do Concurso -->
+            <div class="pt-4 border-t border-slate-100 mt-4 flex items-center justify-between text-2xs text-slate-400">
+              <span>Edital: <strong>${escapeHtml(c.edital || 'Oficial')}</strong></span>
+              <a href="lote.html?admin=1&subaba=concursos" class="text-teal-700 hover:text-teal-900 font-semibold hover:underline">
+                Gerenciar cargos ⚙️
+              </a>
+            </div>
+          </div>
+        `;
+      });
+
+      grid.innerHTML = html;
+      if (contador) {
+        contador.textContent = 'Exibindo ' + lista.length + ' concurso(s) cadastrado(s)';
+      }
+    }
+
+    function filtrarConcursosPortal() {
+      var busca = (document.getElementById('inputBuscaConcursos').value || '').toLowerCase().trim();
+      var filtrados = concursosCarregados.filter(function(c) {
+        var matchStatus = (filtroStatusAtual === 'todos') || (c.status === 'ativo');
+        if (!matchStatus) return false;
+
+        if (!busca) return true;
+        var textoConc = (c.nome + ' ' + (c.orgao || '') + ' ' + (c.descricao || '')).toLowerCase();
+        if (textoConc.includes(busca)) return true;
+
+        if (Array.isArray(c.cargos)) {
+          var temCargo = c.cargos.some(function(cg) {
+            return cg.nome.toLowerCase().includes(busca);
+          });
+          if (temCargo) return true;
+        }
+
+        return false;
+      });
+
+      renderizarGridConcursos(filtrados);
     }
 
     function limparFiltrosPortal() {
       document.getElementById('inputBuscaConcursos').value = '';
       setFiltroStatusPortal('todos');
-    }
-
-    function ativarModoAdminPreview(comAlerta) {
-      localStorage.setItem('tjrs_preview_modo_teste', 'admin');
-      localStorage.setItem('tjrs_usuario_email', 'rafasms0@hotmail.com');
-      var avatar = document.getElementById('avatarUsuarioHeader');
-      if (avatar) avatar.textContent = 'RS';
-      var nome = document.getElementById('nomeUsuarioHeader');
-      if (nome) nome.textContent = 'Rafael Santos (Admin)';
-      if (comAlerta) {
-        mostrarToast('⚡ Conectado como Administrador no Portal!', 'sucesso');
-      }
     }
 
     function fazerLogout() {
@@ -916,10 +699,18 @@
       }, 3500);
     }
 
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
     document.addEventListener('DOMContentLoaded', function() {
-      if (localStorage.getItem('tjrs_preview_modo_teste') === 'admin' || window.location.search.includes('admin=1')) {
-        ativarModoAdminPreview(false);
-      }
+      carregarConcursosDoStore();
     });
   </script>
 </body>
