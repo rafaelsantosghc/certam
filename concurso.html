@@ -27,6 +27,11 @@
     .font-mono {
       font-family: 'JetBrains Mono', monospace;
     }
+    /* Escala tipográfica profissional e legível (sem textos microscópicos) */
+    .text-3xs { font-size: 0.72rem !important; line-height: 1rem !important; }
+    .text-2xs { font-size: 0.785rem !important; line-height: 1.15rem !important; }
+    .shadow-2xs { box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05); }
+
     /* Estilização suave da barra de rolagem */
     ::-webkit-scrollbar {
       width: 7px;
@@ -50,7 +55,7 @@
   <!-- CABEÇALHO INSTITUCIONAL CERTAM                                        -->
   <!-- ===================================================================== -->
   <header class="bg-[#0B132B] text-white shadow-xs border-b border-[#1C2D4A] sticky top-0 z-40">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 sm:py-4">
+    <div class="max-w-[1820px] 2xl:max-w-[1880px] w-full mx-auto px-4 sm:px-6 lg:px-8 xl:px-12 py-3.5 sm:py-4">
       <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3.5">
         
         <!-- Logo e Naming Oficial -->
@@ -139,24 +144,24 @@
   <!-- BARRA DE CONTEXTO DO CONCURSO & NAVEGAÇÃO DE ABAS                     -->
   <!-- ===================================================================== -->
   <section class="bg-gradient-to-r from-[#0B132B] via-[#0E243D] to-[#0E3D4F] text-white border-b border-[#1C2D4A] py-6 sm:py-8">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="max-w-[1820px] 2xl:max-w-[1880px] w-full mx-auto px-4 sm:px-6 lg:px-8 xl:px-12">
       
       <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div class="flex items-center gap-2 flex-wrap mb-1.5">
-            <span id="badgeOrgaoConcurso" class="px-2.5 py-0.5 rounded-md bg-teal-500/20 text-teal-200 text-2xs font-bold font-mono tracking-wider border border-teal-500/40 uppercase">
+            <span id="badgeOrgaoConcurso" class="px-2.5 py-0.5 rounded-md bg-teal-500/20 text-teal-200 text-xs font-bold font-mono tracking-wider border border-teal-500/40 uppercase">
               TJRS
             </span>
-            <span id="badgeStatusConcurso" class="px-2.5 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 text-2xs font-bold font-mono tracking-wider border border-emerald-500/40">
+            <span id="badgeStatusConcurso" class="px-2.5 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 text-xs font-bold font-mono tracking-wider border border-emerald-500/40">
               ● Ativo
             </span>
-            <span class="text-2xs text-slate-400">Edital Oficial</span>
+            <span class="text-xs text-slate-400">Edital Oficial</span>
           </div>
 
-          <h1 id="tituloConcursoNome" class="text-2xl sm:text-3xl font-bold font-serif text-white tracking-tight">
+          <h1 id="tituloConcursoNome" class="text-2xl sm:text-3xl lg:text-4xl font-bold font-serif text-white tracking-tight">
             Concurso TJRS - Analista Judiciário
           </h1>
-          <p id="subtituloConcursoCargo" class="text-xs sm:text-sm text-slate-300 mt-1 font-medium">
+          <p id="subtituloConcursoCargo" class="text-sm sm:text-base text-slate-300 mt-1 font-medium">
             💼 Analista Judiciário - Área Judiciária
           </p>
         </div>
@@ -166,7 +171,7 @@
           <button 
             type="button" 
             onclick="copiarLinkDesteConcurso()" 
-            class="flex items-center gap-1.5 bg-white/10 hover:bg-white/20 text-white font-medium px-3.5 py-2 rounded-xl text-xs border border-white/20 transition-colors cursor-pointer shadow-xs"
+            class="flex items-center gap-1.5 bg-white/10 hover:bg-white/20 text-white font-medium px-4 py-2.5 rounded-xl text-xs sm:text-sm border border-white/20 transition-colors cursor-pointer shadow-xs"
             title="Copiar URL completa deste concurso"
           >
             <span>🔗</span>
@@ -176,7 +181,7 @@
           <a 
             id="btnAtalhoSimulacaoLotes" 
             href="lote.html?concurso=tjrs_analista_2024&lote=lote_1" 
-            class="flex items-center gap-2 bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-400 hover:to-cyan-400 text-slate-950 font-bold px-4 py-2 rounded-xl text-xs transition-all shadow-md cursor-pointer"
+            class="flex items-center gap-2 bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-400 hover:to-cyan-400 text-slate-950 font-bold px-4 sm:px-5 py-2.5 rounded-xl text-xs sm:text-sm transition-all shadow-md cursor-pointer"
           >
             <span>🏛️</span>
             <span>Simulação de Lotação (Lotes) →</span>
@@ -213,7 +218,7 @@
   <!-- ===================================================================== -->
   <!-- CONTEÚDO PRINCIPAL (ABAS 1 E 2)                                       -->
   <!-- ===================================================================== -->
-  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+  <main class="flex-1 max-w-[1820px] 2xl:max-w-[1880px] w-full mx-auto px-4 sm:px-6 lg:px-8 xl:px-12 py-8">
 
     <!-- =================================================================== -->
     <!-- ABA 1: CLASSIFICAÇÃO GERAL E NOMEAÇÕES                              -->
@@ -221,39 +226,39 @@
     <section id="abaConteudoClassificacao" class="space-y-6">
       
       <!-- Cards de Resumo Rápido -->
-      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div class="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-2xs">
-          <span class="text-3xs font-bold uppercase tracking-wider text-slate-400 block font-mono">Aprovados</span>
-          <div class="text-2xl font-bold font-mono text-slate-900 mt-1" id="statTotalAprovados">0</div>
-          <span class="text-2xs text-slate-500">Candidatos homologados</span>
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+        <div class="bg-white rounded-2xl p-5 sm:p-6 border border-slate-200 shadow-2xs">
+          <span class="text-xs font-bold uppercase tracking-wider text-slate-500 block font-mono">Aprovados</span>
+          <div class="text-3xl sm:text-4xl font-extrabold font-mono text-slate-900 mt-1.5" id="statTotalAprovados">0</div>
+          <span class="text-xs text-slate-500 mt-1 block">Candidatos homologados</span>
         </div>
 
-        <div class="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-2xs">
-          <span class="text-3xs font-bold uppercase tracking-wider text-emerald-600 block font-mono">Pretendem Assumir</span>
-          <div class="text-2xl font-bold font-mono text-emerald-700 mt-1" id="statManifestaramInteresse">0</div>
-          <span class="text-2xs text-emerald-600">Interesse ativo na vaga</span>
+        <div class="bg-white rounded-2xl p-5 sm:p-6 border border-slate-200 shadow-2xs">
+          <span class="text-xs font-bold uppercase tracking-wider text-emerald-700 block font-mono">Pretendem Assumir</span>
+          <div class="text-3xl sm:text-4xl font-extrabold font-mono text-emerald-700 mt-1.5" id="statManifestaramInteresse">0</div>
+          <span class="text-xs text-emerald-700/80 mt-1 block">Interesse ativo na vaga</span>
         </div>
 
-        <div class="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-2xs">
-          <span class="text-3xs font-bold uppercase tracking-wider text-teal-600 block font-mono">Nomeados / Exercício</span>
-          <div class="text-2xl font-bold font-mono text-teal-700 mt-1" id="statNomeadosExercicio">0</div>
-          <span class="text-2xs text-teal-600">Convocação oficial</span>
+        <div class="bg-white rounded-2xl p-5 sm:p-6 border border-slate-200 shadow-2xs">
+          <span class="text-xs font-bold uppercase tracking-wider text-teal-700 block font-mono">Nomeados / Exercício</span>
+          <div class="text-3xl sm:text-4xl font-extrabold font-mono text-teal-700 mt-1.5" id="statNomeadosExercicio">0</div>
+          <span class="text-xs text-teal-700/80 mt-1 block">Convocação oficial</span>
         </div>
 
-        <div class="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-2xs">
-          <span class="text-3xs font-bold uppercase tracking-wider text-rose-500 block font-mono">Desistências / Fim de Fila</span>
-          <div class="text-2xl font-bold font-mono text-rose-600 mt-1" id="statDesistenciasFimFila">0</div>
-          <span class="text-2xs text-rose-500">Renúncias ou repasse de vez</span>
+        <div class="bg-white rounded-2xl p-5 sm:p-6 border border-slate-200 shadow-2xs">
+          <span class="text-xs font-bold uppercase tracking-wider text-rose-600 block font-mono">Desistências / Fim de Fila</span>
+          <div class="text-3xl sm:text-4xl font-extrabold font-mono text-rose-600 mt-1.5" id="statDesistenciasFimFila">0</div>
+          <span class="text-xs text-rose-600/80 mt-1 block">Renúncias ou repasse de vez</span>
         </div>
       </div>
 
       <!-- Barra de Filtros e Busca de Candidatos -->
-      <div class="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-2xs space-y-4">
+      <div class="bg-white rounded-2xl p-5 sm:p-6 border border-slate-200 shadow-2xs space-y-4">
         <div class="grid grid-cols-1 md:grid-cols-12 gap-3.5">
           
           <!-- Busca por Nome ou Comarca -->
           <div class="md:col-span-5 relative">
-            <span class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+            <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400 text-sm">
               🔍
             </span>
             <input 
@@ -261,13 +266,13 @@
               id="filtroClassifBusca" 
               oninput="filtrarClassificacaoGeral()" 
               placeholder="Buscar por nome do candidato ou comarca..." 
-              class="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+              class="w-full pl-10 pr-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 font-medium"
             >
           </div>
 
           <!-- Filtro por Cota -->
           <div class="md:col-span-2">
-            <select id="filtroClassifCota" onchange="filtrarClassificacaoGeral()" class="w-full py-2 px-3 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
+            <select id="filtroClassifCota" onchange="filtrarClassificacaoGeral()" class="w-full py-2.5 px-3.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-teal-500">
               <option value="todas">Cota: Todas</option>
               <option value="Ampla">Ampla Concorrência</option>
               <option value="PPP">PPP / Negros (CN)</option>
@@ -278,7 +283,7 @@
 
           <!-- Filtro por Status Oficial -->
           <div class="md:col-span-3">
-            <select id="filtroClassifStatus" onchange="filtrarClassificacaoGeral()" class="w-full py-2 px-3 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
+            <select id="filtroClassifStatus" onchange="filtrarClassificacaoGeral()" class="w-full py-2.5 px-3.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-teal-500">
               <option value="todos">Status: Todos</option>
               <option value="Aguardando">Aguardando Convocação</option>
               <option value="Convocado Titular">Convocado Titular</option>
@@ -293,7 +298,7 @@
 
           <!-- Filtro por Intenção -->
           <div class="md:col-span-2">
-            <select id="filtroClassifIntencao" onchange="filtrarClassificacaoGeral()" class="w-full py-2 px-3 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
+            <select id="filtroClassifIntencao" onchange="filtrarClassificacaoGeral()" class="w-full py-2.5 px-3.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-teal-500">
               <option value="todas">Intenção: Todas</option>
               <option value="Sim">Assume (Sim)</option>
               <option value="Talvez">Em Análise (Talvez)</option>
@@ -305,11 +310,11 @@
 
         </div>
 
-        <div class="flex items-center justify-between text-2xs text-slate-500 pt-1 border-t border-slate-100">
+        <div class="flex items-center justify-between text-xs text-slate-500 pt-2 border-t border-slate-100">
           <div>
-            Exibindo <strong id="contadorCandidatosFiltrados" class="text-slate-800">0</strong> candidato(s)
+            Exibindo <strong id="contadorCandidatosFiltrados" class="text-slate-900 font-bold">0</strong> candidato(s)
           </div>
-          <button type="button" onclick="limparFiltrosClassificacao()" class="text-teal-700 hover:text-teal-900 font-semibold cursor-pointer">
+          <button type="button" onclick="limparFiltrosClassificacao()" class="text-teal-700 hover:text-teal-900 font-semibold cursor-pointer text-xs">
             Limpar filtros
           </button>
         </div>
@@ -318,25 +323,25 @@
       <!-- Tabela Principal de Classificação Geral -->
       <div class="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
         <div class="overflow-x-auto">
-          <table class="w-full text-left text-xs sm:text-sm divide-y divide-slate-100">
-            <thead class="bg-slate-50/80 text-slate-600 font-bold text-2xs uppercase tracking-wider font-mono">
+          <table class="w-full text-left text-sm divide-y divide-slate-100">
+            <thead class="bg-slate-100/90 text-slate-700 font-bold text-xs uppercase tracking-wider font-mono">
               <tr>
-                <th class="px-3.5 py-3 text-center">Class. Geral</th>
-                <th class="px-4 py-3">Candidato &amp; Vínculo</th>
-                <th class="px-3.5 py-3 text-center">Cota</th>
-                <th class="px-3 py-3 text-right">Nota Final</th>
-                <th class="px-3.5 py-3 text-center">Intenção</th>
-                <th class="px-4 py-3">1ª Comarca Desejada</th>
-                <th class="px-3.5 py-3">Status / Lotação</th>
-                <th class="px-3 py-3 text-center">Ações</th>
+                <th class="px-4 py-3.5 text-center">Class. Geral</th>
+                <th class="px-5 py-3.5">Candidato &amp; Vínculo</th>
+                <th class="px-4 py-3.5 text-center">Cota</th>
+                <th class="px-4 py-3.5 text-right">Nota Final</th>
+                <th class="px-4 py-3.5 text-center">Intenção</th>
+                <th class="px-5 py-3.5">1ª Comarca Desejada</th>
+                <th class="px-4 py-3.5">Status / Lotação</th>
+                <th class="px-4 py-3.5 text-center">Ações</th>
               </tr>
             </thead>
             <tbody id="tabelaClassificacaoBody" class="divide-y divide-slate-100">
               <tr>
-                <td colspan="8" class="text-center py-10 text-slate-400">
+                <td colspan="8" class="text-center py-12 text-slate-400">
                   <div class="animate-pulse space-y-2">
                     <div class="h-4 bg-slate-200 rounded w-1/3 mx-auto"></div>
-                    <div class="text-xs text-slate-400">Consultando lista oficial de candidatos...</div>
+                    <div class="text-sm text-slate-500">Consultando lista oficial de candidatos...</div>
                   </div>
                 </td>
               </tr>
@@ -634,19 +639,19 @@
           </div>
 
           <!-- Grid de Duas Colunas Lado a Lado -->
-          <div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+          <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
             
             <!-- COLUNA ESQUERDA: COMARCAS DISPONÍVEIS NO ÓRGÃO (NÃO SELECIONADAS) -->
-            <div class="lg:col-span-6 bg-slate-50 rounded-2xl border border-slate-200 p-4 flex flex-col h-[600px]">
-              <div class="flex items-center justify-between pb-2 border-b border-slate-200 mb-2.5">
+            <div class="lg:col-span-6 bg-slate-50 rounded-2xl border border-slate-200 p-5 flex flex-col h-[720px] 2xl:h-[780px]">
+              <div class="flex items-center justify-between pb-3 border-b border-slate-200 mb-3">
                 <div>
-                  <h4 class="text-xs sm:text-sm font-bold text-slate-800">Comarcas Disponíveis no Estado</h4>
-                  <span class="text-3xs text-slate-500"><span id="contadorComarcasDisponiveis">0</span> comarcas não selecionadas</span>
+                  <h4 class="text-sm sm:text-base font-bold text-slate-900">Comarcas Disponíveis no Estado</h4>
+                  <span class="text-xs text-slate-500 font-medium"><span id="contadorComarcasDisponiveis">0</span> comarcas não selecionadas</span>
                 </div>
                 <button 
                   type="button" 
                   onclick="adicionarTodasComarcasFiltradas()" 
-                  class="text-2xs bg-white text-teal-800 border border-teal-300 font-semibold px-2.5 py-1 rounded-lg hover:bg-teal-50 cursor-pointer transition-colors"
+                  class="text-xs bg-white text-teal-800 border border-teal-300 font-semibold px-3 py-1.5 rounded-xl hover:bg-teal-50 cursor-pointer transition-colors shadow-2xs"
                   title="Adicionar todas as comarcas exibidas na busca para sua lista de posse"
                 >
                   + Adicionar Todas
@@ -654,48 +659,48 @@
               </div>
 
               <!-- Filtros de Busca e Região -->
-              <div class="space-y-2 mb-2.5">
+              <div class="space-y-2 mb-3">
                 <input 
                   type="text" 
                   id="buscaComarcasDisponiveis" 
                   oninput="renderizarTabelaComarcasDisponiveis()" 
                   placeholder="Pesquisar comarca..." 
-                  class="w-full bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs focus:ring-2 focus:ring-teal-500"
+                  class="w-full bg-white border border-slate-200 rounded-xl px-3.5 py-2 text-sm focus:ring-2 focus:ring-teal-500 font-medium"
                 >
               </div>
 
               <!-- Lista Rolável de Comarcas Disponíveis -->
-              <div id="listaComarcasDisponiveis" class="flex-1 overflow-y-auto space-y-1 pr-1">
+              <div id="listaComarcasDisponiveis" class="flex-1 overflow-y-auto space-y-1.5 pr-1">
                 <!-- Preenchido via JavaScript -->
               </div>
             </div>
 
             <!-- COLUNA DIREITA: MINHAS COMARCAS ESCOLHIDAS PARA POSSE (ORDENADAS) -->
-            <div class="lg:col-span-6 bg-teal-50/40 rounded-2xl border-2 border-teal-200 p-4 flex flex-col h-[600px]">
-              <div class="flex items-center justify-between pb-2 border-b border-teal-200 mb-2.5">
+            <div class="lg:col-span-6 bg-teal-50/40 rounded-2xl border-2 border-teal-200 p-5 flex flex-col h-[720px] 2xl:h-[780px]">
+              <div class="flex items-center justify-between pb-3 border-b border-teal-200 mb-3">
                 <div>
-                  <h4 class="text-xs sm:text-sm font-bold text-teal-950 flex items-center gap-1.5">
-                    <span class="w-2 h-2 rounded-full bg-teal-600"></span>
+                  <h4 class="text-sm sm:text-base font-bold text-teal-950 flex items-center gap-2">
+                    <span class="w-2.5 h-2.5 rounded-full bg-teal-600"></span>
                     <span>Minha Lista de Posse (Ordem de Preferência)</span>
                   </h4>
-                  <span class="text-3xs text-teal-800">1º colocado no topo = sua maior prioridade</span>
+                  <span class="text-xs text-teal-800 font-medium">1º colocado no topo = sua maior prioridade de lotação</span>
                 </div>
                 <button 
                   type="button" 
                   onclick="limparTodasEscolhasComarcas()" 
-                  class="text-2xs text-rose-600 hover:text-rose-800 font-semibold cursor-pointer"
+                  class="text-xs text-rose-600 hover:text-rose-800 font-semibold cursor-pointer"
                 >
                   Limpar lista
                 </button>
               </div>
 
-              <div class="text-2xs text-teal-900 bg-teal-100/70 border border-teal-200 rounded-lg p-2 mb-2 flex items-center justify-between">
-                <span>⭐ <strong id="contadorComarcasEscolhidas">0</strong> comarca(s) selecionada(s) para posse.</span>
-                <span class="text-3xs text-teal-700">Use ▲ ▼ para reordenar</span>
+              <div class="text-xs text-teal-900 bg-teal-100/70 border border-teal-200 rounded-xl p-2.5 mb-3 flex items-center justify-between">
+                <span>⭐ <strong id="contadorComarcasEscolhidas" class="font-bold">0</strong> comarca(s) selecionada(s) para posse.</span>
+                <span class="text-xs text-teal-700 font-medium">Use ▲ ▼ para reordenar</span>
               </div>
 
               <!-- Lista Rolável de Comarcas Selecionadas -->
-              <div id="listaComarcasEscolhidas" class="flex-1 overflow-y-auto space-y-1.5 pr-1">
+              <div id="listaComarcasEscolhidas" class="flex-1 overflow-y-auto space-y-2 pr-1">
                 <!-- Preenchido via JavaScript -->
               </div>
             </div>
@@ -797,7 +802,7 @@
   <!-- RODAPÉ INSTITUCIONAL CERTAM                                           -->
   <!-- ===================================================================== -->
   <footer class="bg-[#0B132B] text-slate-400 border-t border-[#1C2D4A] mt-auto py-8 px-4 sm:px-6 lg:px-8 text-xs leading-relaxed">
-    <div class="max-w-7xl mx-auto space-y-5">
+    <div class="max-w-[1820px] 2xl:max-w-[1880px] w-full mx-auto space-y-5">
       <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-[#1C2D4A] pb-5">
         <div class="flex items-center gap-3">
           <span class="font-serif font-bold text-white tracking-wider uppercase text-sm">CERTAM</span>
@@ -1578,71 +1583,71 @@
 
         // Intenção
         var intRaw = (c.intencao || 'indefinido').toLowerCase();
-        var badgeIntencao = '<span class="px-2 py-0.5 rounded text-3xs font-semibold bg-slate-100 text-slate-500">Não informou</span>';
+        var badgeIntencao = '<span class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold bg-slate-100 text-slate-600">Não informou</span>';
         if (intRaw === 'sim' || intRaw === 'assumir') {
-          badgeIntencao = '<span class="px-2 py-0.5 rounded text-3xs font-bold bg-emerald-100 text-emerald-800">Assume (Sim)</span>';
+          badgeIntencao = '<span class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-bold bg-emerald-100 text-emerald-900 border border-emerald-200/60">Assume (Sim)</span>';
         } else if (intRaw === 'talvez') {
-          badgeIntencao = '<span class="px-2 py-0.5 rounded text-3xs font-bold bg-sky-100 text-sky-800">Em Análise (Talvez)</span>';
+          badgeIntencao = '<span class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-bold bg-sky-100 text-sky-900 border border-sky-200/60">Em Análise</span>';
         } else if (intRaw === 'não' || intRaw === 'nao' || intRaw === 'desistir' || intRaw === 'desiste') {
-          badgeIntencao = '<span class="px-2 py-0.5 rounded text-3xs font-bold bg-rose-100 text-rose-800">Desiste</span>';
+          badgeIntencao = '<span class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-bold bg-rose-100 text-rose-900 border border-rose-200/60">Desiste</span>';
         } else if (intRaw === 'final_fila' || intRaw === 'fim_fila') {
-          badgeIntencao = '<span class="px-2 py-0.5 rounded text-3xs font-bold bg-amber-100 text-amber-800">Fim de Fila</span>';
+          badgeIntencao = '<span class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-bold bg-amber-100 text-amber-900 border border-amber-200/60">Fim de Fila</span>';
         }
 
         // 1ª Comarca
         var escolhas = Array.isArray(c.escolhas) ? c.escolhas : [];
         var primeiraComarca = c.lotacao_assumida || c.comarca_preferencia || escolhas[0] || '-';
-        var restoCount = escolhas.length > 1 ? '<span class="text-3xs text-teal-700 bg-teal-50 px-1.5 py-0.5 rounded font-mono ml-1">+' + (escolhas.length - 1) + '</span>' : '';
+        var restoCount = escolhas.length > 1 ? '<span class="text-xs text-teal-800 bg-teal-100/70 border border-teal-200 px-2 py-0.5 rounded font-mono font-semibold ml-1.5">+' + (escolhas.length - 1) + '</span>' : '';
 
         // Status
         var status = c.status_nomeacao || 'Aguardando';
-        var badgeStatus = '<span class="px-2 py-0.5 rounded text-2xs font-medium bg-slate-100 text-slate-700 font-mono">' + escapeHtml(status) + '</span>';
+        var badgeStatus = '<span class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-slate-100 text-slate-700 font-mono">' + escapeHtml(status) + '</span>';
         if (status.includes('Convocado') || status.includes('Nomeado') || status.includes('Exercício') || status.includes('Posse')) {
-          badgeStatus = '<span class="px-2 py-0.5 rounded text-2xs font-bold bg-teal-100 text-teal-900 font-mono">● ' + escapeHtml(status) + '</span>';
+          badgeStatus = '<span class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-bold bg-teal-100 text-teal-900 border border-teal-200 font-mono">● ' + escapeHtml(status) + '</span>';
         } else if (status.includes('Final de lista') || status.includes('Fim de fila')) {
-          badgeStatus = '<span class="px-2 py-0.5 rounded text-2xs font-bold bg-amber-100 text-amber-900 font-mono">● ' + escapeHtml(status) + '</span>';
+          badgeStatus = '<span class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-bold bg-amber-100 text-amber-900 border border-amber-200 font-mono">● ' + escapeHtml(status) + '</span>';
         } else if (status.includes('Desist') || status.includes('Renún')) {
-          badgeStatus = '<span class="px-2 py-0.5 rounded text-2xs font-bold bg-rose-100 text-rose-900 font-mono">● ' + escapeHtml(status) + '</span>';
+          badgeStatus = '<span class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-bold bg-rose-100 text-rose-900 border border-rose-200 font-mono">● ' + escapeHtml(status) + '</span>';
         }
 
         html += `
-          <tr class="hover:bg-slate-50/80 transition-colors">
-            <td class="px-3.5 py-3 text-center font-mono font-bold text-slate-800">
+          <tr class="hover:bg-slate-50 transition-colors">
+            <td class="px-4 py-3.5 text-center font-mono font-bold text-slate-900 text-base">
               ${classGeral}º
-              <div class="text-3xs text-slate-400 font-normal">Vaga: ${escapeHtml(String(vagaChamada))}</div>
+              <div class="text-xs text-slate-500 font-normal font-mono mt-0.5">Vaga: ${escapeHtml(String(vagaChamada))}</div>
             </td>
-            <td class="px-4 py-3">
-              <div class="font-bold text-slate-900 leading-snug">${escapeHtml(nome)}</div>
-              <div class="flex items-center gap-1.5 mt-0.5">
-                ${isServidor ? '<span class="text-3xs bg-purple-100 text-purple-800 border border-purple-200 px-1.5 py-0.2 rounded font-semibold">Servidor TJRS</span>' : ''}
-                ${c.outros_concursos ? '<span class="text-3xs text-slate-400 truncate max-w-[150px]" title="' + escapeHtml(c.outros_concursos) + '">🎯 ' + escapeHtml(c.outros_concursos) + '</span>' : ''}
+            <td class="px-5 py-3.5">
+              <div class="font-bold text-slate-900 text-sm sm:text-base leading-snug">${escapeHtml(nome)}</div>
+              <div class="flex items-center gap-2 mt-1 flex-wrap">
+                ${isServidor ? '<span class="text-xs bg-purple-100 text-purple-900 border border-purple-200 px-2 py-0.5 rounded font-semibold">Servidor TJRS</span>' : ''}
+                ${c.outros_concursos ? '<span class="text-xs text-slate-500 truncate max-w-[280px] xl:max-w-[400px]" title="' + escapeHtml(c.outros_concursos) + '">🎯 ' + escapeHtml(c.outros_concursos) + '</span>' : ''}
               </div>
             </td>
-            <td class="px-3.5 py-3 text-center">
-              <span class="text-2xs font-semibold px-2 py-0.5 rounded ${cota.includes('PPP') || cota.includes('Negro') ? 'bg-amber-50 text-amber-900' : (cota.includes('PCD') ? 'bg-blue-50 text-blue-900' : 'bg-slate-100 text-slate-700')}">
+            <td class="px-4 py-3.5 text-center">
+              <span class="inline-flex items-center text-xs font-semibold px-2.5 py-1 rounded-md ${cota.includes('PPP') || cota.includes('Negro') ? 'bg-amber-100 text-amber-900 border border-amber-200' : (cota.includes('PCD') ? 'bg-blue-100 text-blue-900 border border-blue-200' : 'bg-slate-100 text-slate-700 border border-slate-200')}">
                 ${escapeHtml(cota)}
               </span>
-              <div class="text-3xs text-slate-400 font-mono mt-0.5">${classCota}</div>
+              <div class="text-xs text-slate-500 font-mono mt-1 font-medium">${classCota}</div>
             </td>
-            <td class="px-3 py-3 text-right font-mono font-bold text-slate-800">
+            <td class="px-4 py-3.5 text-right font-mono font-bold text-slate-900 text-sm sm:text-base">
               ${notaFinal}
             </td>
-            <td class="px-3.5 py-3 text-center">
+            <td class="px-4 py-3.5 text-center">
               ${badgeIntencao}
             </td>
-            <td class="px-4 py-3">
-              <span class="font-medium text-slate-800">${escapeHtml(primeiraComarca)}</span>
+            <td class="px-5 py-3.5">
+              <span class="font-semibold text-slate-800 text-sm">${escapeHtml(primeiraComarca)}</span>
               ${restoCount}
             </td>
-            <td class="px-3.5 py-3">
+            <td class="px-4 py-3.5">
               ${badgeStatus}
-              ${c.lotacao_assumida ? '<div class="text-3xs text-slate-500 mt-0.5">Lotação: ' + escapeHtml(c.lotacao_assumida) + '</div>' : ''}
+              ${c.lotacao_assumida ? '<div class="text-xs text-slate-600 mt-1 font-medium">Lotação: ' + escapeHtml(c.lotacao_assumida) + '</div>' : ''}
             </td>
-            <td class="px-3 py-3 text-center">
+            <td class="px-4 py-3.5 text-center">
               <button 
                 type="button" 
                 onclick="abrirModalDetalhesCandidato('${c.candidato_id || c.id || (inicio + idx)}')" 
-                class="bg-slate-100 hover:bg-teal-50 text-slate-700 hover:text-teal-900 border border-slate-300 hover:border-teal-300 px-2.5 py-1 rounded-lg text-2xs font-semibold transition-colors cursor-pointer"
+                class="bg-slate-100 hover:bg-teal-50 text-slate-700 hover:text-teal-900 border border-slate-300 hover:border-teal-300 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer shadow-2xs"
                 title="Ver detalhes de notas e todas as comarcas"
               >
                 👁️ Detalhes
@@ -2004,15 +2009,15 @@
       var html = '';
       disponiveis.forEach(function(cm) {
         html += `
-          <div class="flex items-center justify-between p-2 rounded-xl bg-white border border-slate-200/80 hover:border-teal-300 transition-colors">
+          <div class="flex items-center justify-between p-2.5 rounded-xl bg-white border border-slate-200 hover:border-teal-300 transition-colors shadow-2xs">
             <div class="flex items-center gap-2">
-              <span class="text-xs font-semibold text-slate-800">${escapeHtml(cm.nome)}</span>
-              ${cm.regiao ? '<span class="text-3xs font-mono text-slate-400">(' + escapeHtml(cm.regiao) + ')</span>' : ''}
+              <span class="text-sm font-semibold text-slate-900">${escapeHtml(cm.nome)}</span>
+              ${cm.regiao ? '<span class="text-xs font-mono text-slate-400">(' + escapeHtml(cm.regiao) + ')</span>' : ''}
             </div>
             <button 
               type="button" 
               onclick="adicionarComarcaPosse('${escapeHtml(cm.nome)}')" 
-              class="text-2xs bg-teal-50 hover:bg-teal-600 text-teal-800 hover:text-white font-bold px-2.5 py-1 rounded-lg border border-teal-200 hover:border-teal-600 transition-colors cursor-pointer"
+              class="text-xs bg-teal-50 hover:bg-teal-600 text-teal-800 hover:text-white font-bold px-3 py-1.5 rounded-xl border border-teal-200 hover:border-teal-600 transition-colors cursor-pointer shadow-2xs"
               title="Adicionar à lista de posse"
             >
               + Adicionar
@@ -2032,26 +2037,26 @@
       if (contador) contador.textContent = escolhidas.length;
 
       if (escolhidas.length === 0) {
-        container.innerHTML = '<div class="text-2xs text-teal-800 text-center py-10 bg-white/60 rounded-xl border border-dashed border-teal-200">Sua lista de preferências para posse está vazia.<br>Clique em "+ Adicionar" na tabela da esquerda para incluir suas comarcas desejadas.</div>';
+        container.innerHTML = '<div class="text-xs text-teal-800 text-center py-12 bg-white/70 rounded-xl border border-dashed border-teal-200 font-medium">Sua lista de preferências para posse está vazia.<br>Clique em "+ Adicionar" na tabela da esquerda para incluir suas comarcas desejadas.</div>';
         return;
       }
 
       var html = '';
       escolhidas.forEach(function(nome, idx) {
         html += `
-          <div class="flex items-center justify-between p-2 rounded-xl bg-white border border-teal-200 shadow-2xs">
-            <div class="flex items-center gap-2">
-              <span class="w-6 h-6 rounded-lg bg-teal-50 text-teal-900 border border-teal-200 flex items-center justify-center font-mono font-bold text-2xs">
+          <div class="flex items-center justify-between p-2.5 rounded-xl bg-white border border-teal-200 shadow-2xs">
+            <div class="flex items-center gap-2.5">
+              <span class="w-7 h-7 rounded-lg bg-teal-50 text-teal-900 border border-teal-200 flex items-center justify-center font-mono font-bold text-xs">
                 ${idx + 1}º
               </span>
-              <span class="text-xs font-bold text-slate-900">${escapeHtml(nome)}</span>
+              <span class="text-sm font-bold text-slate-900">${escapeHtml(nome)}</span>
             </div>
 
-            <div class="flex items-center gap-1">
+            <div class="flex items-center gap-1.5">
               <button 
                 type="button" 
                 onclick="moverComarca(${idx}, -1)" 
-                class="w-6 h-6 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 text-2xs font-bold flex items-center justify-center cursor-pointer"
+                class="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold flex items-center justify-center cursor-pointer"
                 title="Subir na preferência"
                 ${idx === 0 ? 'disabled style="opacity: 0.3;"' : ''}
               >
@@ -2060,7 +2065,7 @@
               <button 
                 type="button" 
                 onclick="moverComarca(${idx}, 1)" 
-                class="w-6 h-6 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 text-2xs font-bold flex items-center justify-center cursor-pointer"
+                class="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold flex items-center justify-center cursor-pointer"
                 title="Descer na preferência"
                 ${idx === escolhidas.length - 1 ? 'disabled style="opacity: 0.3;"' : ''}
               >
@@ -2069,7 +2074,7 @@
               <button 
                 type="button" 
                 onclick="removerComarcaPosse(${idx})" 
-                class="w-6 h-6 rounded bg-rose-50 hover:bg-rose-100 text-rose-700 text-2xs font-bold flex items-center justify-center ml-1 cursor-pointer"
+                class="w-7 h-7 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold flex items-center justify-center ml-1 cursor-pointer"
                 title="Remover da lista de posse (retorna para a tabela da esquerda)"
               >
                 ✕
