@@ -1,0 +1,126 @@
+import { Comarca } from '../types';
+
+export const COMARCAS_RS: Comarca[] = [
+  // Região Metropolitana (Polo: Porto Alegre)
+  { id: 1, nome: 'Porto Alegre', regiao: 'Metropolitana', vagas_total: 18, entrancia: 'Final' },
+  { id: 2, nome: 'Canoas', regiao: 'Metropolitana', vagas_total: 6, entrancia: 'Final' },
+  { id: 3, nome: 'Novo Hamburgo', regiao: 'Metropolitana', vagas_total: 5, entrancia: 'Final' },
+  { id: 4, nome: 'São Leopoldo', regiao: 'Metropolitana', vagas_total: 5, entrancia: 'Final' },
+  { id: 5, nome: 'Gravataí', regiao: 'Metropolitana', vagas_total: 4, entrancia: 'Final' },
+  { id: 6, nome: 'Alvorada', regiao: 'Metropolitana', vagas_total: 3, entrancia: 'Intermediária' },
+  { id: 7, nome: 'Viamão', regiao: 'Metropolitana', vagas_total: 4, entrancia: 'Final' },
+  { id: 8, nome: 'Guaíba', regiao: 'Metropolitana', vagas_total: 3, entrancia: 'Intermediária' },
+  { id: 9, nome: 'Sapucaia do Sul', regiao: 'Metropolitana', vagas_total: 3, entrancia: 'Intermediária' },
+  { id: 10, nome: 'Esteio', regiao: 'Metropolitana', vagas_total: 2, entrancia: 'Intermediária' },
+  { id: 11, nome: 'Cachoeirinha', regiao: 'Metropolitana', vagas_total: 3, entrancia: 'Intermediária' },
+  { id: 12, nome: 'Montenegro', regiao: 'Metropolitana', vagas_total: 3, entrancia: 'Intermediária' },
+  { id: 13, nome: 'Taquara', regiao: 'Metropolitana', vagas_total: 2, entrancia: 'Intermediária' },
+  { id: 14, nome: 'Campo Bom', regiao: 'Metropolitana', vagas_total: 2, entrancia: 'Intermediária' },
+  { id: 15, nome: 'Dois Irmãos', regiao: 'Metropolitana', vagas_total: 1, entrancia: 'Inicial' },
+  { id: 16, nome: 'Estância Velha', regiao: 'Metropolitana', vagas_total: 2, entrancia: 'Intermediária' },
+  { id: 17, nome: 'Sapiranga', regiao: 'Metropolitana', vagas_total: 3, entrancia: 'Intermediária' },
+  { id: 18, nome: 'Santo Antônio da Patrulha', regiao: 'Metropolitana', vagas_total: 2, entrancia: 'Intermediária' },
+
+  // Região Nordeste / Serra Gaúcha
+  { id: 19, nome: 'Caxias do Sul', regiao: 'Serra', vagas_total: 8, entrancia: 'Final' },
+  { id: 20, nome: 'Bento Gonçalves', regiao: 'Serra', vagas_total: 4, entrancia: 'Final' },
+  { id: 21, nome: 'Farroupilha', regiao: 'Serra', vagas_total: 3, entrancia: 'Intermediária' },
+  { id: 22, nome: 'Gramado', regiao: 'Serra', vagas_total: 2, entrancia: 'Intermediária' },
+  { id: 23, nome: 'Canela', regiao: 'Serra', vagas_total: 2, entrancia: 'Intermediária' },
+  { id: 24, nome: 'Vacaria', regiao: 'Serra', vagas_total: 3, entrancia: 'Intermediária' },
+  { id: 25, nome: 'Garibaldi', regiao: 'Serra', vagas_total: 2, entrancia: 'Inicial' },
+  { id: 26, nome: 'Flores da Cunha', regiao: 'Serra', vagas_total: 2, entrancia: 'Inicial' },
+  { id: 27, nome: 'Carlos Barbosa', regiao: 'Serra', vagas_total: 1, entrancia: 'Inicial' },
+  { id: 28, nome: 'Nova Prata', regiao: 'Serra', vagas_total: 2, entrancia: 'Intermediária' },
+  { id: 29, nome: 'Veranópolis', regiao: 'Serra', vagas_total: 2, entrancia: 'Inicial' },
+  { id: 30, nome: 'São Marcos', regiao: 'Serra', vagas_total: 1, entrancia: 'Inicial' },
+
+  // Região Norte / Noroeste
+  { id: 31, nome: 'Passo Fundo', regiao: 'Norte', vagas_total: 7, entrancia: 'Final' },
+  { id: 32, nome: 'Erechim', regiao: 'Norte', vagas_total: 4, entrancia: 'Final' },
+  { id: 33, nome: 'Frederico Westphalen', regiao: 'Norte', vagas_total: 3, entrancia: 'Intermediária' },
+  { id: 34, nome: 'Carazinho', regiao: 'Norte', vagas_total: 3, entrancia: 'Intermediária' },
+  { id: 35, nome: 'Palmeira das Missões', regiao: 'Norte', vagas_total: 2, entrancia: 'Intermediária' },
+  { id: 36, nome: 'Soledade', regiao: 'Norte', vagas_total: 2, entrancia: 'Intermediária' },
+  { id: 37, nome: 'Três Passos', regiao: 'Norte', vagas_total: 2, entrancia: 'Intermediária' },
+  { id: 38, nome: 'Lagoa Vermelha', regiao: 'Norte', vagas_total: 2, entrancia: 'Intermediária' },
+  { id: 39, nome: 'Marau', regiao: 'Norte', vagas_total: 2, entrancia: 'Inicial' },
+  { id: 40, nome: 'Sananduva', regiao: 'Norte', vagas_total: 1, entrancia: 'Inicial' },
+  { id: 41, nome: 'Sarandi', regiao: 'Norte', vagas_total: 1, entrancia: 'Inicial' },
+  { id: 42, nome: 'Tapejara', regiao: 'Norte', vagas_total: 1, entrancia: 'Inicial' },
+  { id: 43, nome: 'Getúlio Vargas', regiao: 'Norte', vagas_total: 1, entrancia: 'Inicial' },
+
+  // Região Centro-Oeste / Vales
+  { id: 44, nome: 'Santa Maria', regiao: 'Centro', vagas_total: 7, entrancia: 'Final' },
+  { id: 45, nome: 'Santa Cruz do Sul', regiao: 'Centro', vagas_total: 4, entrancia: 'Final' },
+  { id: 46, nome: 'Lajeado', regiao: 'Centro', vagas_total: 4, entrancia: 'Intermediária' },
+  { id: 47, nome: 'Cachoeira do Sul', regiao: 'Centro', vagas_total: 3, entrancia: 'Intermediária' },
+  { id: 48, nome: 'Cruz Alta', regiao: 'Centro', vagas_total: 3, entrancia: 'Intermediária' },
+  { id: 49, nome: 'Ijuí', regiao: 'Centro', vagas_total: 3, entrancia: 'Intermediária' },
+  { id: 50, nome: 'Santo Ângelo', regiao: 'Centro', vagas_total: 3, entrancia: 'Intermediária' },
+  { id: 51, nome: 'Santa Rosa', regiao: 'Centro', vagas_total: 3, entrancia: 'Intermediária' },
+  { id: 52, nome: 'Venâncio Aires', regiao: 'Centro', vagas_total: 2, entrancia: 'Intermediária' },
+  { id: 53, nome: 'Estrela', regiao: 'Centro', vagas_total: 2, entrancia: 'Intermediária' },
+  { id: 54, nome: 'Encantado', regiao: 'Centro', vagas_total: 1, entrancia: 'Inicial' },
+  { id: 55, nome: 'São Jerônimo', regiao: 'Centro', vagas_total: 1, entrancia: 'Intermediária' },
+  { id: 56, nome: 'Candelária', regiao: 'Centro', vagas_total: 1, entrancia: 'Inicial' },
+  { id: 57, nome: 'Taquari', regiao: 'Centro', vagas_total: 1, entrancia: 'Inicial' },
+
+  // Região Sul / Litoral
+  { id: 58, nome: 'Pelotas', regiao: 'Sul', vagas_total: 7, entrancia: 'Final' },
+  { id: 59, nome: 'Rio Grande', regiao: 'Sul', vagas_total: 5, entrancia: 'Final' },
+  { id: 60, nome: 'Bagé', regiao: 'Sul', vagas_total: 4, entrancia: 'Intermediária' },
+  { id: 61, nome: 'Camaquã', regiao: 'Sul', vagas_total: 3, entrancia: 'Intermediária' },
+  { id: 62, nome: 'Torres', regiao: 'Sul', vagas_total: 2, entrancia: 'Intermediária' },
+  { id: 63, nome: 'Capão da Canoa', regiao: 'Sul', vagas_total: 3, entrancia: 'Intermediária' },
+  { id: 64, nome: 'Tramandaí', regiao: 'Sul', vagas_total: 3, entrancia: 'Intermediária' },
+  { id: 65, nome: 'Osório', regiao: 'Sul', vagas_total: 2, entrancia: 'Intermediária' },
+  { id: 66, nome: 'São Lourenço do Sul', regiao: 'Sul', vagas_total: 2, entrancia: 'Inicial' },
+  { id: 67, nome: 'Canguçu', regiao: 'Sul', vagas_total: 1, entrancia: 'Intermediária' },
+  { id: 68, nome: 'São José do Norte', regiao: 'Sul', vagas_total: 1, entrancia: 'Inicial' },
+  { id: 69, nome: 'Santa Vitória do Palmar', regiao: 'Sul', vagas_total: 1, entrancia: 'Inicial' },
+
+  // Fronteira Oeste
+  { id: 70, nome: 'Uruguaiana', regiao: 'Fronteira', vagas_total: 4, entrancia: 'Final' },
+  { id: 71, nome: 'Santana do Livramento', regiao: 'Fronteira', vagas_total: 3, entrancia: 'Intermediária' },
+  { id: 72, nome: 'Alegrete', regiao: 'Fronteira', vagas_total: 3, entrancia: 'Intermediária' },
+  { id: 73, nome: 'São Borja', regiao: 'Fronteira', vagas_total: 2, entrancia: 'Intermediária' },
+  { id: 74, nome: 'Itaqui', regiao: 'Fronteira', vagas_total: 2, entrancia: 'Inicial' },
+  { id: 75, nome: 'Dom Pedrito', regiao: 'Fronteira', vagas_total: 2, entrancia: 'Inicial' },
+  { id: 76, nome: 'Rosário do Sul', regiao: 'Fronteira', vagas_total: 1, entrancia: 'Inicial' },
+  { id: 77, nome: 'São Gabriel', regiao: 'Fronteira', vagas_total: 2, entrancia: 'Intermediária' },
+  { id: 78, nome: 'Quaraí', regiao: 'Fronteira', vagas_total: 1, entrancia: 'Inicial' },
+];
+
+export const REGIOES_INFO = {
+  Metropolitana: {
+    nome: 'Região Metropolitana',
+    polos: 'Porto Alegre, Canoas, Novo Hamburgo, Gravataí, São Leopoldo',
+    cor: '#07192B',
+  },
+  Serra: {
+    nome: 'Região Nordeste / Serra Gaúcha',
+    polos: 'Caxias do Sul, Bento Gonçalves, Farroupilha, Gramado, Vacaria',
+    cor: '#1D8A8A',
+  },
+  Norte: {
+    nome: 'Região Norte / Noroeste',
+    polos: 'Passo Fundo, Erechim, Frederico Westphalen, Carazinho',
+    cor: '#135A7A',
+  },
+  Centro: {
+    nome: 'Região Centro-Oeste / Vales',
+    polos: 'Santa Maria, Cruz Alta, Santa Cruz do Sul, Lajeado, Cachoeira do Sul',
+    cor: '#2DD4AA',
+  },
+  Sul: {
+    nome: 'Região Sul / Litoral',
+    polos: 'Pelotas, Rio Grande, Bagé, Camaquã, Tramandaí, Capão da Canoa',
+    cor: '#3CE3B4',
+  },
+  Fronteira: {
+    nome: 'Fronteira Oeste',
+    polos: 'Uruguaiana, Santana do Livramento, Alegrete, São Borja, Itaqui',
+    cor: '#155263',
+  },
+};

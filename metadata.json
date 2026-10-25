@@ -1,0 +1,8 @@
+{
+  "name": "CERTAM | Portal do Concurseiro",
+  "description": "Portal oficial de acompanhamento de certames, escolha de lotação e classificação de concursos públicos.",
+  "permissions": [],
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
