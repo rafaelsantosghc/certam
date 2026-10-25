@@ -30,6 +30,11 @@
     .font-mono {
       font-family: 'JetBrains Mono', monospace;
     }
+    /* Escala tipográfica profissional e legível (sem textos microscópicos) */
+    .text-3xs { font-size: 0.72rem !important; line-height: 1rem !important; }
+    .text-2xs { font-size: 0.785rem !important; line-height: 1.15rem !important; }
+    .shadow-2xs { box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05); }
+
     /* Estilização suave da barra de rolagem */
     ::-webkit-scrollbar {
       width: 8px;
@@ -53,7 +58,7 @@
   <!-- CABEÇALHO INSTITUCIONAL CERTAM                                        -->
   <!-- ===================================================================== -->
   <header class="bg-[#0B132B] text-white shadow-xs border-b border-[#1C2D4A] sticky top-0 z-40">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 sm:py-4">
+    <div class="max-w-[1820px] 2xl:max-w-[1880px] w-full mx-auto px-4 sm:px-6 lg:px-8 xl:px-12 py-3.5 sm:py-4">
       <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3.5">
         
         <!-- Logo e Naming Oficial -->
@@ -146,8 +151,8 @@
       <div class="absolute -bottom-24 -right-24 w-96 h-96 bg-blue-600 rounded-full blur-3xl"></div>
     </div>
 
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-      <div class="max-w-3xl">
+    <div class="max-w-[1820px] 2xl:max-w-[1880px] w-full mx-auto px-4 sm:px-6 lg:px-8 xl:px-12 relative z-10">
+      <div class="max-w-4xl">
         <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-teal-500/15 border border-teal-500/30 text-teal-300 text-xs font-semibold mb-4">
           <span>🏛️</span>
           <span>Portal Oficial de Certames Judiciais e Administrativos</span>
@@ -155,14 +160,14 @@
         <h1 class="text-3xl sm:text-4xl lg:text-5xl font-bold font-serif tracking-tight text-white leading-tight">
           Portal de Concursos e Escolha de Lotação
         </h1>
-        <p class="mt-4 text-sm sm:text-base text-slate-300 leading-relaxed font-light">
+        <p class="mt-4 text-base sm:text-lg text-slate-300 leading-relaxed font-light">
           Acompanhe em tempo real a classificação geral oficial, as manifestações de preferência de comarcas e as simulações algorítmicas de alocação por colocação e cotas.
         </p>
       </div>
 
       <!-- Barra de Pesquisa e Filtros Rápidos -->
-      <div class="mt-8 bg-white/10 backdrop-blur-md p-3 sm:p-4 rounded-2xl border border-white/15 shadow-xl max-w-4xl space-y-3">
-        <div class="flex flex-col sm:flex-row gap-2.5">
+      <div class="mt-8 bg-white/10 backdrop-blur-md p-4 sm:p-5 rounded-2xl border border-white/15 shadow-xl max-w-5xl xl:max-w-6xl space-y-3.5">
+        <div class="flex flex-col sm:flex-row gap-3">
           <!-- Campo de Busca em Tempo Real -->
           <div class="relative flex-1">
             <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
@@ -175,7 +180,7 @@
               id="inputBuscaConcursos" 
               oninput="filtrarConcursos()" 
               placeholder="Buscar por nome do concurso, cargo ou órgão (ex: TJRS, Analista)..." 
-              class="w-full pl-10 pr-10 py-2.5 bg-slate-900/80 text-white placeholder-slate-400 border border-slate-700 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-teal-400 focus:border-transparent transition-all"
+              class="w-full pl-10 pr-10 py-3 bg-slate-900/80 text-white placeholder-slate-400 border border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-400 focus:border-transparent transition-all"
             >
             <button 
               type="button" 
@@ -194,7 +199,7 @@
               type="button" 
               id="filtroStatusTodos" 
               onclick="setFiltroStatus('todos')" 
-              class="px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-colors bg-teal-500 text-slate-950 shadow-xs"
+              class="px-3.5 py-2 rounded-lg text-xs font-semibold cursor-pointer transition-colors bg-teal-500 text-slate-950 shadow-xs"
             >
               Todos (<span id="contagemStatusTodos">0</span>)
             </button>
@@ -202,7 +207,7 @@
               type="button" 
               id="filtroStatusAtivos" 
               onclick="setFiltroStatus('ativos')" 
-              class="px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-colors text-slate-300 hover:text-white"
+              class="px-3.5 py-2 rounded-lg text-xs font-semibold cursor-pointer transition-colors text-slate-300 hover:text-white"
             >
               Ativos (<span id="contagemStatusAtivos">0</span>)
             </button>
@@ -210,7 +215,7 @@
               type="button" 
               id="filtroStatusEncerrados" 
               onclick="setFiltroStatus('encerrados')" 
-              class="px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-colors text-slate-300 hover:text-white"
+              class="px-3.5 py-2 rounded-lg text-xs font-semibold cursor-pointer transition-colors text-slate-300 hover:text-white"
             >
               Encerrados (<span id="contagemStatusEncerrados">0</span>)
             </button>
@@ -218,9 +223,9 @@
         </div>
 
         <!-- Indicador de Resultados da Busca -->
-        <div class="flex items-center justify-between text-2xs text-slate-300 px-1 pt-1 border-t border-white/10">
+        <div class="flex items-center justify-between text-xs text-slate-300 px-1 pt-1 border-t border-white/10">
           <span id="textoStatusResultados">Carregando certames do Supabase...</span>
-          <span class="text-teal-300 font-mono">TJRS • Analista Judiciário</span>
+          <span class="text-teal-300 font-mono font-medium">TJRS • Analista Judiciário</span>
         </div>
       </div>
 
@@ -230,7 +235,7 @@
   <!-- ===================================================================== -->
   <!-- CONTEÚDO PRINCIPAL: GRID DE CARDS DE CONCURSOS                        -->
   <!-- ===================================================================== -->
-  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
+  <main class="flex-1 max-w-[1820px] 2xl:max-w-[1880px] w-full mx-auto px-4 sm:px-6 lg:px-8 xl:px-12 py-8 sm:py-12">
     
     <!-- Cabeçalho da Seção de Certames -->
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6 sm:mb-8 pb-4 border-b border-slate-200">
@@ -248,7 +253,7 @@
         <button 
           type="button" 
           onclick="carregarDadosPortal(true)" 
-          class="flex items-center gap-1.5 text-xs font-medium text-slate-600 bg-white hover:bg-slate-50 border border-slate-300 px-3 py-1.5 rounded-xl shadow-2xs transition-colors cursor-pointer"
+          class="flex items-center gap-1.5 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 px-3.5 py-2 rounded-xl shadow-2xs transition-colors cursor-pointer"
           title="Recarregar dados atualizados do Supabase"
         >
           <span>🔄</span>
@@ -258,7 +263,7 @@
     </div>
 
     <!-- SKELETON / LOADING STATE (Exibido enquanto carrega) -->
-    <div id="portalLoadingSkeleton" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+    <div id="portalLoadingSkeleton" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-4 gap-6">
       <div class="bg-white rounded-2xl border border-slate-200 p-6 space-y-4 shadow-sm animate-pulse">
         <div class="flex justify-between items-center">
           <div class="h-6 w-20 bg-slate-200 rounded-md"></div>
@@ -322,7 +327,7 @@
     </div>
 
     <!-- GRID DINÂMICO DE CONCURSOS -->
-    <div id="portalGridConcursos" style="display: none;" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+    <div id="portalGridConcursos" style="display: none;" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-4 gap-6">
       <!-- Renderizado via JavaScript a partir do Supabase -->
     </div>
 
@@ -340,7 +345,7 @@
   <!-- RODAPÉ INSTITUCIONAL CERTAM                                           -->
   <!-- ===================================================================== -->
   <footer class="bg-[#0B132B] text-slate-400 border-t border-[#1C2D4A] mt-auto py-8 px-4 sm:px-6 lg:px-8 text-xs leading-relaxed">
-    <div class="max-w-7xl mx-auto space-y-5">
+    <div class="max-w-[1820px] 2xl:max-w-[1880px] w-full mx-auto space-y-5">
       <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-[#1C2D4A] pb-5">
         <div class="flex items-center gap-3">
           <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-[#0F1E3D] to-[#0A1128] border border-teal-500/30 flex items-center justify-center p-1.5 shrink-0">
