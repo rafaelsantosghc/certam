@@ -296,6 +296,7 @@
             <select id="filtroClassifIntencao" onchange="filtrarClassificacaoGeral()" class="w-full py-2 px-3 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
               <option value="todas">Intenção: Todas</option>
               <option value="Sim">Assume (Sim)</option>
+              <option value="Talvez">Em Análise (Talvez)</option>
               <option value="final_fila">Fim de Fila</option>
               <option value="Não">Desiste (Não)</option>
               <option value="Indefinido">Não Informou</option>
@@ -547,6 +548,7 @@
                 <label class="block text-2xs font-bold text-slate-700 tracking-wider mb-1">Intenção Quanto à Vaga <span class="text-red-500">*</span></label>
                 <select id="perfilIntencao" class="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-teal-500">
                   <option value="assumir">Pretendo assumir a vaga (Sim)</option>
+                  <option value="talvez">Em análise quanto à posse (Talvez)</option>
                   <option value="final_fila">Pedir final de fila</option>
                   <option value="desistir">Desistir da vaga / Renúncia</option>
                 </select>
@@ -755,6 +757,7 @@
             <div><strong>Lote de Chamada:</strong> <span id="modalLoteChamadaTexto">-</span></div>
             <div><strong>Lotação Assumida:</strong> <span id="modalLotacaoAssumidaTexto">-</span></div>
             <div><strong>Data de Nomeação:</strong> <span id="modalDataNomeacaoTexto">-</span></div>
+            <div><strong>Preferência Declarada:</strong> <span id="modalPreferenciaTexto">-</span></div>
             <div class="sm:col-span-2"><strong>Outros Concursos:</strong> <span id="modalOutrosConcursosTexto">-</span></div>
           </div>
         </div>
@@ -1123,6 +1126,7 @@
       if (!val) return '';
       var v = String(val).toLowerCase().trim();
       if (v === 'sim' || v === 'assumir' || v === 'interesse' || v.includes('pretende assumir') || v === 'titular') return 'assumir';
+      if (v === 'talvez' || v.includes('analise') || v.includes('análise') || v.includes('duvida') || v.includes('dúvida')) return 'talvez';
       if (v === 'não' || v === 'nao' || v === 'desistir' || v === 'desiste' || v.includes('desist') || v.includes('renún') || v.includes('renun')) return 'desistir';
       if (v.includes('fim') || v.includes('final') || v.includes('fila') || v.includes('lista')) return 'final_fila';
       return '';
@@ -1132,11 +1136,11 @@
       resp = resp || {};
 
       // 1. Resposta direta do candidato em pesquisa/lote ativo
-      var intResp = normalizarValorIntencao(resp.intencao);
+      var intResp = normalizarValorIntencao(resp.intencao || resp.assumira);
       if (intResp) return intResp;
 
-      // 2. Intenção explícita gravada no registro do candidato
-      var intCand = normalizarValorIntencao(c.intencao);
+      // 2. Intenção explícita gravada no registro do candidato ou planilha
+      var intCand = normalizarValorIntencao(c.intencao || c.assumira);
       if (intCand) return intCand;
 
       // 3. Status oficial registrado na planilha/concurso
@@ -1147,14 +1151,11 @@
       if (st.includes('desist') || st.includes('renún') || st.includes('renun')) {
         return 'desistir';
       }
-      if (st.includes('convocado titular') || st.includes('nomeado') || st.includes('posse') || st.includes('exercício')) {
-        return 'assumir';
-      }
-      if (st.includes('suplente') && (c.lotacao_assumida || resp.lotacao_assumida)) {
+      if (st.includes('nomeado') || st.includes('posse') || st.includes('exercício') || st.includes('exercicio')) {
         return 'assumir';
       }
 
-      // 4. Candidatos com status 'Aguardando' ou sem manifestação
+      // 4. Candidatos com status 'Aguardando' ou sem manifestação explícita
       return 'indefinido';
     }
 
@@ -1206,7 +1207,34 @@
           }
         }
 
-        // 3. Carrega respostas de formulários e preferências para mesclar com os candidatos
+        // 3. Carrega banco_central_candidatos da tabela configuracoes para complementar dados enriquecidos da planilha
+        var mapaCentral = {};
+        if (supabaseClient) {
+          try {
+            var resCentral = await supabaseClient
+              .from('configuracoes')
+              .select('valor')
+              .eq('chave', 'banco_central_candidatos')
+              .maybeSingle();
+            if (resCentral && resCentral.data && resCentral.data.valor) {
+              var arrCentral = typeof resCentral.data.valor === 'string'
+                ? JSON.parse(resCentral.data.valor)
+                : resCentral.data.valor;
+              if (Array.isArray(arrCentral)) {
+                arrCentral.forEach(function(item) {
+                  if (item.cpf) mapaCentral[item.cpf.replace(/\D/g, '')] = item;
+                  if (item.inscricao) mapaCentral[String(item.inscricao).trim()] = item;
+                  if (item.nome) mapaCentral[item.nome.trim().toLowerCase()] = item;
+                  if (item.id) mapaCentral[item.id] = item;
+                });
+              }
+            }
+          } catch(eCent) {
+            console.warn('Aviso ao consultar banco_central_candidatos:', eCent);
+          }
+        }
+
+        // 4. Carrega respostas de formulários e preferências para mesclar com os candidatos
         var mapaRespostas = {};
         if (supabaseClient) {
           try {
@@ -1229,55 +1257,64 @@
           }
         }
 
-        // 4. Consolida lista final de candidatos com notas oficiais e dados completos
+        // 5. Consolida lista final de candidatos com notas oficiais e dados completos
         var dados = todosCandidatos.map(function(c, i) {
           var emailCand = (c.email || '').trim().toLowerCase();
           var cpfCand = (c.cpf || '').replace(/\D/g, '');
           var nomeCand = (c.nome || '').trim().toLowerCase();
+          var inscCand = String(c.inscricao || '').trim();
+
+          var cent = (cpfCand && mapaCentral[cpfCand]) ||
+                     (inscCand && mapaCentral[inscCand]) ||
+                     (nomeCand && mapaCentral[nomeCand]) ||
+                     (c.id && mapaCentral[c.id]) || {};
+
+          var candMesclado = Object.assign({}, cent, c);
 
           var resp = (emailCand && mapaRespostas[emailCand]) ||
                      (cpfCand && mapaRespostas[cpfCand]) ||
                      (nomeCand && mapaRespostas[nomeCand]) ||
                      mapaRespostas[c.id] || {};
 
-          var escolhasResp = Array.isArray(resp.escolhas) ? resp.escolhas : (Array.isArray(c.escolhas) ? c.escolhas : []);
-          var primComarca = (escolhasResp && escolhasResp[0]) || c.lotacao_assumida || c.comarca_preferencia || '';
+          var escolhasResp = Array.isArray(resp.escolhas) ? resp.escolhas : (Array.isArray(candMesclado.escolhas) ? candMesclado.escolhas : []);
+          var primComarca = (escolhasResp && escolhasResp[0]) || candMesclado.lotacao_assumida || candMesclado.comarca_preferencia || candMesclado.comarca_atual || '';
 
           return {
-            candidato_id: c.id || ('tjrs_analista_2024-' + (c.classificacao_ampla || (i + 1))),
-            id: c.id,
-            concurso_id: c.concurso_id || ESTADO.concursoId,
-            nome: c.nome || 'Candidato',
-            cpf: c.cpf || '',
-            email: c.email || '',
-            whatsapp: c.whatsapp || '',
-            inscricao: c.inscricao || '',
-            data_nascimento: c.data_nascimento || '',
-            cota: c.cota || c.tipo || 'Ampla',
-            classificacao_ampla: c.classificacao_ampla || (i + 1),
-            classificacao_cota: c.classificacao_cota,
-            ordem_nomeacao: c.ordem_nomeacao,
-            vaga_chamada: c.vaga_chamada || (c.ordem_nomeacao ? (c.ordem_nomeacao + 'º ' + (c.cota || 'Ampla')) : '-'),
-            nota_port: c.nota_port,
-            nota_leg: c.nota_leg,
-            nota_info: c.nota_info,
-            nota_comum: c.nota_comum,
-            nota_const: c.nota_const,
-            nota_adm: c.nota_adm,
-            nota_civil: c.nota_civil,
-            nota_penal: c.nota_penal,
-            nota_espec: c.nota_espec,
-            nota_final: c.nota_final,
-            status_nomeacao: resp.status_nomeacao || c.status_nomeacao || 'Aguardando',
-            lote_chamada: resp.lote_chamada || c.lote_chamada || null,
-            lotacao_assumida: resp.lotacao_assumida || c.lotacao_assumida || null,
-            data_nomeacao: resp.data_nomeacao || c.data_nomeacao || null,
-            data_convocacao: c.data_convocacao || null,
-            intencao: determinarIntencaoCandidato(c, resp),
+            candidato_id: candMesclado.id || ('tjrs_analista_2024-' + (candMesclado.classificacao_ampla || (i + 1))),
+            id: candMesclado.id,
+            concurso_id: candMesclado.concurso_id || ESTADO.concursoId,
+            nome: candMesclado.nome || 'Candidato',
+            cpf: candMesclado.cpf || '',
+            email: candMesclado.email || '',
+            whatsapp: candMesclado.whatsapp || '',
+            inscricao: candMesclado.inscricao || '',
+            data_nascimento: candMesclado.data_nascimento || '',
+            cota: candMesclado.cota || candMesclado.tipo || 'Ampla',
+            classificacao_ampla: candMesclado.classificacao_ampla || (i + 1),
+            classificacao_cota: candMesclado.classificacao_cota,
+            ordem_nomeacao: candMesclado.ordem_nomeacao,
+            vaga_chamada: candMesclado.vaga_chamada || (candMesclado.ordem_nomeacao ? (candMesclado.ordem_nomeacao + 'º ' + (candMesclado.cota || 'Ampla')) : '-'),
+            nota_port: candMesclado.nota_port,
+            nota_leg: candMesclado.nota_leg,
+            nota_info: candMesclado.nota_info,
+            nota_comum: candMesclado.nota_comum,
+            nota_const: candMesclado.nota_const,
+            nota_adm: candMesclado.nota_adm,
+            nota_civil: candMesclado.nota_civil,
+            nota_penal: candMesclado.nota_penal,
+            nota_espec: candMesclado.nota_espec,
+            nota_final: candMesclado.nota_final,
+            status_nomeacao: resp.status_nomeacao || candMesclado.status_nomeacao || 'Aguardando',
+            lote_chamada: resp.lote_chamada || candMesclado.lote_chamada || null,
+            lotacao_assumida: resp.lotacao_assumida || candMesclado.lotacao_assumida || null,
+            data_nomeacao: resp.data_nomeacao || candMesclado.data_nomeacao || null,
+            data_convocacao: candMesclado.data_convocacao || null,
+            intencao: determinarIntencaoCandidato(candMesclado, resp),
             escolhas: escolhasResp,
             comarca_preferencia: primComarca,
-            ja_e_servidor: resp.possui_fg_cc === 'Sim' || c.ja_e_servidor === true,
-            outros_concursos: resp.outros_concursos || c.outros_concursos || ''
+            regiao_preferencia: candMesclado.regiao_preferencia || '',
+            ja_e_servidor: resp.possui_fg_cc === 'Sim' || candMesclado.ja_e_servidor === true || candMesclado.possui_fg_cc === 'Sim',
+            outros_concursos: resp.outros_concursos || candMesclado.outros_concursos || ''
           };
         });
 
@@ -1362,7 +1399,10 @@
           status_nomeacao: obj.status_nomeacao || 'Aguardando',
           lotacao_assumida: obj.lotacao_assumida,
           data_nomeacao: obj.data_nomeacao,
-          intencao: obj.intencao || ''
+          intencao: obj.intencao || obj['Assumirá?'] || '',
+          comarca_preferencia: obj.comarca_preferencia || obj['Comarca de preferência'] || '',
+          regiao_preferencia: obj.regiao_preferencia || obj['Região de preferência'] || '',
+          outros_concursos: obj.outros_concursos || obj['Outros concursos em que está aprovado'] || ''
         });
       }
       return resultado;
@@ -1427,6 +1467,7 @@
         if (intencao !== 'todas') {
           var cInt = (c.intencao || 'indefinido').toLowerCase();
           if (intencao === 'Sim' && cInt !== 'sim' && cInt !== 'assumir') return false;
+          if (intencao === 'Talvez' && cInt !== 'talvez') return false;
           if (intencao === 'Não' && cInt !== 'não' && cInt !== 'nao' && cInt !== 'desistir' && cInt !== 'desiste') return false;
           if (intencao === 'final_fila' && cInt !== 'final_fila' && cInt !== 'fim_fila') return false;
           if (intencao === 'Indefinido' && cInt !== '' && cInt !== 'indefinido') return false;
@@ -1540,6 +1581,8 @@
         var badgeIntencao = '<span class="px-2 py-0.5 rounded text-3xs font-semibold bg-slate-100 text-slate-500">Não informou</span>';
         if (intRaw === 'sim' || intRaw === 'assumir') {
           badgeIntencao = '<span class="px-2 py-0.5 rounded text-3xs font-bold bg-emerald-100 text-emerald-800">Assume (Sim)</span>';
+        } else if (intRaw === 'talvez') {
+          badgeIntencao = '<span class="px-2 py-0.5 rounded text-3xs font-bold bg-sky-100 text-sky-800">Em Análise (Talvez)</span>';
         } else if (intRaw === 'não' || intRaw === 'nao' || intRaw === 'desistir' || intRaw === 'desiste') {
           badgeIntencao = '<span class="px-2 py-0.5 rounded text-3xs font-bold bg-rose-100 text-rose-800">Desiste</span>';
         } else if (intRaw === 'final_fila' || intRaw === 'fim_fila') {
@@ -1658,6 +1701,8 @@
       var textoIntencaoModal = 'Não informou';
       if (intRawModal === 'sim' || intRawModal === 'assumir') {
         textoIntencaoModal = 'Pretende assumir a vaga (Sim)';
+      } else if (intRawModal === 'talvez') {
+        textoIntencaoModal = 'Em análise quanto à posse (Talvez)';
       } else if (intRawModal === 'não' || intRawModal === 'nao' || intRawModal === 'desistir' || intRawModal === 'desiste') {
         textoIntencaoModal = 'Desiste da vaga / Renúncia';
       } else if (intRawModal === 'final_fila' || intRawModal === 'fim_fila') {
@@ -1668,6 +1713,13 @@
       document.getElementById('modalLoteChamadaTexto').textContent = cand.lote_chamada || 'Aguardando lote';
       document.getElementById('modalLotacaoAssumidaTexto').textContent = cand.lotacao_assumida || 'Não alocado';
       document.getElementById('modalDataNomeacaoTexto').textContent = cand.data_nomeacao || 'Não nomeado';
+
+      var prefTexto = [];
+      if (cand.comarca_preferencia) prefTexto.push('Comarca: ' + cand.comarca_preferencia);
+      if (cand.regiao_preferencia) prefTexto.push('Região: ' + cand.regiao_preferencia);
+      var elPref = document.getElementById('modalPreferenciaTexto');
+      if (elPref) elPref.textContent = prefTexto.length > 0 ? prefTexto.join(' • ') : 'Não informada';
+
       document.getElementById('modalOutrosConcursosTexto').textContent = cand.outros_concursos || 'Nenhum informado';
 
       // Lista completa de comarcas
