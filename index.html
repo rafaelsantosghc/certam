@@ -21,7 +21,77 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
   <!-- Armazenamento Central de Concursos e Cargos Cadastrados -->
-  <script src="concursos-store.js"></script>
+  <script src="/concursos-store.js"></script>
+  <script>
+    if (typeof window.CertamStore === 'undefined') {
+      (function() {
+        var KEY = 'certam_concursos_cargos';
+        var PADRAO = [{
+          id: 'tjrs_2024',
+          nome: 'Concurso TJRS - Tribunal de Justiça do Rio Grande do Sul',
+          orgao: 'TJRS',
+          ano: '2024',
+          edital: 'Edital 01/2024',
+          status: 'ativo',
+          descricao: 'Tribunal de Justiça do Estado do Rio Grande do Sul - Servidores da Justiça Estadual',
+          cargos: [
+            { id: 'analista_judiciario', nome: 'Analista Judiciário - Área Judiciária', nivel: 'Superior', vagas_imediatas: 38, tem_cr: true, ativo: true },
+            { id: 'tecnico_judiciario', nome: 'Técnico Judiciário - Área Administrativa', nivel: 'Médio', vagas_imediatas: 0, tem_cr: true, ativo: true }
+          ]
+        }];
+        window.CertamStore = {
+          _cache: null,
+          getConcursos: function() {
+            if (this._cache && Array.isArray(this._cache) && this._cache.length > 0) return this._cache;
+            try {
+              var s = localStorage.getItem(KEY);
+              if (s) {
+                var p = JSON.parse(s);
+                if (Array.isArray(p) && p.length > 0) {
+                  this._cache = p;
+                  return p;
+                }
+              }
+            } catch(e) {}
+            this._cache = JSON.parse(JSON.stringify(PADRAO));
+            try { localStorage.setItem(KEY, JSON.stringify(this._cache)); } catch(e){}
+            return this._cache;
+          },
+          getConcurso: function(id) {
+            var l = this.getConcursos();
+            return l.find(function(c) { return c.id === id || (id==='tjrs' && c.id==='tjrs_2024'); }) || l[0] || null;
+          },
+          getCargo: function(cid, gid) {
+            var c = this.getConcurso(cid);
+            if (!c || !c.cargos) return null;
+            return c.cargos.find(function(g) { return g.id === gid; }) || c.cargos[0] || null;
+          },
+          salvarConcurso: function(conc) {
+            if (!conc || !conc.id) return false;
+            var l = this.getConcursos();
+            var i = l.findIndex(function(c) { return c.id === conc.id; });
+            if (!Array.isArray(conc.cargos) || conc.cargos.length === 0) {
+              conc.cargos = [{ id: 'geral', nome: 'Geral / Lista Única', nivel: 'Superior', vagas_imediatas: 0, tem_cr: true, ativo: true }];
+            }
+            if (i >= 0) l[i] = Object.assign({}, l[i], conc);
+            else l.push(conc);
+            this._cache = l;
+            try { localStorage.setItem(KEY, JSON.stringify(l)); } catch(e){}
+            try { window.dispatchEvent(new CustomEvent('certam_concursos_updated', { detail: l })); } catch(e){}
+            return true;
+          },
+          excluirConcurso: function(cid) {
+            var l = this.getConcursos().filter(function(c) { return c.id !== cid; });
+            this._cache = l;
+            try { localStorage.setItem(KEY, JSON.stringify(l)); } catch(e){}
+            try { window.dispatchEvent(new CustomEvent('certam_concursos_updated', { detail: l })); } catch(e){}
+            return true;
+          },
+          carregarDeSupabase: async function() { return this.getConcursos(); }
+        };
+      })();
+    }
+  </script>
 
   <style>
     body {
@@ -146,6 +216,17 @@
         </span>
         <span class="text-amber-300 font-semibold">⚙️ Painel Admin (Concursos)</span>
       </a>
+
+      <!-- MENU DINÂMICO: CONCURSOS CADASTRADOS -->
+      <div class="pt-4 border-t border-[#0F2942] px-4 space-y-2">
+        <div class="flex items-center justify-between text-[10px] uppercase tracking-wider font-mono font-bold text-teal-400">
+          <span>Concursos Ativos</span>
+          <span id="badgeMenuPortalConcursos" class="px-1.5 py-0.5 rounded bg-teal-500/20 text-[#2DD4AA] text-3xs font-mono font-bold">0</span>
+        </div>
+        <div id="sidebarListaConcursosPortal" class="space-y-1">
+          <span class="text-3xs text-slate-400 block py-1">Carregando...</span>
+        </div>
+      </div>
 
     </nav>
 
@@ -699,11 +780,43 @@
       setFiltroStatusPortal('todos');
     }
 
+    function renderizarMenuConcursosPortal(lista) {
+      var menu = document.getElementById('sidebarListaConcursosPortal');
+      var badge = document.getElementById('badgeMenuPortalConcursos');
+      if (!menu) return;
+      var concursos = Array.isArray(lista) ? lista : (concursosCarregados || []);
+      if (badge) badge.textContent = concursos.length;
+      if (concursos.length === 0) {
+        menu.innerHTML = '<span class="text-3xs text-slate-400 block py-1">Nenhum concurso ativo</span>';
+        return;
+      }
+      var html = '';
+      concursos.forEach(function(c) {
+        var cargosQtd = (c.cargos && Array.isArray(c.cargos)) ? c.cargos.length : 0;
+        html += `
+          <a 
+            href="concurso.html?id=${encodeURIComponent(c.id)}" 
+            class="group flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium text-slate-300 hover:text-white hover:bg-[#0C2640] border border-transparent hover:border-teal-500/20 transition-all"
+            title="${escapeHtml(c.nome)}"
+          >
+            <div class="flex items-center gap-2 min-w-0">
+              <span class="w-1.5 h-1.5 rounded-full bg-[#2DD4AA] shrink-0"></span>
+              <span class="truncate font-semibold text-xs">${escapeHtml(c.orgao || c.id.toUpperCase())}</span>
+              <span class="text-3xs text-teal-300/70 truncate hidden sm:inline font-mono">(${cargosQtd})</span>
+            </div>
+            <span class="text-3xs text-slate-400 group-hover:text-teal-300 transition-colors shrink-0">↗</span>
+          </a>
+        `;
+      });
+      menu.innerHTML = html;
+    }
+
     async function carregarConcursosDoStore() {
       if (typeof window.CertamStore !== 'undefined') {
         concursosCarregados = window.CertamStore.getConcursos();
         atualizarMetricasPortal();
         renderizarGridConcursos(concursosCarregados);
+        renderizarMenuConcursosPortal(concursosCarregados);
 
         try {
           var remotos = await window.CertamStore.carregarDeSupabase();
@@ -711,12 +824,14 @@
             concursosCarregados = remotos;
             atualizarMetricasPortal();
             renderizarGridConcursos(concursosCarregados);
+            renderizarMenuConcursosPortal(concursosCarregados);
           }
         } catch(e) {}
       } else {
         concursosCarregados = [];
         atualizarMetricasPortal();
         renderizarGridConcursos(concursosCarregados);
+        renderizarMenuConcursosPortal(concursosCarregados);
       }
     }
 
