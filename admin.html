@@ -21,7 +21,93 @@
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Source+Serif+4:ital,wght@0,600;0,700;1,600&display=swap" rel="stylesheet">
 
   <!-- Gerenciador Central de Concursos e Cargos -->
-  <script src="concursos-store.js"></script>
+  <script src="/concursos-store.js"></script>
+  <script>
+    // Garantia de execução e persistência caso o script externo seja bloqueado ou atrase
+    if (typeof window.CertamStore === 'undefined') {
+      (function() {
+        var KEY = 'certam_concursos_cargos';
+        var PADRAO = [{
+          id: 'tjrs_2024',
+          nome: 'Concurso TJRS - Tribunal de Justiça do Rio Grande do Sul',
+          orgao: 'TJRS',
+          ano: '2024',
+          edital: 'Edital 01/2024',
+          status: 'ativo',
+          descricao: 'Tribunal de Justiça do Estado do Rio Grande do Sul - Servidores da Justiça Estadual',
+          cargos: [
+            { id: 'analista_judiciario', nome: 'Analista Judiciário - Área Judiciária', nivel: 'Superior', vagas_imediatas: 38, tem_cr: true, ativo: true },
+            { id: 'tecnico_judiciario', nome: 'Técnico Judiciário - Área Administrativa', nivel: 'Médio', vagas_imediatas: 0, tem_cr: true, ativo: true }
+          ]
+        }];
+        window.CertamStore = {
+          _cache: null,
+          getConcursos: function() {
+            if (this._cache && Array.isArray(this._cache) && this._cache.length > 0) return this._cache;
+            try {
+              var s = localStorage.getItem(KEY);
+              if (s) {
+                var p = JSON.parse(s);
+                if (Array.isArray(p) && p.length > 0) {
+                  this._cache = p;
+                  return p;
+                }
+              }
+            } catch(e) {}
+            this._cache = JSON.parse(JSON.stringify(PADRAO));
+            try { localStorage.setItem(KEY, JSON.stringify(this._cache)); } catch(e){}
+            return this._cache;
+          },
+          getConcurso: function(id) {
+            var l = this.getConcursos();
+            return l.find(function(c) { return c.id === id || (id==='tjrs' && c.id==='tjrs_2024'); }) || l[0] || null;
+          },
+          getCargo: function(cid, gid) {
+            var c = this.getConcurso(cid);
+            if (!c || !c.cargos) return null;
+            return c.cargos.find(function(g) { return g.id === gid; }) || c.cargos[0] || null;
+          },
+          salvarConcurso: function(conc) {
+            if (!conc || !conc.id) return false;
+            var l = this.getConcursos();
+            var i = l.findIndex(function(c) { return c.id === conc.id; });
+            if (!Array.isArray(conc.cargos) || conc.cargos.length === 0) {
+              conc.cargos = [{ id: 'geral', nome: 'Geral / Lista Única', nivel: 'Superior', vagas_imediatas: 0, tem_cr: true, ativo: true }];
+            }
+            if (i >= 0) l[i] = Object.assign({}, l[i], conc);
+            else l.push(conc);
+            this._cache = l;
+            try { localStorage.setItem(KEY, JSON.stringify(l)); } catch(e){}
+            try { window.dispatchEvent(new CustomEvent('certam_concursos_updated', { detail: l })); } catch(e){}
+            return true;
+          },
+          salvarCargo: function(cid, cg) {
+            var c = this.getConcurso(cid);
+            if (!c) return false;
+            if (!c.cargos) c.cargos = [];
+            var i = c.cargos.findIndex(function(g) { return g.id === cg.id; });
+            if (i >= 0) c.cargos[i] = Object.assign({}, c.cargos[i], cg);
+            else c.cargos.push(cg);
+            return this.salvarConcurso(c);
+          },
+          excluirConcurso: function(cid) {
+            var l = this.getConcursos().filter(function(c) { return c.id !== cid; });
+            this._cache = l;
+            try { localStorage.setItem(KEY, JSON.stringify(l)); } catch(e){}
+            try { window.dispatchEvent(new CustomEvent('certam_concursos_updated', { detail: l })); } catch(e){}
+            return true;
+          },
+          excluirCargo: function(cid, gid) {
+            var c = this.getConcurso(cid);
+            if (!c || !c.cargos) return false;
+            c.cargos = c.cargos.filter(function(g) { return g.id !== gid; });
+            return this.salvarConcurso(c);
+          },
+          carregarDeSupabase: async function() { return this.getConcursos(); }
+        };
+      })();
+    }
+  </script>
 
   <style>
     body {
@@ -157,6 +243,17 @@
         </span>
         <span>Simulador de Lotes TJRS</span>
       </a>
+
+      <!-- MENU DINÂMICO: CONCURSOS CADASTRADOS -->
+      <div class="pt-4 border-t border-[#0F2942] px-4 space-y-2">
+        <div class="flex items-center justify-between text-[10px] uppercase tracking-wider font-mono font-bold text-teal-400">
+          <span>Seus Concursos</span>
+          <span id="badgeMenuContadorConcursos" class="px-1.5 py-0.5 rounded bg-teal-500/20 text-[#2DD4AA] text-3xs font-mono font-bold">0</span>
+        </div>
+        <div id="sidebarListaConcursosAdmin" class="space-y-1">
+          <span class="text-3xs text-slate-400 block py-1">Carregando concursos...</span>
+        </div>
+      </div>
 
     </nav>
 
@@ -397,18 +494,18 @@
       <form id="formNovoConcurso" onsubmit="salvarNovoConcursoForm(event)" class="space-y-3.5">
         <div>
           <label class="block text-xs font-bold text-slate-700 mb-1">Identificador Único (Slug / ID):</label>
-          <input type="text" id="inpConcursoId" required placeholder="ex: tjrs, tre_rs, trf4, pcrj" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#2DD4AA]">
-          <span class="text-3xs text-slate-400 mt-0.5 block">Identificador permanente para as URLs do portal (apenas letras minúsculas, números e sublinhado).</span>
+          <input type="text" id="inpConcursoId" oninput="this.dataset.editadoManualmente='1'" required placeholder="ex: tjrs, tre_rs, trf4, pcrj" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#2DD4AA]">
+          <span class="text-3xs text-slate-400 mt-0.5 block">Gerado automaticamente pelo nome/órgão ou personalizado (apenas letras, números e sublinhado).</span>
         </div>
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label class="block text-xs font-bold text-slate-700 mb-1">Nome Completo do Concurso:</label>
-            <input type="text" id="inpConcursoNome" required placeholder="ex: Tribunal Regional Eleitoral do RS" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#2DD4AA]">
+            <input type="text" id="inpConcursoNome" oninput="autoSugerirIdConcurso()" required placeholder="ex: Tribunal Regional Eleitoral do RS" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#2DD4AA]">
           </div>
           <div>
             <label class="block text-xs font-bold text-slate-700 mb-1">Órgão / Sigla:</label>
-            <input type="text" id="inpConcursoOrgao" required placeholder="ex: TRE-RS" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#2DD4AA]">
+            <input type="text" id="inpConcursoOrgao" oninput="autoSugerirIdConcurso()" required placeholder="ex: TRE-RS" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#2DD4AA]">
           </div>
         </div>
 
@@ -579,7 +676,52 @@
       }
     }
 
+    function renderizarMenuConcursosAdmin() {
+      var menu = document.getElementById('sidebarListaConcursosAdmin');
+      var badge = document.getElementById('badgeMenuContadorConcursos');
+      if (!menu) return;
+      var lista = (typeof window.CertamStore !== 'undefined') ? window.CertamStore.getConcursos() : [];
+      if (badge) badge.textContent = lista.length;
+      if (lista.length === 0) {
+        menu.innerHTML = '<span class="text-3xs text-slate-400 block py-1">Nenhum concurso cadastrado</span>';
+        return;
+      }
+      var html = '';
+      lista.forEach(function(c) {
+        var cargosQtd = (c.cargos && Array.isArray(c.cargos)) ? c.cargos.length : 0;
+        html += `
+          <a 
+            href="concurso.html?id=${encodeURIComponent(c.id)}" 
+            target="_blank" 
+            class="group flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium text-slate-300 hover:text-white hover:bg-[#0C2640] border border-transparent hover:border-teal-500/20 transition-all"
+            title="${escapeHtml(c.nome)}"
+          >
+            <div class="flex items-center gap-2 min-w-0">
+              <span class="w-1.5 h-1.5 rounded-full bg-[#2DD4AA] shrink-0"></span>
+              <span class="truncate font-semibold text-xs">${escapeHtml(c.orgao || c.id.toUpperCase())}</span>
+              <span class="text-3xs text-teal-300/70 truncate hidden sm:inline font-mono">(${cargosQtd} cargo${cargosQtd !== 1 ? 's' : ''})</span>
+            </div>
+            <span class="text-3xs text-slate-400 group-hover:text-teal-300 transition-colors shrink-0">↗</span>
+          </a>
+        `;
+      });
+      menu.innerHTML = html;
+    }
+
+    function autoSugerirIdConcurso() {
+      var inpId = document.getElementById('inpConcursoId');
+      var orgao = (document.getElementById('inpConcursoOrgao') ? document.getElementById('inpConcursoOrgao').value : '').trim();
+      var nome = (document.getElementById('inpConcursoNome') ? document.getElementById('inpConcursoNome').value : '').trim();
+      if (!inpId) return;
+      if (!inpId.dataset.editadoManualmente || !inpId.value) {
+        var base = orgao || nome;
+        var slug = base.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9_]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
+        if (slug) inpId.value = slug;
+      }
+    }
+
     function renderizarAdminConcursos() {
+      renderizarMenuConcursosAdmin();
       var container = document.getElementById('listaAdminConcursosContainer');
       var contador = document.getElementById('contadorConcursosAdmin');
       if (!container) return;
@@ -774,20 +916,29 @@
 
     async function salvarNovoConcursoForm(e) {
       if (e) e.preventDefault();
-      var id = (document.getElementById('inpConcursoId').value || '').toLowerCase().trim().replace(/[^a-z0-9_]/g, '_');
+      var idInp = document.getElementById('inpConcursoId');
       var nome = (document.getElementById('inpConcursoNome').value || '').trim();
       var orgao = (document.getElementById('inpConcursoOrgao').value || '').trim();
+      var id = (idInp ? idInp.value : '').toLowerCase().trim().replace(/[^a-z0-9_]/g, '_');
+
+      // Se id estiver em branco, gera slug a partir do órgão ou nome
+      if (!id) {
+        var base = orgao || nome;
+        id = base.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9_]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '').slice(0, 30);
+      }
+
       var ano = (document.getElementById('inpConcursoAno').value || '').trim();
       var status = (document.getElementById('inpConcursoStatus').value || 'ativo').trim();
       var desc = (document.getElementById('inpConcursoDesc').value || '').trim();
       var cargoInicialNome = (document.getElementById('inpCargoInicialNome').value || '').trim();
 
-      if (!id || !nome || !orgao) {
-        alert('Por favor, informe ID, Nome e Órgão do Concurso.');
+      if (!nome || !orgao) {
+        alert('Por favor, informe ao menos o Nome e o Órgão do Concurso.');
         return;
       }
+      if (!id) id = 'concurso_' + Date.now();
 
-      var cargoId = cargoInicialNome ? cargoInicialNome.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '_') : 'geral';
+      var cargoId = cargoInicialNome ? cargoInicialNome.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '_').slice(0, 30) : 'geral';
 
       var cargosIniciais = [];
       if (cargoInicialNome) {
@@ -811,13 +962,40 @@
         cargos: cargosIniciais
       };
 
-      if (typeof window.CertamStore !== 'undefined') {
-        window.CertamStore.salvarConcurso(concursoObj);
+      var salvo = false;
+      if (typeof window.CertamStore !== 'undefined' && typeof window.CertamStore.salvarConcurso === 'function') {
+        salvo = window.CertamStore.salvarConcurso(concursoObj);
+      }
+
+      // Garantia dupla de salvamento em localStorage
+      if (!salvo) {
+        try {
+          var k = 'certam_concursos_cargos';
+          var raw = localStorage.getItem(k);
+          var l = raw ? JSON.parse(raw) : [];
+          if (!Array.isArray(l)) l = [];
+          var idx = l.findIndex(function(c) { return c.id === concursoObj.id; });
+          if (idx >= 0) l[idx] = concursoObj;
+          else l.push(concursoObj);
+          localStorage.setItem(k, JSON.stringify(l));
+          if (typeof window.CertamStore !== 'undefined') window.CertamStore._cache = l;
+          salvo = true;
+        } catch(err) {
+          console.error('Erro na persistência local:', err);
+        }
       }
 
       fecharModalNovoConcurso();
-      mostrarToast('✓ Concurso "' + nome + '" cadastrado com sucesso!', 'sucesso');
-      renderizarAdminConcursos();
+      if (salvo) {
+        mostrarToast('✓ Concurso "' + nome + '" cadastrado com sucesso!', 'sucesso');
+        renderizarAdminConcursos();
+        renderizarMenuConcursosAdmin();
+        try {
+          window.dispatchEvent(new CustomEvent('certam_concursos_updated', { detail: window.CertamStore ? window.CertamStore.getConcursos() : [concursoObj] }));
+        } catch(e){}
+      } else {
+        mostrarToast('Erro ao cadastrar concurso. Tente novamente.', 'erro');
+      }
     }
 
     function abrirModalNovoCargo(concursoId, concursoNome) {
