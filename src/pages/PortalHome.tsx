@@ -3,6 +3,7 @@ import { certamStore } from '../store/certamStore';
 import { lotesStore } from '../store/lotesStore';
 import { useAuth } from '../store/authContext';
 import { Concurso, Cargo, Candidato } from '../types';
+import { sanitizeInput, isValidEmail } from '../utils/security';
 import {
   Search,
   Plus,
@@ -75,12 +76,22 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
     e.preventDefault();
     if (!usuario) return;
 
+    const emailLimpo = formEmail.trim();
+    if (emailLimpo && !isValidEmail(emailLimpo)) {
+      showToast('Por favor, informe um e-mail válido.');
+      return;
+    }
+
+    const nomeSanitizado = sanitizeInput(formNome, 100) || usuario.nome;
+    const whatsSanitizado = sanitizeInput(formWhatsapp, 25);
+    const cpfSanitizado = sanitizeInput(formCpf, 20);
+
     atualizarDadosUsuario({
-      nome: formNome.trim() || usuario.nome,
-      email: formEmail.trim() || usuario.email,
-      whatsapp: formWhatsapp.trim(),
-      telefone: formWhatsapp.trim(),
-      cpf: formCpf.trim(),
+      nome: nomeSanitizado,
+      email: emailLimpo || usuario.email,
+      whatsapp: whatsSanitizado,
+      telefone: whatsSanitizado,
+      cpf: cpfSanitizado,
     });
 
     // Sincronizar nome/contato na lista oficial de candidatos se o usuário já estiver vinculado
@@ -91,14 +102,14 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
           (cand) =>
             cand.id === usuario.candidato_id ||
             cand.email?.toLowerCase() === usuario.email?.toLowerCase() ||
-            cand.email?.toLowerCase() === formEmail.trim().toLowerCase()
+            cand.email?.toLowerCase() === emailLimpo.toLowerCase()
         );
         if (match) {
           lotesStore.salvarCandidato(c.id, cg.id, {
             ...match,
-            nome: formNome.trim() || match.nome,
-            whatsapp: formWhatsapp.trim() || match.whatsapp,
-            cpf: formCpf.trim() || match.cpf,
+            nome: nomeSanitizado || match.nome,
+            whatsapp: whatsSanitizado || match.whatsapp,
+            cpf: cpfSanitizado || match.cpf,
           });
         }
       });
@@ -115,10 +126,19 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
 
   const handleLoginEmailSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!loginEmailInput.trim()) return;
+    const emailLimpo = loginEmailInput.trim();
+    if (!emailLimpo) return;
+
+    if (!isValidEmail(emailLimpo)) {
+      showToast('Por favor, informe um endereço de e-mail válido.');
+      return;
+    }
+
+    const nomeSanitizado = sanitizeInput(loginNomeInput, 100) || emailLimpo.split('@')[0];
+
     simularEmailCandidato(
-      loginEmailInput.trim(),
-      loginNomeInput.trim() || loginEmailInput.split('@')[0]
+      emailLimpo,
+      nomeSanitizado
     );
     setShowEmailLoginForm(false);
     setLoginEmailInput('');

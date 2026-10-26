@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { chatStore } from '../store/chatStore';
 import { useAuth } from '../store/authContext';
 import { ChatMensagem, CanalChatId } from '../types';
+import { sanitizeInput } from '../utils/security';
 import {
   MessageSquare,
   Pin,
@@ -69,16 +70,17 @@ export const CommunityForum: React.FC<CommunityForumProps> = ({
 
   const handleEnviar = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!novoTexto.trim()) return;
+    const textoLimpo = sanitizeInput(novoTexto, 2000);
+    if (!textoLimpo) return;
 
-    const autorFinal = nomeAutor.trim() || usuario?.nome || 'Candidato Aprovado';
+    const autorFinal = sanitizeInput(nomeAutor, 80) || usuario?.nome || 'Candidato Aprovado';
     const emailFinal = usuario?.email || 'candidato@certam.com.br';
 
-    chatStore.enviarMensagem(concursoId, cargoId, canalAtivo, autorFinal, emailFinal, novoTexto.trim(), {
+    chatStore.enviarMensagem(concursoId, cargoId, canalAtivo, autorFinal, emailFinal, textoLimpo, {
       isAdmin: Boolean(isAdmin),
       isFixado: isAdmin && fixarNovaMsg,
       posicao: posicaoAutor ? Number(posicaoAutor) : undefined,
-      comarcaPreferida: comarcaAutor.trim() || undefined,
+      comarcaPreferida: sanitizeInput(comarcaAutor, 80) || undefined,
     });
 
     setNovoTexto('');

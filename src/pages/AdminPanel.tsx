@@ -4,6 +4,7 @@ import { lotesStore } from '../store/lotesStore';
 import { faqStore } from '../store/faqStore';
 import { useAuth } from '../store/authContext';
 import { Concurso, Cargo, Candidato, FaqItem, FaqCategoria } from '../types';
+import { sanitizeInput, sanitizeFileName } from '../utils/security';
 import * as XLSX from 'xlsx';
 import {
   Plus,
@@ -318,7 +319,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const handleUploadArquivoExcel = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    setNomeArquivo(file.name);
+
+    // Protecao contra exaustao de memoria e DoS (limite maximo de 10 MB)
+    if (file.size > 10 * 1024 * 1024) {
+      showToast('O arquivo selecionado ultrapassa o limite seguro de 10 MB.');
+      return;
+    }
+
+    const nomeSeguro = sanitizeFileName(file.name);
+    setNomeArquivo(nomeSeguro);
 
     const reader = new FileReader();
     reader.onload = (evt) => {
@@ -329,15 +338,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         const ws = wb.Sheets[wsname];
         const data: unknown[][] = XLSX.utils.sheet_to_json(ws, { header: 1 });
 
-        // Skip header rows if any and extract records
+        // Skip header rows if any and extract records (com sanitizacao rigorosa)
         const parsed: Partial<Candidato>[] = [];
-        for (let i = 1; i < data.length; i++) {
+        const maxLinhas = Math.min(data.length, 10000); // Limite de seguranca contra congelamento do navegador
+        for (let i = 1; i < maxLinhas; i++) {
           const row = data[i] as (string | number | undefined)[];
           if (!row || row.length < 2) continue;
-          const pos = Number(row[0]) || i;
-          const nome = String(row[1] || `Candidato ${i}`);
-          const cota = (row[2] as Candidato['cota']) || 'Ampla';
-          const nota = Number(row[3]) || 80.0;
+          const pos = Math.max(1, Math.min(100000, Number(row[0]) || i));
+          const nome = sanitizeInput(String(row[1] || `Candidato ${i}`), 100);
+          const cota = (sanitizeInput(String(row[2] || 'Ampla'), 30) as Candidato['cota']) || 'Ampla';
+          const nota = Math.max(0, Math.min(100, Number(row[3]) || 80.0));
           parsed.push({
             posicao: pos,
             nome,
@@ -348,9 +358,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           });
         }
         setPreviewPlanilha(parsed.slice(0, 10));
-        showToast(`${parsed.length} registros processados do arquivo!`);
+        showToast(`${parsed.length} registros processados do arquivo com sucesso!`);
       } catch {
-        alert('Erro ao processar planilha. Verifique o formato do arquivo.');
+        showToast('Erro ao processar planilha. Verifique o formato do arquivo.');
       }
     };
     reader.readAsBinaryString(file);
