@@ -107,7 +107,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <span className="w-5 h-5 flex items-center justify-center">
               <LayoutGrid className="w-5 h-5" />
             </span>
-            <span>Concursos Cadastrados</span>
+            <span>Concursos cadastrados</span>
           </button>
 
           {/* 2. Simulador de Lotes e Comarcas */}
@@ -123,7 +123,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <span className="w-5 h-5 flex items-center justify-center">
               <MapPin className="w-5 h-5" />
             </span>
-            <span>Simulador de Lotes TJRS</span>
+            <span>Simulador de lotes TJRS</span>
           </button>
 
           {/* 3. Painel Administrativo */}
@@ -140,7 +140,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <Settings className="w-5 h-5" />
             </span>
             <span className="flex items-center gap-1.5">
-              <span>Painel Admin</span>
+              <span>Painel administrativo</span>
               <span className="px-1 py-0.5 rounded text-[9px] bg-amber-400/20 text-amber-300 font-mono font-bold">
                 GERÊNCIA
               </span>
@@ -160,13 +160,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <span className="w-5 h-5 flex items-center justify-center">
               <ShieldCheck className="w-5 h-5" />
             </span>
-            <span>Política de Privacidade</span>
+            <span>Política de privacidade</span>
           </button>
 
           {/* MENU DINÂMICO: CONCURSOS CADASTRADOS */}
           <div className="pt-4 border-t border-[#0F2942] px-4 space-y-2">
             <div className="flex items-center justify-between text-[10px] uppercase tracking-wider font-mono font-bold text-teal-400 px-2">
-              <span>Concursos Ativos</span>
+              <span>Concursos ativos</span>
               <span className="px-1.5 py-0.5 rounded bg-teal-500/20 text-[#2DD4AA] text-[10px] font-mono font-bold">
                 {concursos.length}
               </span>
@@ -226,7 +226,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                           className="w-full text-left px-2.5 py-1 text-[11px] text-teal-300 hover:text-white truncate rounded-md hover:bg-white/5 transition-colors flex items-center gap-1.5 font-medium"
                         >
                           <HelpCircle className="w-3.5 h-3.5 text-[#2DD4AA] shrink-0" />
-                          <span>Dúvidas &amp; FAQ do Concurso</span>
+                          <span>Dúvidas e FAQ do concurso</span>
                         </button>
                       )}
                     </div>
@@ -240,7 +240,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* Rodapé da Sidebar */}
         <div className="p-4 border-t border-[#0F2942] space-y-2.5">
           <div className="px-3 py-2 rounded-xl bg-[#0C2640] border border-teal-500/20 text-xs space-y-1">
-            <span className="text-teal-400 font-bold block text-[11px]">Administrador Oficial</span>
+            <span className="text-teal-400 font-bold block text-[11px]">Administrador oficial</span>
             <span className="text-slate-300 font-mono text-[11px] truncate block">
               rafasms0@hotmail.com
             </span>
@@ -253,7 +253,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-xl transition-colors cursor-pointer"
             >
               <LogOut className="w-3.5 h-3.5" />
-              <span>Desconectar Conta</span>
+              <span>Desconectar conta</span>
             </button>
           )}
         </div>

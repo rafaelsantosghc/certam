@@ -250,7 +250,7 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
             }`}
           >
             <BarChart3 className="w-4 h-4" />
-            <span>Dashboard do Cargo</span>
+            <span>Dashboard do cargo</span>
           </button>
 
           <button
@@ -263,7 +263,7 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
             }`}
           >
             <ListOrdered className="w-4 h-4" />
-            <span>Classificação Completa &amp; Notas</span>
+            <span>Classificação completa e notas</span>
           </button>
 
           <button
@@ -276,7 +276,7 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
             }`}
           >
             <UserCheck className="w-4 h-4" />
-            <span>Área do Candidato &amp; Comarcas</span>
+            <span>Área do candidato e comarcas</span>
           </button>
 
           <button
@@ -289,7 +289,7 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
             }`}
           >
             <MessageSquare className="w-4 h-4" />
-            <span>Fórum &amp; Chat da Comunidade</span>
+            <span>Fórum e comunidade</span>
           </button>
 
           <button
@@ -302,7 +302,7 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
             }`}
           >
             <HelpCircle className="w-4 h-4" />
-            <span>Dúvidas &amp; FAQ</span>
+            <span>Dúvidas e FAQ</span>
           </button>
         </div>
 
@@ -318,7 +318,7 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
             className="flex items-center gap-1.5 bg-gradient-to-r from-teal-600 to-cyan-600 hover:from-teal-500 hover:to-cyan-500 text-white font-bold px-3.5 py-2 rounded-xl text-xs shadow-xs transition-all cursor-pointer"
           >
             <span>🏛️</span>
-            <span>Simulador de Lotes deste Cargo →</span>
+            <span>Simulador de lotes deste cargo →</span>
           </button>
         </div>
       </div>
@@ -343,7 +343,7 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
           {/* 4 KPI CARDS */}
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 sm:gap-5">
             <div className="bg-white rounded-2xl p-5 border border-slate-200 card-shadow flex flex-col justify-between">
-              <span className="text-xs font-semibold text-slate-500">Vagas Imediatas</span>
+              <span className="text-xs font-semibold text-slate-500">Vagas imediatas</span>
               <div className="mt-2 flex items-baseline gap-2">
                 <span className="text-3xl font-extrabold text-slate-900 font-mono">
                   {cargo.vagas_imediatas}
@@ -358,7 +358,7 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
             </div>
 
             <div className="bg-white rounded-2xl p-5 border border-slate-200 card-shadow flex flex-col justify-between">
-              <span className="text-xs font-semibold text-slate-500">Candidatos Cadastrados</span>
+              <span className="text-xs font-semibold text-slate-500">Candidatos cadastrados</span>
               <div className="mt-2 flex items-baseline gap-2">
                 <span className="text-3xl font-extrabold text-slate-900 font-mono">
                   {kpiStats.total}
@@ -366,12 +366,12 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
                 <span className="text-xs text-slate-400 font-medium">na lista</span>
               </div>
               <span className="text-xs text-[#2DD4AA] font-bold mt-1">
-                {kpiStats.convocados} convocados no 1º Lote
+                {kpiStats.convocados} convocados no 1º lote
               </span>
             </div>
 
             <div className="bg-white rounded-2xl p-5 border border-slate-200 card-shadow flex flex-col justify-between">
-              <span className="text-xs font-semibold text-slate-500">Pretendem Assumir</span>
+              <span className="text-xs font-semibold text-slate-500">Pretendem assumir</span>
               <div className="mt-2 flex items-baseline gap-2">
                 <span className="text-3xl font-extrabold text-slate-900 font-mono">
                   {kpiStats.assumem}
@@ -382,7 +382,7 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
             </div>
 
             <div className="bg-white rounded-2xl p-5 border border-slate-200 card-shadow flex flex-col justify-between">
-              <span className="text-xs font-semibold text-slate-500">Desistências / Fim de Fila</span>
+              <span className="text-xs font-semibold text-slate-500">Desistências / fim de fila</span>
               <div className="mt-2 flex items-baseline gap-2">
                 <span className="text-3xl font-extrabold text-rose-600 font-mono">
                   {kpiStats.desistem}

@@ -226,10 +226,10 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
         <div>
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#2DD4AA]/15 text-[#135A7A] text-xs font-semibold mb-2">
             <span>🏛️</span>
-            <span>CERTAM • Portal do Candidato</span>
+            <span>CERTAM • Portal do candidato</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-bold text-[#0F172A] tracking-tight font-serif">
-            Portal do Candidato
+            Portal do candidato
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 mt-1 max-w-3xl leading-relaxed">
             Acesse sua conta para atualizar seus dados de contato, acompanhe os concursos em que você está inscrito e consulte os certames cadastrados.
@@ -244,7 +244,7 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
             className="inline-flex items-center gap-2 bg-[#07192B] hover:bg-[#0C2640] text-white font-bold px-4 py-2.5 rounded-xl text-xs shadow-xs transition-colors cursor-pointer"
           >
             <Plus className="w-4 h-4 text-[#2DD4AA]" />
-            <span>Cadastrar Concurso</span>
+            <span>Cadastrar concurso</span>
           </button>
         </div>
       </div>
@@ -258,7 +258,7 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
               <div>
                 <div className="flex items-center gap-2 text-slate-900 font-serif font-bold text-lg">
                   <LogIn className="w-5 h-5 text-[#135A7A]" />
-                  <span>Acesse sua Conta de Candidato</span>
+                  <span>Acesse sua conta de candidato</span>
                 </div>
                 <p className="text-xs text-slate-500 mt-1">
                   Faça login para gerenciar suas inscrições, salvar seus dados de contato e acompanhar suas colocações.
@@ -299,7 +299,7 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
                   className="inline-flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold px-3.5 py-2 rounded-xl text-xs transition-colors cursor-pointer"
                 >
                   <Mail className="w-3.5 h-3.5 text-slate-600" />
-                  <span>Entrar com E-mail</span>
+                  <span>Entrar com e-mail</span>
                 </button>
 
                 <button
@@ -308,7 +308,7 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
                   className="inline-flex items-center gap-1.5 bg-[#07192B] hover:bg-[#0C2640] text-teal-300 font-semibold px-3.5 py-2 rounded-xl text-xs transition-colors cursor-pointer"
                 >
                   <ShieldCheck className="w-3.5 h-3.5" />
-                  <span>Acesso Admin</span>
+                  <span>Acesso administrativo</span>
                 </button>
               </div>
             </div>
@@ -319,7 +319,7 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
-                      Nome Completo
+                      Nome completo
                     </label>
                     <input
                       type="text"
@@ -331,7 +331,7 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
                   </div>
                   <div>
                     <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
-                      E-mail do Candidato *
+                      E-mail do candidato *
                     </label>
                     <input
                       type="email"
@@ -355,7 +355,7 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
                     type="submit"
                     className="px-4 py-1.5 bg-[#135A7A] hover:bg-[#0C2640] text-white font-bold rounded-lg text-xs cursor-pointer shadow-xs"
                   >
-                    Confirmar Login
+                    Confirmar login
                   </button>
                 </div>
               </form>
@@ -418,7 +418,7 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
                   className="inline-flex items-center gap-2 bg-[#135A7A] hover:bg-[#0C2640] text-white font-bold px-4 py-2 rounded-xl text-xs shadow-xs transition-colors cursor-pointer"
                 >
                   <Edit3 className="w-3.5 h-3.5 text-teal-300" />
-                  <span>Atualizar Meus Dados</span>
+                  <span>Atualizar meus dados</span>
                 </button>
 
                 <button
@@ -427,7 +427,7 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
                   title="Alternar usuário para demonstração"
                   className="inline-flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-3 py-2 rounded-xl text-xs transition-colors cursor-pointer"
                 >
-                  <span>Alternar Perfil</span>
+                  <span>Alternar perfil</span>
                 </button>
 
                 <button
@@ -446,7 +446,7 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
               <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 font-mono block">
-                  E-mail de Notificação
+                  E-mail de notificação
                 </span>
                 <span className="font-semibold text-slate-800 mt-1 flex items-center gap-1 truncate" title={usuario.email}>
                   <Mail className="w-3 h-3 text-teal-600 shrink-0" />
@@ -466,7 +466,7 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
 
               <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 font-mono block">
-                  CPF Cadastrado
+                  CPF cadastrado
                 </span>
                 <span className="font-semibold text-slate-800 mt-1 flex items-center gap-1">
                   <ShieldCheck className="w-3 h-3 text-teal-600 shrink-0" />
@@ -476,7 +476,7 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
 
               <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 font-mono block">
-                  Concursos Vinculados
+                  Concursos vinculados
                 </span>
                 <span className="font-semibold text-slate-800 mt-1 flex items-center gap-1">
                   <BookmarkCheck className="w-3 h-3 text-teal-600 shrink-0" />
@@ -496,7 +496,7 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
               <div className="flex items-center gap-2">
                 <BookmarkCheck className="w-5 h-5 text-teal-600" />
                 <h2 className="text-base sm:text-lg font-bold font-serif text-slate-900">
-                  Meus Concursos Inscritos
+                  Meus concursos inscritos
                 </h2>
                 <span className="px-2 py-0.5 rounded-full bg-teal-100 text-teal-900 text-xs font-bold font-mono">
                   {inscricoesCandidato.length}
@@ -559,10 +559,10 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
                     <div className="p-3 bg-white rounded-xl border border-slate-200/80 grid grid-cols-2 gap-2 text-xs">
                       <div>
                         <span className="text-[10px] uppercase text-slate-400 font-bold block">
-                          Sua Classificação
+                          Sua classificação
                         </span>
                         <span className="font-bold text-[#135A7A] text-sm">
-                          {item.candidato ? `${item.candidato.posicao}º Lugar` : 'Acompanhando'}
+                          {item.candidato ? `${item.candidato.posicao}º lugar` : 'Acompanhando'}
                         </span>
                         {item.candidato?.cota && (
                           <span className="text-[10px] text-slate-500 block">
@@ -573,7 +573,7 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
 
                       <div>
                         <span className="text-[10px] uppercase text-slate-400 font-bold block">
-                          Comarcas do Cargo
+                          Comarcas do cargo
                         </span>
                         {item.candidato?.comarca_desejada_1 ? (
                           <span className="font-semibold text-slate-800 text-xs truncate block" title={item.candidato.comarca_desejada_1}>
@@ -633,7 +633,7 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
                         className="text-xs font-semibold bg-teal-50 hover:bg-teal-100 text-[#135A7A] border border-teal-200 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer"
                       >
                         <MapPin className="w-3.5 h-3.5 text-teal-600" />
-                        <span>Definir Comarcas</span>
+                        <span>Definir comarcas</span>
                       </button>
 
                       <button
@@ -648,7 +648,7 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
                         title="Acessar a página inicial deste concurso"
                         className="text-xs font-bold bg-[#135A7A] hover:bg-[#0C2640] text-white px-3.5 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
                       >
-                        <span>Acessar Concurso</span>
+                        <span>Acessar concurso</span>
                         <ArrowRight className="w-3.5 h-3.5" />
                       </button>
                     </div>
@@ -665,7 +665,7 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
             <h2 className="text-xl sm:text-2xl font-bold font-serif text-slate-900">
-              Concursos Cadastrados no Site
+              Concursos cadastrados no site
             </h2>
             <p className="text-xs sm:text-sm text-slate-500">
               Consulte os certames disponíveis no CERTAM, selecione o concurso desejado para acessar seus cargos e definir suas preferências de lotação.
@@ -761,7 +761,7 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
                 {/* Cargos cadastrados deste concurso */}
                 <div className="pt-2 border-t border-slate-100 space-y-2">
                   <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 font-mono block">
-                    Cargos Disponíveis ({concurso.cargos?.length || 0})
+                    Cargos disponíveis ({concurso.cargos?.length || 0})
                   </span>
                   <div className="space-y-1.5">
                     {concurso.cargos?.map((cargo) => {
@@ -865,7 +865,7 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
                   }
                   className="text-xs font-bold bg-[#135A7A] hover:bg-[#0C2640] text-white px-3.5 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
                 >
-                  <span>Acessar Concurso</span>
+                  <span>Acessar concurso</span>
                   <ArrowRight className="w-3.5 h-3.5" />
                 </button>
               </div>
@@ -882,7 +882,7 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
               <div className="flex items-center gap-2">
                 <Edit3 className="w-5 h-5 text-[#135A7A]" />
                 <h3 className="text-lg font-bold font-serif text-slate-900">
-                  Atualizar Dados Cadastrais
+                  Atualizar dados cadastrais
                 </h3>
               </div>
               <button
@@ -897,7 +897,7 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
             <form onSubmit={handleSalvarDados} className="space-y-4">
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                  Nome Completo
+                  Nome completo
                 </label>
                 <input
                   type="text"
@@ -910,7 +910,7 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                  E-mail do Candidato
+                  E-mail do candidato
                 </label>
                 <input
                   type="email"
@@ -952,7 +952,7 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
               {/* Informação contextual sobre escolhas de comarcas e intenção */}
               <div className="p-3 bg-teal-50/70 border border-teal-200 rounded-xl text-xs text-slate-700 space-y-1">
                 <span className="font-bold text-[#135A7A] block">
-                  ℹ️ Comarcas e Intenção de Posse
+                  ℹ️ Comarcas e intenção de posse
                 </span>
                 <p className="text-[11px] leading-relaxed text-slate-600">
                   As preferências de comarcas, ordenação de prioridade e manifestação de intenção de posse são preenchidas individualmente na página de cada cargo/concurso, garantindo que suas escolhas sejam específicas para o certame desejado.
@@ -971,7 +971,7 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
                   type="submit"
                   className="px-5 py-2.5 bg-[#135A7A] hover:bg-[#0C2640] text-white font-bold rounded-xl text-xs shadow-md transition-colors cursor-pointer"
                 >
-                  Salvar Alterações
+                  Salvar alterações
                 </button>
               </div>
             </form>

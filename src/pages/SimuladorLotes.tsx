@@ -229,7 +229,7 @@ export const SimuladorLotes: React.FC<SimuladorLotesProps> = ({
             className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#2DD4AA] hover:bg-[#20BE96] text-slate-950 text-xs font-extrabold transition-colors cursor-pointer shadow-xs"
           >
             <Printer className="w-3.5 h-3.5" />
-            <span>Folha de Impressão A4</span>
+            <span>Folha de impressão A4</span>
           </button>
         </div>
       </div>
@@ -247,7 +247,7 @@ export const SimuladorLotes: React.FC<SimuladorLotesProps> = ({
             }`}
           >
             <FileText className="w-4 h-4" />
-            <span>Formulário de Escolha</span>
+            <span>Formulário de escolha</span>
           </button>
 
           <button
@@ -260,7 +260,7 @@ export const SimuladorLotes: React.FC<SimuladorLotesProps> = ({
             }`}
           >
             <BarChart className="w-4 h-4" />
-            <span>Meu Dashboard Provisório</span>
+            <span>Meu dashboard provisório</span>
           </button>
 
           <button
@@ -273,7 +273,7 @@ export const SimuladorLotes: React.FC<SimuladorLotesProps> = ({
             }`}
           >
             <Grid className="w-4 h-4" />
-            <span>Painel Geral ({simulacao.totalVagasOfertadas} vagas)</span>
+            <span>Painel geral ({simulacao.totalVagasOfertadas} vagas)</span>
           </button>
 
           <button
@@ -286,7 +286,7 @@ export const SimuladorLotes: React.FC<SimuladorLotesProps> = ({
             }`}
           >
             <MapPin className="w-4 h-4" />
-            <span>Vagas por Comarca</span>
+            <span>Vagas por comarca</span>
           </button>
 
           <button
@@ -299,7 +299,7 @@ export const SimuladorLotes: React.FC<SimuladorLotesProps> = ({
             }`}
           >
             <Printer className="w-4 h-4" />
-            <span>Folha de Audiência</span>
+            <span>Folha de audiência</span>
           </button>
 
           {isAdmin && (
@@ -313,7 +313,7 @@ export const SimuladorLotes: React.FC<SimuladorLotesProps> = ({
               }`}
             >
               <Shield className="w-4 h-4" />
-              <span>Painel Admin do Lote</span>
+              <span>Painel administrativo</span>
             </button>
           )}
         </div>
@@ -347,16 +347,16 @@ export const SimuladorLotes: React.FC<SimuladorLotesProps> = ({
               <div className="bg-white rounded-2xl p-6 sm:p-8 border border-slate-200 card-shadow space-y-5">
                 <div className="border-b border-slate-100 pb-3 flex items-center justify-between">
                   <h3 className="text-base sm:text-lg font-bold font-serif text-slate-900">
-                    1. Identificação e Manifestação de Intenção
+                    1. Identificação e manifestação de intenção
                   </h3>
                   <span className="text-xs font-mono font-bold text-teal-700 bg-teal-50 px-2.5 py-1 rounded-md border border-teal-200">
-                    {candidatoLogado?.posicao}º Lugar Geral
+                    {candidatoLogado?.posicao}º lugar geral
                   </span>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Nome Completo:</label>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Nome completo:</label>
                     <input
                       type="text"
                       value={nomeCandidato}
@@ -392,7 +392,7 @@ export const SimuladorLotes: React.FC<SimuladorLotesProps> = ({
                 {/* Seletor de Intenção */}
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                    Sua Intenção em Relação ao Concurso:
+                    Sua intenção em relação ao concurso:
                   </label>
                   <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                     <label
@@ -409,7 +409,7 @@ export const SimuladorLotes: React.FC<SimuladorLotesProps> = ({
                         onChange={() => setIntencao('Sim')}
                         className="text-emerald-600 focus:ring-emerald-500"
                       />
-                      <span className="text-xs">Pretendo Assumir (Sim)</span>
+                      <span className="text-xs">Pretendo assumir (Sim)</span>
                     </label>
 
                     <label
@@ -426,7 +426,7 @@ export const SimuladorLotes: React.FC<SimuladorLotesProps> = ({
                         onChange={() => setIntencao('Talvez')}
                         className="text-amber-600 focus:ring-amber-500"
                       />
-                      <span className="text-xs">Em Análise (Talvez)</span>
+                      <span className="text-xs">Em análise (Talvez)</span>
                     </label>
 
                     <label
@@ -443,7 +443,7 @@ export const SimuladorLotes: React.FC<SimuladorLotesProps> = ({
                         onChange={() => setIntencao('final_fila')}
                         className="text-indigo-600 focus:ring-indigo-500"
                       />
-                      <span className="text-xs">Fim de Fila (Requerer)</span>
+                      <span className="text-xs">Fim de fila (Requerer)</span>
                     </label>
 
                     <label
@@ -460,7 +460,7 @@ export const SimuladorLotes: React.FC<SimuladorLotesProps> = ({
                         onChange={() => setIntencao('Não')}
                         className="text-rose-600 focus:ring-rose-500"
                       />
-                      <span className="text-xs">Desisto da Vaga (Não)</span>
+                      <span className="text-xs">Desisto da vaga (Não)</span>
                     </label>
                   </div>
                 </div>
@@ -469,7 +469,7 @@ export const SimuladorLotes: React.FC<SimuladorLotesProps> = ({
                 <div className="pt-3 border-t border-slate-100 space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-slate-800">
-                      Possui Função Gratificada (FG) ou Cargo em Comissão (CC) no TJRS?
+                      Possui função gratificada (FG) ou cargo em comissão (CC) no TJRS?
                     </span>
                     <button
                       type="button"
@@ -488,7 +488,7 @@ export const SimuladorLotes: React.FC<SimuladorLotesProps> = ({
                     <div className="p-4 rounded-xl bg-teal-50/50 border border-teal-200 grid grid-cols-1 sm:grid-cols-4 gap-3">
                       <div>
                         <label className="block text-2xs font-bold text-slate-700 mb-1">
-                          Registro Funcional:
+                          Registro funcional:
                         </label>
                         <input
                           type="text"
@@ -499,7 +499,7 @@ export const SimuladorLotes: React.FC<SimuladorLotesProps> = ({
                         />
                       </div>
                       <div>
-                        <label className="block text-2xs font-bold text-slate-700 mb-1">Cargo Atual:</label>
+                        <label className="block text-2xs font-bold text-slate-700 mb-1">Cargo atual:</label>
                         <input
                           type="text"
                           value={fgCargo}
@@ -510,7 +510,7 @@ export const SimuladorLotes: React.FC<SimuladorLotesProps> = ({
                       </div>
                       <div>
                         <label className="block text-2xs font-bold text-slate-700 mb-1">
-                          Comarca Atual:
+                          Comarca atual:
                         </label>
                         <input
                           type="text"
@@ -522,15 +522,15 @@ export const SimuladorLotes: React.FC<SimuladorLotesProps> = ({
                       </div>
                       <div>
                         <label className="block text-2xs font-bold text-slate-700 mb-1">
-                          Pretende Continuar?:
+                          Pretende permanecer na comarca?
                         </label>
                         <select
                           value={fgPretendeContinuar}
                           onChange={(e) => setFgPretendeContinuar(e.target.value)}
                           className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-semibold"
                         >
-                          <option value="Sim">Sim, pretendo continuar</option>
-                          <option value="Não">Não, pretendo nova lotação</option>
+                          <option value="Sim">Sim, pretendo permanecer nesta comarca</option>
+                          <option value="Não">Não, pretendo escolher outra comarca</option>
                         </select>
                       </div>
                     </div>
@@ -543,7 +543,7 @@ export const SimuladorLotes: React.FC<SimuladorLotesProps> = ({
                 <div className="border-b border-slate-100 pb-3 flex items-center justify-between">
                   <div>
                     <h3 className="text-base sm:text-lg font-bold font-serif text-slate-900">
-                      2. Ordem de Prioridade de Comarcas para Lotação
+                      2. Ordem de prioridade de comarcas para lotação
                     </h3>
                     <p className="text-xs text-slate-500">
                       Adicione e ordene suas opções. Na audiência pública de escolha, você receberá a primeira comarca da sua lista que ainda tiver vaga livre.
@@ -555,7 +555,7 @@ export const SimuladorLotes: React.FC<SimuladorLotesProps> = ({
                     className="bg-gradient-to-r from-teal-600 to-cyan-600 hover:from-teal-500 hover:to-cyan-500 text-white font-bold px-5 py-2.5 rounded-xl text-xs shadow-xs transition-all cursor-pointer flex items-center gap-2"
                   >
                     <Save className="w-4 h-4" />
-                    <span>Salvar Manifestação Definitiva</span>
+                    <span>Salvar manifestação definitiva</span>
                   </button>
                 </div>
 
@@ -564,7 +564,7 @@ export const SimuladorLotes: React.FC<SimuladorLotesProps> = ({
                   <div className="lg:col-span-6 bg-slate-50 rounded-2xl border border-slate-200 p-5 flex flex-col h-[520px]">
                     <div className="flex items-center justify-between pb-3 border-b border-slate-200 mb-3">
                       <h4 className="text-sm font-bold text-slate-900">
-                        Comarcas do Concurso ({comarcasDisponiveis.length})
+                        Comarcas do concurso ({comarcasDisponiveis.length})
                       </h4>
                       <input
                         type="text"
@@ -603,7 +603,7 @@ export const SimuladorLotes: React.FC<SimuladorLotesProps> = ({
                   <div className="lg:col-span-6 bg-teal-50/40 rounded-2xl border-2 border-teal-300 p-5 flex flex-col h-[520px]">
                     <div className="flex items-center justify-between pb-3 border-b border-teal-200 mb-3">
                       <h4 className="text-sm font-bold text-teal-950">
-                        Minha Lista de Preferência ({escolhasComarcas.length})
+                        Minha lista de preferência ({escolhasComarcas.length})
                       </h4>
                       <button
                         type="button"
