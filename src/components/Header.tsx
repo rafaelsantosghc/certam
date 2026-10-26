@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../store/authContext';
 import { NotificationBell } from './NotificationBell';
 import { PerfilCandidatoModal } from './PerfilCandidatoModal';
 import { ContatoAdminModal } from './ContatoAdminModal';
 import { MensagensPrivadasDrawer } from './MensagensPrivadasDrawer';
+import { GoogleAuthModal } from './GoogleAuthModal';
 import {
   Menu,
   Share2,
@@ -14,6 +15,7 @@ import {
   MessageCircle,
   ShieldCheck,
   HelpCircle,
+  LogOut,
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -33,14 +35,21 @@ export const Header: React.FC<HeaderProps> = ({
   onNavigate,
   concursoAtualId,
 }) => {
-  const { usuario, isAdmin, loginGoogle } = useAuth();
+  const { usuario, isAdmin, loginGoogle, redirecionarGoogleOAuth, logout } = useAuth();
   const [copiado, setCopiado] = useState(false);
 
   // Modais do Cabeçalho
   const [modalPerfilAberto, setModalPerfilAberto] = useState(false);
   const [modalContatoAberto, setModalContatoAberto] = useState(false);
   const [modalDmAberto, setModalDmAberto] = useState(false);
+  const [modalGoogleAberto, setModalGoogleAberto] = useState(false);
   const [motivoContatoInicial, setMotivoContatoInicial] = useState<any>('duvida');
+
+  useEffect(() => {
+    const handler = () => setModalGoogleAberto(true);
+    window.addEventListener('certam_abrir_google_auth', handler);
+    return () => window.removeEventListener('certam_abrir_google_auth', handler);
+  }, []);
 
   const handleCopiarLink = () => {
     navigator.clipboard.writeText(window.location.href);
@@ -144,7 +153,12 @@ export const Header: React.FC<HeaderProps> = ({
             <div className="flex items-center gap-1.5">
               <button
                 type="button"
-                onClick={loginGoogle}
+                onClick={() => {
+                  const redirecionou = redirecionarGoogleOAuth();
+                  if (!redirecionou) {
+                    setModalGoogleAberto(true);
+                  }
+                }}
                 className="flex items-center gap-2 bg-white hover:bg-slate-50 text-slate-800 font-semibold px-3 py-1.5 rounded-xl text-xs border border-slate-300 shadow-2xs transition-colors cursor-pointer"
               >
                 <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24">
@@ -157,40 +171,58 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
             </div>
           ) : (
-            <div
-              onClick={() => setModalPerfilAberto(true)}
-              className="flex items-center gap-2.5 p-1 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer"
-              title="Clique para gerenciar seu cadastro e dados auditados"
-            >
-              <div className="text-right hidden sm:block">
-                <span className="block text-xs font-bold text-slate-800 leading-tight">
-                  {usuario.nome}
-                </span>
-                <span className="text-[11px] font-mono text-slate-500 max-w-[130px] truncate block">
-                  {usuario.email_contato || usuario.email}
-                </span>
-              </div>
+            <div className="flex items-center gap-1.5">
               <div
-                className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs shadow-xs text-white uppercase relative ${
-                  isAdmin ? 'bg-amber-600 border border-amber-300' : 'bg-[#135A7A] border border-teal-500'
-                }`}
+                onClick={() => setModalPerfilAberto(true)}
+                className="flex items-center gap-2.5 p-1 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer"
+                title="Clique para gerenciar seu cadastro e dados auditados"
               >
-                {usuario.nome ? usuario.nome.slice(0, 2) : 'US'}
-                {usuario.cpf_verificado && (
-                  <span
-                    className="absolute -bottom-1 -right-1 w-3.5 h-3.5 bg-emerald-500 rounded-full border-2 border-white flex items-center justify-center text-[8px] text-white"
-                    title="CPF Verificado no Cadastro Geral"
-                  >
-                    ✓
+                <div className="text-right hidden sm:block">
+                  <span className="block text-xs font-bold text-slate-800 leading-tight">
+                    {usuario.nome}
                   </span>
-                )}
+                  <span className="text-[11px] font-mono text-slate-500 max-w-[130px] truncate block">
+                    {usuario.email_contato || usuario.email}
+                  </span>
+                </div>
+                <div
+                  className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs shadow-xs text-white uppercase relative ${
+                    isAdmin ? 'bg-amber-600 border border-amber-300' : 'bg-[#135A7A] border border-teal-500'
+                  }`}
+                >
+                  {usuario.nome ? usuario.nome.slice(0, 2) : 'US'}
+                  {usuario.cpf_verificado && (
+                    <span
+                      className="absolute -bottom-1 -right-1 w-3.5 h-3.5 bg-emerald-500 rounded-full border-2 border-white flex items-center justify-center text-[8px] text-white"
+                      title="CPF Verificado no Cadastro Geral"
+                    >
+                      ✓
+                    </span>
+                  )}
+                </div>
               </div>
+
+              {/* Botão Desconectar / Trocar de conta */}
+              <button
+                type="button"
+                onClick={logout}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                title="Sair / Desconectar"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
             </div>
           )}
         </div>
       </header>
 
       {/* Modais Globais do Header */}
+      <GoogleAuthModal
+        aberto={modalGoogleAberto}
+        onFechar={() => setModalGoogleAberto(false)}
+        onLoginCustom={(email, nome, cpf) => loginGoogle(email, nome, cpf)}
+      />
+
       <PerfilCandidatoModal
         aberto={modalPerfilAberto}
         onClose={() => setModalPerfilAberto(false)}

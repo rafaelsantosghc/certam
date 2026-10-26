@@ -265,7 +265,7 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
-                  onClick={loginGoogle}
+                  onClick={() => loginGoogle()}
                   className="inline-flex items-center gap-2 bg-white hover:bg-slate-50 text-slate-800 font-semibold px-4 py-2 rounded-xl text-xs border border-slate-300 shadow-2xs transition-all cursor-pointer"
                 >
                   <svg className="w-4 h-4" viewBox="0 0 24 24">

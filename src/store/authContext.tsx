@@ -1,11 +1,12 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Usuario } from '../types';
-import { identificarCandidatoMaster } from '../data/defaultCandidates';
+import { identificarCandidatoMaster, MASTER_CADASTRO_GERAL } from '../data/defaultCandidates';
 
 interface AuthContextType {
   usuario: Usuario | null;
   isAdmin: boolean;
-  loginGoogle: () => void;
+  loginGoogle: (email?: string, nome?: string, cpf?: string) => void;
+  redirecionarGoogleOAuth: () => boolean;
   loginAdmin: (senha: string) => boolean;
   loginAdminPreview: () => void;
   loginCandidato: (email: string, nome?: string, cpf?: string) => void;
@@ -18,12 +19,13 @@ interface AuthContextType {
   logout: () => void;
 }
 
-const AUTH_STORAGE_KEY = 'certam_auth_user_v4';
+const AUTH_STORAGE_KEY = 'certam_auth_user_v5';
 
 const AuthContext = createContext<AuthContextType>({
   usuario: null,
   isAdmin: false,
   loginGoogle: () => {},
+  redirecionarGoogleOAuth: () => false,
   loginAdmin: () => false,
   loginAdminPreview: () => {},
   loginCandidato: () => {},
@@ -42,6 +44,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.removeItem('certam_auth_user');
       localStorage.removeItem('certam_auth_session');
       localStorage.removeItem('certam_auth_user_v3');
+      localStorage.removeItem('certam_auth_user_v4');
 
       const stored = localStorage.getItem(AUTH_STORAGE_KEY);
       if (stored) {
@@ -53,7 +56,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch {
       // ignore
     }
-    // IMPORTANTE: Por padrão, nenhum visitante começa logado como administrador
+    // Por padrão, visitante não logado
     return null;
   });
 
@@ -69,41 +72,66 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [usuario]);
 
-  // Login de candidato via Google
-  const loginGoogle = () => {
-    const nomePadrao = 'Mariana Duarte Becker';
-    const cpfPadrao = '812.300.450-11';
-    const match = identificarCandidatoMaster(nomePadrao, cpfPadrao);
+  // Processamento do retorno do Google OAuth (Implicit Flow com #access_token)
+  useEffect(() => {
+    try {
+      const hash = window.location.hash;
+      if (hash && hash.includes('access_token=')) {
+        const params = new URLSearchParams(hash.replace(/^#/, ''));
+        const token = params.get('access_token');
+        if (token) {
+          fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+            headers: { Authorization: `Bearer ${token}` },
+          })
+            .then((res) => res.json())
+            .then((googleUser) => {
+              if (googleUser && (googleUser.email || googleUser.name)) {
+                loginCandidato(googleUser.email, googleUser.name);
+              }
+              window.history.replaceState(null, '', window.location.pathname + window.location.search);
+            })
+            .catch((err) => {
+              console.error('Falha ao obter perfil do Google:', err);
+            });
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
 
-    const novoUsuario: Usuario = {
-      nome: nomePadrao,
-      email: 'mariana.becker@gmail.com',
-      email_contato: 'mariana.becker@gmail.com',
-      is_admin: false,
-      candidato_id: match ? match.id : 'cand-002',
-      cpf: cpfPadrao,
-      cpf_verificado: !!match,
-      data_nascimento: '1994-08-20',
-      telefone: '(51) 98122-4455',
-      whatsapp: '(51) 98122-4455',
-      read_notification_ids: [],
-      outros_concursos: [
-        {
-          concurso_nome: 'TJRS 2025',
-          ano: '2025',
-          cargo: 'Analista Judiciário - Área Judiciária',
-          classificacao: 2,
-        },
-      ],
-      concursos_inscritos: [
-        {
-          concurso_id: 'tjrs_2025',
-          cargo_id: 'analista_judiciario',
-          data_inscricao: '12/01/2025',
-        },
-      ],
-    };
-    setUsuario(novoUsuario);
+  // Redirecionamento oficial para o Google OAuth 2.0
+  const redirecionarGoogleOAuth = (): boolean => {
+    const clientId =
+      (import.meta as any).env?.VITE_GOOGLE_CLIENT_ID ||
+      localStorage.getItem('certam_google_client_id');
+    if (!clientId) return false;
+
+    const redirectUri = window.location.origin + window.location.pathname;
+    const scope = encodeURIComponent('openid email profile');
+    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(
+      clientId
+    )}&redirect_uri=${encodeURIComponent(
+      redirectUri
+    )}&response_type=token&scope=${scope}&prompt=select_account`;
+
+    window.location.href = authUrl;
+    return true;
+  };
+
+  // Login de candidato via Google
+  const loginGoogle = (email?: string, nome?: string, cpf?: string) => {
+    if (email) {
+      loginCandidato(email, nome, cpf);
+      return;
+    }
+
+    // Tenta redirecionar para o Google OAuth caso haja Client ID configurado
+    const redirecionou = redirecionarGoogleOAuth();
+    if (!redirecionou) {
+      // Se não houver Client ID no momento, abre modal de seleção e configuração Google
+      window.dispatchEvent(new CustomEvent('certam_abrir_google_auth'));
+    }
   };
 
   // Login administrativo protegido por senha
@@ -151,16 +179,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Login de candidato com e-mail/dados próprios
   const loginCandidato = (email: string, nome?: string, cpf?: string) => {
     const emailLimpo = email.trim().toLowerCase();
-    const nomeLimpo = nome?.trim() || emailLimpo.split('@')[0];
-    const match = identificarCandidatoMaster(nomeLimpo, cpf);
+    const matchEmail = MASTER_CADASTRO_GERAL.find((c) => c.email?.toLowerCase() === emailLimpo);
+    const nomeLimpo = nome?.trim() || matchEmail?.nome || emailLimpo.split('@')[0];
+    const match =
+      (cpf ? identificarCandidatoMaster(nomeLimpo, cpf) : null) ||
+      matchEmail ||
+      identificarCandidatoMaster(nomeLimpo);
+
+    const isAdminUser = emailLimpo === 'rafasms0@hotmail.com' || emailLimpo === 'admin@certam.com.br';
 
     const novoCandidato: Usuario = {
-      nome: nomeLimpo,
+      nome: match ? match.nome : nomeLimpo,
       email: emailLimpo,
-      email_contato: emailLimpo,
-      is_admin: false,
+      email_contato: match?.email || emailLimpo,
+      is_admin: isAdminUser,
       candidato_id: match ? match.id : `cand-${Date.now().toString(36)}`,
-      cpf: cpf || '',
+      cpf: cpf || match?.cpf || '',
       cpf_verificado: !!match,
       data_nascimento: match?.data_nascimento || '',
       telefone: match?.whatsapp || '',
@@ -274,6 +308,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         usuario,
         isAdmin: !!usuario?.is_admin,
         loginGoogle,
+        redirecionarGoogleOAuth,
         loginAdmin,
         loginAdminPreview,
         loginCandidato,

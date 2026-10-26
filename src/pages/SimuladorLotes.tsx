@@ -387,7 +387,7 @@ export const SimuladorLotes: React.FC<SimuladorLotesProps> = ({
               </p>
               <button
                 type="button"
-                onClick={loginGoogle}
+                onClick={() => loginGoogle()}
                 className="inline-flex items-center gap-3 bg-white hover:bg-slate-100 text-slate-900 font-bold px-6 py-3 rounded-xl shadow-md text-sm transition-all cursor-pointer"
               >
                 <span>Entrar com Google</span>

@@ -907,7 +907,7 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
               </p>
               <button
                 type="button"
-                onClick={loginGoogle}
+                onClick={() => loginGoogle()}
                 className="bg-[#2DD4AA] hover:bg-[#20BE96] text-slate-950 font-bold px-6 py-2.5 rounded-xl text-xs transition-all cursor-pointer shadow-md"
               >
                 Entrar com Google
