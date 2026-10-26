@@ -153,12 +153,7 @@ export const Header: React.FC<HeaderProps> = ({
             <div className="flex items-center gap-1.5">
               <button
                 type="button"
-                onClick={() => {
-                  const redirecionou = redirecionarGoogleOAuth();
-                  if (!redirecionou) {
-                    setModalGoogleAberto(true);
-                  }
-                }}
+                onClick={() => loginGoogle()}
                 className="flex items-center gap-2 bg-white hover:bg-slate-50 text-slate-800 font-semibold px-3 py-1.5 rounded-xl text-xs border border-slate-300 shadow-2xs transition-colors cursor-pointer"
               >
                 <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24">

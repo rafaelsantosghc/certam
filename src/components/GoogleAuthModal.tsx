@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, ExternalLink, ShieldCheck, UserCheck, AlertCircle, Sparkles } from 'lucide-react';
 import { MASTER_CADASTRO_GERAL } from '../data/defaultCandidates';
+import { GOOGLE_CLIENT_ID_PADRAO } from '../store/authContext';
 
 interface GoogleAuthModalProps {
   aberto: boolean;
@@ -19,10 +20,12 @@ export const GoogleAuthModal: React.FC<GoogleAuthModalProps> = ({
     return (
       (import.meta as any).env?.VITE_GOOGLE_CLIENT_ID ||
       localStorage.getItem('certam_google_client_id') ||
-      ''
+      GOOGLE_CLIENT_ID_PADRAO
     );
   });
-  const [aba, setAba] = useState<'direto' | 'oauth'>('direto');
+  const [aba, setAba] = useState<'oauth' | 'direto'>('oauth');
+  const [copiadoOrigem, setCopiadoOrigem] = useState(false);
+  const [copiadoRedirect, setCopiadoRedirect] = useState(false);
 
   if (!aberto) return null;
 
@@ -244,11 +247,11 @@ export const GoogleAuthModal: React.FC<GoogleAuthModalProps> = ({
                 <ExternalLink className="w-4 h-4 text-blue-700 shrink-0 mt-0.5" />
                 <div>
                   <span className="font-semibold block">Redirecionamento Oficial Google OAuth 2.0</span>
-                  Redireciona diretamente para o endpoint de autenticação do Google (
+                  O botão redireciona para a tela oficial de login do Google (
                   <code className="text-2xs font-mono bg-blue-100 px-1 py-0.5 rounded">
                     accounts.google.com/o/oauth2/v2/auth
                   </code>
-                  ) com retorno para este portal.
+                  ). Após escolher sua conta Google, o retorno autentica seu perfil no portal.
                 </div>
               </div>
 
@@ -260,30 +263,70 @@ export const GoogleAuthModal: React.FC<GoogleAuthModalProps> = ({
                   type="text"
                   value={clientId}
                   onChange={(e) => setClientId(e.target.value)}
-                  placeholder="Ex: 123456789-abcdef.apps.googleusercontent.com"
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono focus:bg-white focus:border-teal-600 focus:outline-hidden"
+                  placeholder="Ex: 893072513173-detf69cldt4cefhbg8ta3cpi5hb73rma.apps.googleusercontent.com"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono focus:bg-white focus:border-teal-600 focus:outline-hidden"
                 />
-                <span className="text-2xs text-slate-500 block mt-1">
-                  URI de redirecionamento autorizada para cadastrar no Google Cloud:{' '}
-                  <code className="font-mono text-slate-700 font-semibold bg-slate-100 px-1 py-0.5 rounded">
-                    {window.location.origin + window.location.pathname}
-                  </code>
-                </span>
               </div>
 
-              <div className="pt-2">
+              {/* Informações para cadastrar no Google Cloud Console */}
+              <div className="space-y-2 p-3 bg-slate-50 border border-slate-200 rounded-xl text-2xs">
+                <span className="font-bold text-slate-700 block uppercase tracking-wide">
+                  Configuração no Google Cloud Console:
+                </span>
+                <div>
+                  <span className="text-slate-500 block mb-0.5">1. Origem JavaScript Autorizada:</span>
+                  <div className="flex items-center gap-1.5">
+                    <code className="flex-1 font-mono text-slate-800 bg-white px-2 py-1 rounded border border-slate-200 truncate">
+                      {window.location.origin}
+                    </code>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(window.location.origin);
+                        setCopiadoOrigem(true);
+                        setTimeout(() => setCopiadoOrigem(false), 2000);
+                      }}
+                      className="px-2 py-1 bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold rounded shrink-0 cursor-pointer"
+                    >
+                      {copiadoOrigem ? '✓ Copiado' : 'Copiar'}
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <span className="text-slate-500 block mb-0.5">2. URI de Redirecionamento Autorizada:</span>
+                  <div className="flex items-center gap-1.5">
+                    <code className="flex-1 font-mono text-slate-800 bg-white px-2 py-1 rounded border border-slate-200 truncate">
+                      {window.location.origin + window.location.pathname}
+                    </code>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(window.location.origin + window.location.pathname);
+                        setCopiadoRedirect(true);
+                        setTimeout(() => setCopiadoRedirect(false), 2000);
+                      }}
+                      className="px-2 py-1 bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold rounded shrink-0 cursor-pointer"
+                    >
+                      {copiadoRedirect ? '✓ Copiado' : 'Copiar'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-1">
                 <button
                   type="button"
                   onClick={handleRedirecionarGoogleOAuth}
                   className="w-full py-2.5 px-4 bg-[#1a73e8] hover:bg-[#1557b0] text-white font-bold rounded-xl text-xs tracking-wider uppercase transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <ExternalLink className="w-4 h-4" />
-                  <span>Redirecionar para accounts.google.com</span>
+                  <span>Ir para autenticação Google</span>
                 </button>
               </div>
 
               <div className="text-2xs text-slate-500 text-center">
-                Após autenticar na página do Google, você retornará automaticamente para o CERTAM logado com seu perfil verificado.
+                Se você ainda não cadastrou a URL no Google Cloud, faça isso no console em Credenciais OAuth 2.0.
               </div>
             </div>
           )}

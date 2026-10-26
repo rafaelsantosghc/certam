@@ -19,7 +19,8 @@ interface AuthContextType {
   logout: () => void;
 }
 
-const AUTH_STORAGE_KEY = 'certam_auth_user_v5';
+const AUTH_STORAGE_KEY = 'certam_auth_user_v6';
+export const GOOGLE_CLIENT_ID_PADRAO = '893072513173-detf69cldt4cefhbg8ta3cpi5hb73rma.apps.googleusercontent.com';
 
 const AuthContext = createContext<AuthContextType>({
   usuario: null,
@@ -45,6 +46,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.removeItem('certam_auth_session');
       localStorage.removeItem('certam_auth_user_v3');
       localStorage.removeItem('certam_auth_user_v4');
+      localStorage.removeItem('certam_auth_user_v5');
 
       const stored = localStorage.getItem(AUTH_STORAGE_KEY);
       if (stored) {
@@ -104,8 +106,39 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const redirecionarGoogleOAuth = (): boolean => {
     const clientId =
       (import.meta as any).env?.VITE_GOOGLE_CLIENT_ID ||
-      localStorage.getItem('certam_google_client_id');
+      localStorage.getItem('certam_google_client_id') ||
+      GOOGLE_CLIENT_ID_PADRAO;
+
     if (!clientId) return false;
+
+    // Se a biblioteca oficial do Google Identity Services estiver pronta, prioriza
+    const win = window as any;
+    if (win.google?.accounts?.oauth2?.initTokenClient) {
+      try {
+        const client = win.google.accounts.oauth2.initTokenClient({
+          client_id: clientId,
+          scope: 'openid email profile',
+          callback: (response: any) => {
+            if (response?.access_token) {
+              fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+                headers: { Authorization: `Bearer ${response.access_token}` },
+              })
+                .then((res) => res.json())
+                .then((googleUser) => {
+                  if (googleUser && (googleUser.email || googleUser.name)) {
+                    loginCandidato(googleUser.email, googleUser.name);
+                  }
+                })
+                .catch((err) => console.error('Erro ao ler perfil do Google:', err));
+            }
+          },
+        });
+        client.requestAccessToken({ prompt: 'select_account' });
+        return true;
+      } catch (e) {
+        console.warn('Fallback para redirecionamento HTTP Google OAuth:', e);
+      }
+    }
 
     const redirectUri = window.location.origin + window.location.pathname;
     const scope = encodeURIComponent('openid email profile');
@@ -126,10 +159,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return;
     }
 
-    // Tenta redirecionar para o Google OAuth caso haja Client ID configurado
+    // Redirecionamento imediato para a tela oficial de autenticação do Google
     const redirecionou = redirecionarGoogleOAuth();
     if (!redirecionou) {
-      // Se não houver Client ID no momento, abre modal de seleção e configuração Google
       window.dispatchEvent(new CustomEvent('certam_abrir_google_auth'));
     }
   };
