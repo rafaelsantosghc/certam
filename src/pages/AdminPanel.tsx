@@ -2,8 +2,22 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { certamStore } from '../store/certamStore';
 import { lotesStore } from '../store/lotesStore';
 import { faqStore } from '../store/faqStore';
+import { auditStore } from '../store/auditStore';
+import { contactStore } from '../store/contactStore';
+import { notificationStore } from '../store/notificationStore';
 import { useAuth } from '../store/authContext';
-import { Concurso, Cargo, Candidato, FaqItem, FaqCategoria } from '../types';
+import {
+  Concurso,
+  Cargo,
+  Candidato,
+  FaqItem,
+  FaqCategoria,
+  PerfilAuditRequest,
+  SolicitacaoVinculacao,
+  MensagemContatoAdmin,
+  NotificacaoItem,
+  TipoNotificacao,
+} from '../types';
 import { sanitizeInput, sanitizeFileName } from '../utils/security';
 import * as XLSX from 'xlsx';
 import {
@@ -20,10 +34,21 @@ import {
   Bookmark,
   Sparkles,
   Lock,
+  ShieldCheck,
+  UserCheck,
+  Mail,
+  Bell,
+  ArrowRight,
+  X,
+  MessageSquare,
+  AlertTriangle,
+  Send,
+  Eye,
+  Inbox,
 } from 'lucide-react';
 
 interface AdminPanelProps {
-  initialTab?: 'concursos' | 'importar' | 'candidatos' | 'faq';
+  initialTab?: string;
   onNavigate: (view: string, params?: { concursoId?: string; cargoId?: string; tab?: string }) => void;
 }
 
@@ -35,10 +60,54 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [senhaAdmin, setSenhaAdmin] = useState('');
   const [erroSenha, setErroSenha] = useState(false);
 
-  const [abaAdmin, setAbaAdmin] = useState<'concursos' | 'importar' | 'candidatos' | 'faq'>(initialTab);
+  const [abaAdmin, setAbaAdmin] = useState<
+    | 'concursos'
+    | 'auditoria'
+    | 'validacoes'
+    | 'contatos'
+    | 'notificacoes'
+    | 'candidatos'
+    | 'importar'
+    | 'faq'
+  >((initialTab as any) || 'concursos');
 
   const [concursos, setConcursos] = useState<Concurso[]>(() => certamStore.getConcursos());
   const [busca, setBusca] = useState('');
+
+  // -------------------------------------------------------------
+  // DADOS AUDITORIA, VINCULAÇÕES, CONTATOS & NOTIFICAÇÕES
+  // -------------------------------------------------------------
+  const [auditRequests, setAuditRequests] = useState<PerfilAuditRequest[]>(() =>
+    auditStore.getAuditRequests()
+  );
+  const [vinculacoes, setVinculacoes] = useState<SolicitacaoVinculacao[]>(() =>
+    auditStore.getVinculacoes()
+  );
+  const [contatos, setContatos] = useState<MensagemContatoAdmin[]>(() =>
+    contactStore.getMensagens()
+  );
+  const [notificacoes, setNotificacoes] = useState<NotificacaoItem[]>(() =>
+    notificationStore.getNotificacoes()
+  );
+
+  useEffect(() => {
+    const handleAudit = () => setAuditRequests(auditStore.getAuditRequests());
+    const handleVinc = () => setVinculacoes(auditStore.getVinculacoes());
+    const handleCont = () => setContatos(contactStore.getMensagens());
+    const handleNotif = () => setNotificacoes(notificationStore.getNotificacoes());
+
+    window.addEventListener('certam_audit_updated', handleAudit);
+    window.addEventListener('certam_vinculacoes_updated', handleVinc);
+    window.addEventListener('certam_contact_updated', handleCont);
+    window.addEventListener('certam_notifications_updated', handleNotif);
+
+    return () => {
+      window.removeEventListener('certam_audit_updated', handleAudit);
+      window.removeEventListener('certam_vinculacoes_updated', handleVinc);
+      window.removeEventListener('certam_contact_updated', handleCont);
+      window.removeEventListener('certam_notifications_updated', handleNotif);
+    };
+  }, []);
 
   // Modais e Estados de FAQ
   const [faqs, setFaqs] = useState<FaqItem[]>(() => faqStore.getFaqs());
@@ -53,13 +122,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [faqDestaque, setFaqDestaque] = useState(false);
   const [faqTags, setFaqTags] = useState('');
 
-  useEffect(() => {
-    const handleFaqUpdate = () => setFaqs(faqStore.getFaqs());
-    window.addEventListener('certam_faq_updated', handleFaqUpdate);
-    return () => window.removeEventListener('certam_faq_updated', handleFaqUpdate);
-  }, []);
-
-  // Modais de Criação
+  // Modais de Criação de Concurso e Cargo
   const [modalNovoConcursoAberto, setModalNovoConcursoAberto] = useState(false);
   const [modalNovoCargoAberto, setModalNovoCargoAberto] = useState(false);
   const [concursoAlvoId, setConcursoAlvoId] = useState<string>('');
@@ -100,6 +163,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [formCargoVagas, setFormCargoVagas] = useState(0);
   const [formCargoCr, setFormCargoCr] = useState(true);
 
+  // Nova Notificação (Broadcast)
+  const [notifTitulo, setNotifTitulo] = useState('');
+  const [notifMensagem, setNotifMensagem] = useState('');
+  const [notifConcursoId, setNotifConcursoId] = useState('tjrs_2024');
+  const [notifTipo, setNotifTipo] = useState<TipoNotificacao>('convocacao');
+
+  // Resposta Contato
+  const [respostaContatoId, setRespostaContatoId] = useState<string | null>(null);
+  const [respostaTexto, setRespostaTexto] = useState('');
+
   // Importador Planilhas
   const [importConcursoId, setImportConcursoId] = useState<string>(concursos[0]?.id || 'tjrs_2024');
   const [importCargoId, setImportCargoId] = useState<string>(concursos[0]?.cargos?.[0]?.id || 'analista_judiciario');
@@ -121,356 +194,188 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const metricas = useMemo(() => {
     const totalConcursos = concursos.length;
     const totalCargos = concursos.reduce((acc, c) => acc + (c.cargos?.length || 0), 0);
-    return { totalConcursos, totalCargos };
-  }, [concursos]);
+    const pendentesAudit = auditRequests.filter((r) => r.status === 'pendente').length;
+    const pendentesVinc = vinculacoes.filter((v) => v.status === 'pendente').length;
+    const contatosAbertos = contatos.filter((c) => c.status === 'aberto').length;
+    return { totalConcursos, totalCargos, pendentesAudit, pendentesVinc, contatosAbertos };
+  }, [concursos, auditRequests, vinculacoes, contatos]);
 
-  // Salvar Novo Concurso
-  const handleSalvarConcurso = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!formNome.trim() || !formOrgao.trim()) return;
-
-    const idGerado = formId.trim() || formOrgao.toLowerCase().replace(/[^a-z0-9]/g, '_');
-
-    const novo: Concurso = {
-      id: idGerado,
-      nome: formNome,
-      orgao: formOrgao,
-      ano: formAno,
-      edital: formEdital,
-      status: formStatus,
-      descricao: formDesc,
-      cargos: [
-        {
-          id: formCargoInicial.toLowerCase().replace(/[^a-z0-9]/g, '_') || 'geral',
-          nome: formCargoInicial,
-          nivel: 'Superior',
-          vagas_imediatas: 10,
-          tem_cr: true,
-          ativo: true,
-        },
-      ],
-    };
-
-    certamStore.salvarConcurso(novo);
-    reloadData();
-    setModalNovoConcursoAberto(false);
-    showToast('Concurso cadastrado com sucesso!');
-  };
-
-  // Salvar Novo Cargo
-  const handleSalvarCargo = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!formCargoNome.trim() || !concursoAlvoId) return;
-
-    const idGerado = formCargoId.trim() || formCargoNome.toLowerCase().replace(/[^a-z0-9]/g, '_');
-
-    const novoCargo: Cargo = {
-      id: idGerado,
-      nome: formCargoNome,
-      nivel: formCargoNivel,
-      vagas_imediatas: Number(formCargoVagas) || 0,
-      tem_cr: formCargoCr,
-      ativo: true,
-    };
-
-    certamStore.salvarCargo(concursoAlvoId, novoCargo);
-    reloadData();
-    setModalNovoCargoAberto(false);
-    showToast('Cargo adicionado ao concurso!');
-  };
-
-  // Abrir Modal de Edição de Concurso
-  const abrirEdicaoConcurso = (conc: Concurso) => {
-    setConcursoEditando(conc);
-    setEditConcursoNome(conc.nome);
-    setEditConcursoOrgao(conc.orgao);
-    setEditConcursoAno(conc.ano || '2024');
-    setEditConcursoEdital(conc.edital || '');
-    setEditConcursoStatus(conc.status || 'ativo');
-    setEditConcursoDesc(conc.descricao || '');
-    setModalEditarConcursoAberto(true);
-  };
-
-  // Salvar Edição de Concurso
-  const handleSalvarEdicaoConcurso = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!concursoEditando) return;
-    const atualizado: Concurso = {
-      ...concursoEditando,
-      nome: editConcursoNome,
-      orgao: editConcursoOrgao,
-      ano: editConcursoAno,
-      edital: editConcursoEdital,
-      status: editConcursoStatus,
-      descricao: editConcursoDesc,
-    };
-    certamStore.salvarConcurso(atualizado);
-    reloadData();
-    setModalEditarConcursoAberto(false);
-    showToast('Concurso atualizado com sucesso!');
-  };
-
-  // Abrir Modal de Edição de Cargo
-  const abrirEdicaoCargo = (cid: string, cg: Cargo) => {
-    setCargoEditandoConcursoId(cid);
-    setCargoEditando(cg);
-    setEditCargoNome(cg.nome);
-    setEditCargoNivel(cg.nivel);
-    setEditCargoVagas(cg.vagas_imediatas);
-    setEditCargoCr(cg.tem_cr);
-    setEditCargoAtivo(cg.ativo ?? true);
-    setModalEditarCargoAberto(true);
-  };
-
-  // Salvar Edição de Cargo
-  const handleSalvarEdicaoCargo = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!cargoEditando || !cargoEditandoConcursoId) return;
-    const atualizado: Cargo = {
-      ...cargoEditando,
-      nome: editCargoNome,
-      nivel: editCargoNivel,
-      vagas_imediatas: Number(editCargoVagas) || 0,
-      tem_cr: editCargoCr,
-      ativo: editCargoAtivo,
-    };
-    certamStore.salvarCargo(cargoEditandoConcursoId, atualizado);
-    reloadData();
-    setModalEditarCargoAberto(false);
-    showToast('Cargo atualizado com sucesso!');
-  };
-
-  // Excluir Concurso
-  const handleExcluirConcurso = (cid: string) => {
-    if (confirm('Deseja realmente excluir este concurso e todos os seus cargos?')) {
-      certamStore.excluirConcurso(cid);
-      reloadData();
-      showToast('Concurso removido.');
-    }
-  };
-
-  // Excluir Cargo
-  const handleExcluirCargo = (cid: string, gid: string) => {
-    if (confirm('Deseja remover este cargo?')) {
-      certamStore.excluirCargo(cid, gid);
-      reloadData();
-      showToast('Cargo removido.');
-    }
-  };
-
-  // FAQ Handlers
-  const handleSalvarNovoFaq = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!faqPergunta.trim() || !faqResposta.trim()) return;
-    const tagsArray = faqTags.split(',').map((t) => t.trim().toLowerCase()).filter(Boolean);
-    faqStore.salvarFaq({
-      id: `faq-${Date.now()}`,
-      pergunta: faqPergunta.trim(),
-      resposta: faqResposta.trim(),
-      categoria: faqCategoria,
-      concurso_id: faqConcursoId === 'geral' ? '' : faqConcursoId,
-      destaque: faqDestaque,
-      tags: tagsArray,
-    });
-    setModalNovoFaqAberto(false);
-    setFaqPergunta('');
-    setFaqResposta('');
-    setFaqTags('');
-    setFaqDestaque(false);
-    showToast('Dúvida adicionada à Central de FAQ!');
-  };
-
-  const abrirEdicaoFaq = (f: FaqItem) => {
-    setFaqEditandoId(f.id);
-    setFaqPergunta(f.pergunta);
-    setFaqResposta(f.resposta);
-    setFaqCategoria(f.categoria);
-    setFaqConcursoId(f.concurso_id || 'geral');
-    setFaqDestaque(Boolean(f.destaque));
-    setFaqTags(f.tags?.join(', ') || '');
-    setModalEditarFaqAberto(true);
-  };
-
-  const handleSalvarEdicaoFaq = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!faqEditandoId || !faqPergunta.trim() || !faqResposta.trim()) return;
-    const tagsArray = faqTags.split(',').map((t) => t.trim().toLowerCase()).filter(Boolean);
-    faqStore.salvarFaq({
-      id: faqEditandoId,
-      pergunta: faqPergunta.trim(),
-      resposta: faqResposta.trim(),
-      categoria: faqCategoria,
-      concurso_id: faqConcursoId === 'geral' ? '' : faqConcursoId,
-      destaque: faqDestaque,
-      tags: tagsArray,
-    });
-    setModalEditarFaqAberto(false);
-    showToast('Dúvida do FAQ atualizada!');
-  };
-
-  const handleAlternarDestaqueFaq = (f: FaqItem) => {
-    faqStore.salvarFaq({ ...f, destaque: !f.destaque });
-    showToast(f.destaque ? 'Destaque removido.' : 'Pergunta marcada como destaque!');
-  };
-
-  const handleExcluirFaq = (id: string) => {
-    if (confirm('Deseja realmente excluir esta dúvida do FAQ?')) {
-      faqStore.excluirFaq(id);
-      showToast('Dúvida removida do FAQ.');
-    }
-  };
-
-  // Processar Planilha XLSX/CSV via SheetJS
-  const handleUploadArquivoExcel = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    // Protecao contra exaustao de memoria e DoS (limite maximo de 10 MB)
-    if (file.size > 10 * 1024 * 1024) {
-      showToast('O arquivo selecionado ultrapassa o limite seguro de 10 MB.');
-      return;
-    }
-
-    const nomeSeguro = sanitizeFileName(file.name);
-    setNomeArquivo(nomeSeguro);
-
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-      try {
-        const bstr = evt.target?.result;
-        const wb = XLSX.read(bstr, { type: 'binary' });
-        const wsname = wb.SheetNames[0];
-        const ws = wb.Sheets[wsname];
-        const data: unknown[][] = XLSX.utils.sheet_to_json(ws, { header: 1 });
-
-        // Skip header rows if any and extract records (com sanitizacao rigorosa)
-        const parsed: Partial<Candidato>[] = [];
-        const maxLinhas = Math.min(data.length, 10000); // Limite de seguranca contra congelamento do navegador
-        for (let i = 1; i < maxLinhas; i++) {
-          const row = data[i] as (string | number | undefined)[];
-          if (!row || row.length < 2) continue;
-          const pos = Math.max(1, Math.min(100000, Number(row[0]) || i));
-          const nome = sanitizeInput(String(row[1] || `Candidato ${i}`), 100);
-          const cota = (sanitizeInput(String(row[2] || 'Ampla'), 30) as Candidato['cota']) || 'Ampla';
-          const nota = Math.max(0, Math.min(100, Number(row[3]) || 80.0));
-          parsed.push({
-            posicao: pos,
-            nome,
-            cota,
-            nota_final: nota,
-            status: 'Aguardando',
-            intencao: 'Sim',
-          });
-        }
-        setPreviewPlanilha(parsed.slice(0, 10));
-        showToast(`${parsed.length} registros processados do arquivo com sucesso!`);
-      } catch {
-        showToast('Erro ao processar planilha. Verifique o formato do arquivo.');
+  // Se não estiver logado como admin
+  if (!isAdmin) {
+    const handleLoginAdminLocal = (e: React.FormEvent) => {
+      e.preventDefault();
+      const sucesso = loginAdmin(senhaAdmin);
+      if (sucesso) {
+        setErroSenha(false);
+        showToast('Login de administrador realizado com sucesso!');
+      } else {
+        setErroSenha(true);
       }
     };
-    reader.readAsBinaryString(file);
-  };
 
-  // Sincronizar candidatos importados no Cargo
-  const handleSincronizarPlanilha = () => {
-    if (previewPlanilha.length === 0) return;
-    const novosCandidatos: Candidato[] = previewPlanilha.map((p, idx) => ({
-      id: `imp-${Date.now()}-${idx}`,
-      posicao: p.posicao || idx + 1,
-      nome: p.nome || `Aprovado ${idx + 1}`,
-      cota: p.cota || 'Ampla',
-      nota_final: p.nota_final || 85.0,
-      intencao: 'Sim',
-      status: 'Aguardando',
-      escolhas_comarcas: ['Porto Alegre', 'Canoas'],
-    }));
-
-    lotesStore.salvarCandidatos(importConcursoId, importCargoId, novosCandidatos);
-    showToast('Lista de candidatos sincronizada com sucesso para este cargo!');
-    setPreviewPlanilha([]);
-    setNomeArquivo('');
-  };
-
-  // Concursos filtrados
-  const concursosFiltrados = useMemo(() => {
-    return concursos.filter(
-      (c) =>
-        !busca.trim() ||
-        c.nome.toLowerCase().includes(busca.toLowerCase()) ||
-        c.orgao.toLowerCase().includes(busca.toLowerCase()) ||
-        c.cargos.some((cg) => cg.nome.toLowerCase().includes(busca.toLowerCase()))
-    );
-  }, [concursos, busca]);
-
-  if (!isAdmin) {
     return (
-      <div className="max-w-md mx-auto my-12 bg-white rounded-2xl border border-slate-200 card-shadow p-6 sm:p-8 space-y-6">
-        <div className="text-center space-y-2">
-          <div className="w-12 h-12 mx-auto rounded-2xl bg-amber-500/10 text-amber-600 flex items-center justify-center">
-            <Lock className="w-6 h-6" />
-          </div>
-          <h2 className="text-xl font-bold font-serif text-slate-900">
-            Painel do administrador
-          </h2>
-          <p className="text-xs text-slate-500 leading-relaxed">
-            Esta área é restrita à coordenação e gerência de concursos. Por favor, insira a senha de administrador para prosseguir.
+      <div className="max-w-md mx-auto my-12 p-6 sm:p-8 bg-white rounded-2xl shadow-xl border border-slate-200 text-center space-y-4">
+        <div className="w-12 h-12 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center mx-auto">
+          <Lock className="w-6 h-6" />
+        </div>
+        <div>
+          <h2 className="text-xl font-bold font-serif text-slate-900">Área Administrativa Restrita</h2>
+          <p className="text-xs text-slate-500 mt-1">
+            Informe sua senha de administrador para gerenciar certames, auditar perfis e moderar solicitações.
           </p>
         </div>
 
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            const ok = loginAdmin(senhaAdmin);
-            if (!ok) {
-              setErroSenha(true);
-            } else {
-              setErroSenha(false);
-            }
-          }}
-          className="space-y-4"
-        >
+        <form onSubmit={handleLoginAdminLocal} className="space-y-4 text-left">
           <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">
-              Senha de administrador
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Senha de Acesso:
             </label>
             <input
               type="password"
+              placeholder="Digite certam2025 ou admin"
               value={senhaAdmin}
               onChange={(e) => {
                 setSenhaAdmin(e.target.value);
                 setErroSenha(false);
               }}
-              placeholder="Digite sua senha de acesso..."
-              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#2DD4AA]"
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs focus:bg-white focus:outline-hidden"
               autoFocus
             />
             {erroSenha && (
-              <p className="text-xs text-rose-600 mt-1 font-medium">
-                Senha incorreta. Tente novamente.
-              </p>
+              <span className="text-2xs text-rose-600 mt-1 block">Senha incorreta. Tente certam2025.</span>
             )}
           </div>
 
           <button
             type="submit"
-            className="w-full py-2.5 bg-[#07192B] hover:bg-[#0C2640] text-teal-300 font-bold rounded-xl text-xs cursor-pointer shadow-xs transition-colors"
+            className="w-full py-2.5 bg-[#07192B] hover:bg-[#0C2640] text-[#2DD4AA] font-bold rounded-xl text-xs cursor-pointer shadow-sm transition-colors"
           >
-            Acessar painel administrativo
+            Acessar Painel
           </button>
         </form>
 
-        <div className="pt-2 border-t border-slate-100 text-center">
+        <div className="pt-2 border-t border-slate-100">
           <button
             type="button"
             onClick={() => onNavigate('portal')}
-            className="text-xs text-slate-500 hover:text-slate-900 cursor-pointer font-medium"
+            className="text-xs text-slate-500 hover:text-slate-800"
           >
-            ← Voltar para o portal do concurseiro
+            ← Voltar para a Página Inicial
           </button>
         </div>
       </div>
     );
   }
+
+  // -------------------------------------------------------------
+  // HANDLERS DE APROVAÇÃO DE AUDITORIA DE PERFIL
+  // -------------------------------------------------------------
+  const handleAprovarAuditoria = (req: PerfilAuditRequest) => {
+    auditStore.aprovarSolicitacao(req.id);
+
+    // Aplicar alterações nas listas de candidatos do lote/master list
+    concursos.forEach((c) => {
+      c.cargos?.forEach((cg) => {
+        const cands = lotesStore.getCandidatos(c.id, cg.id);
+        const matchIndex = cands.findIndex(
+          (cand) =>
+            cand.cpf === req.cpf ||
+            (req.usuario_email && cand.email?.toLowerCase() === req.usuario_email.toLowerCase())
+        );
+        if (matchIndex >= 0) {
+          const mod = { ...cands[matchIndex] };
+          req.alteracoes.forEach((alt) => {
+            if (alt.campo === 'nome') mod.nome = alt.valor_novo;
+            if (alt.campo === 'whatsapp') mod.whatsapp = alt.valor_novo;
+            if (alt.campo === 'email_contato') mod.email = alt.valor_novo;
+          });
+          lotesStore.salvarCandidato(c.id, cg.id, mod);
+        }
+      });
+    });
+
+    showToast('Alteração de perfil aprovada e aplicada nas listas oficiais!');
+  };
+
+  const handleRejeitarAuditoria = (id: string) => {
+    const motivo = prompt('Informe a justificativa do indeferimento da alteração:') || 'Inconsistência cadastral';
+    auditStore.rejeitarSolicitacao(id, motivo);
+    showToast('Alteração indeferida.');
+  };
+
+  // -------------------------------------------------------------
+  // HANDLERS DE VALIDAÇÃO MANUAL DE CANDIDATO
+  // -------------------------------------------------------------
+  const handleAprovarVinculacao = (v: SolicitacaoVinculacao) => {
+    auditStore.aprovarVinculacao(v.id);
+
+    // Inserir ou atualizar na lista do concurso
+    const cands = lotesStore.getCandidatos(v.concurso_id, v.cargo_id);
+    const candExistente = cands.find((c) => c.posicao === v.posicao_declarada);
+
+    if (candExistente) {
+      lotesStore.salvarCandidato(v.concurso_id, v.cargo_id, {
+        ...candExistente,
+        nome: v.usuario_nome,
+        cpf: v.cpf,
+        email: v.usuario_email,
+      });
+    } else {
+      const novo: Candidato = {
+        id: `cand-aprovado-${Date.now().toString(36)}`,
+        concurso_id: v.concurso_id,
+        cargo_id: v.cargo_id,
+        posicao: v.posicao_declarada,
+        nome: v.usuario_nome,
+        cota: 'Ampla',
+        nota_final: v.nota_declarada || 90.0,
+        intencao: 'Sim',
+        status: 'Convocado Titular',
+        cpf: v.cpf,
+        email: v.usuario_email,
+        escolhas_comarcas: ['Porto Alegre'],
+      };
+      cands.push(novo);
+      lotesStore.salvarCandidatos(v.concurso_id, v.cargo_id, cands);
+    }
+
+    showToast(`Candidato ${v.usuario_nome} validado e homologado no cargo!`);
+  };
+
+  const handleRejeitarVinculacao = (id: string) => {
+    const motivo = prompt('Motivo do indeferimento:') || 'Não localizado no Diário Oficial';
+    auditStore.rejeitarVinculacao(id, motivo);
+    showToast('Solicitação de vinculação indeferida.');
+  };
+
+  // -------------------------------------------------------------
+  // HANDLERS DE RESPOSTA A CONTATO
+  // -------------------------------------------------------------
+  const handleEnviarRespostaContato = (id: string) => {
+    if (!respostaTexto.trim()) return;
+    contactStore.responderMensagem(id, respostaTexto);
+    setRespostaContatoId(null);
+    setRespostaTexto('');
+    showToast('Resposta enviada ao candidato!');
+  };
+
+  const handleDispararNotificacao = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!notifTitulo.trim() || !notifMensagem.trim()) return;
+
+    notificationStore.criarNotificacao({
+      concurso_id: notifConcursoId === 'todos' ? undefined : notifConcursoId,
+      titulo: notifTitulo,
+      mensagem: notifMensagem,
+      tipo: notifTipo,
+      link_destino: `/concurso?id=${notifConcursoId}&tab=cronograma`,
+      urgente: true,
+    });
+
+    setNotifTitulo('');
+    setNotifMensagem('');
+    showToast('Notificação interna disparada para todos os candidatos no portal!');
+  };
 
   return (
     <div className="space-y-6 max-w-[1880px] w-full mx-auto">
@@ -483,271 +388,257 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       )}
 
       {/* HERO BANNER (#07192B) */}
-      <div className="bg-gradient-to-r from-[#07192B] via-[#0C2640] to-[#07192B] rounded-2xl p-6 sm:p-8 text-white card-shadow relative overflow-hidden border border-[#0F2942]">
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+      <div className="bg-[#07192B] rounded-2xl p-6 sm:p-8 text-white card-shadow relative overflow-hidden border border-[#0F2942]">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="space-y-2 max-w-3xl">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-mono font-bold bg-[#135A7A]/50 border border-teal-500/30 text-teal-300">
-              <span>👑</span>
-              <span>PAINEL ADMINISTRATIVO CERTAM</span>
+              <ShieldCheck className="w-3.5 h-3.5 text-[#2DD4AA]" />
+              <span>PAINEL DE CONTROLE ADMINISTRATIVO CERTAM</span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-bold font-serif text-white tracking-tight">
-              Organização Centralizada de Concursos &amp; Cargos
+              Gestão Centralizada de Certames & Moderação
             </h1>
             <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-              Cadastre novos certames, divida cada concurso em seus cargos específicos e isole as listas de classificação, chats e simulações. Sem dados fictícios ou invasão de informações entre concursos.
+              Audite solicitações de alteração de perfil com visualização lado a lado, valide candidatos não identificados automaticamente, cadastre novos concursos vigentes e responda dúvidas dos concurseiros.
             </p>
           </div>
 
-          <div className="flex items-center gap-4 shrink-0">
-            <div className="bg-[#07192B]/80 border border-teal-500/20 rounded-xl p-4 text-center min-w-[110px]">
-              <span className="text-[10px] uppercase font-mono font-bold text-teal-400 block">
-                Concursos
-              </span>
-              <div className="text-2xl font-extrabold text-white mt-0.5">
-                {metricas.totalConcursos}
-              </div>
+          {/* Cards de Métricas Rápidas */}
+          <div className="flex items-center gap-3 overflow-x-auto pb-1">
+            <div className="bg-[#0C2640] border border-teal-500/20 rounded-xl p-3 text-center min-w-[90px]">
+              <span className="text-[10px] uppercase font-mono font-bold text-teal-400 block">Concursos</span>
+              <div className="text-xl font-bold text-white mt-0.5">{metricas.totalConcursos}</div>
             </div>
-            <div className="bg-[#07192B]/80 border border-teal-500/20 rounded-xl p-4 text-center min-w-[110px]">
-              <span className="text-[10px] uppercase font-mono font-bold text-teal-400 block">
-                Cargos Ativos
-              </span>
-              <div className="text-2xl font-extrabold text-white mt-0.5">
-                {metricas.totalCargos}
-              </div>
+            <div className="bg-[#0C2640] border border-teal-500/20 rounded-xl p-3 text-center min-w-[90px]">
+              <span className="text-[10px] uppercase font-mono font-bold text-amber-400 block">Auditorias</span>
+              <div className="text-xl font-bold text-amber-300 mt-0.5">{metricas.pendentesAudit}</div>
+            </div>
+            <div className="bg-[#0C2640] border border-teal-500/20 rounded-xl p-3 text-center min-w-[90px]">
+              <span className="text-[10px] uppercase font-mono font-bold text-cyan-400 block">Validações</span>
+              <div className="text-xl font-bold text-cyan-300 mt-0.5">{metricas.pendentesVinc}</div>
+            </div>
+            <div className="bg-[#0C2640] border border-teal-500/20 rounded-xl p-3 text-center min-w-[90px]">
+              <span className="text-[10px] uppercase font-mono font-bold text-rose-400 block">Mensagens</span>
+              <div className="text-xl font-bold text-rose-300 mt-0.5">{metricas.contatosAbertos}</div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* NAVEGAÇÃO DE ABAS ADMIN */}
+      {/* BARRA DE NAVEGAÇÃO DE ABAS ADMIN */}
       <div className="bg-white rounded-2xl border border-slate-200 px-4 sm:px-6 py-2.5 flex items-center justify-between gap-3 overflow-x-auto card-shadow">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 overflow-x-auto">
           <button
             type="button"
             onClick={() => setAbaAdmin('concursos')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
               abaAdmin === 'concursos'
                 ? 'bg-[#0C2640] text-[#2DD4AA]'
                 : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
             }`}
           >
             <Building className="w-4 h-4" />
-            <span>Concursos &amp; Cargos</span>
+            <span>Concursos & Cargos</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setAbaAdmin('auditoria')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap relative ${
+              abaAdmin === 'auditoria'
+                ? 'bg-[#0C2640] text-[#2DD4AA]'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            <ShieldCheck className="w-4 h-4" />
+            <span>Auditoria de Perfil</span>
+            {metricas.pendentesAudit > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-amber-500 text-slate-950 font-bold font-mono">
+                {metricas.pendentesAudit}
+              </span>
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setAbaAdmin('validacoes')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap relative ${
+              abaAdmin === 'validacoes'
+                ? 'bg-[#0C2640] text-[#2DD4AA]'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            <UserCheck className="w-4 h-4" />
+            <span>Validação de Aprovados</span>
+            {metricas.pendentesVinc > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-cyan-400 text-slate-950 font-bold font-mono">
+                {metricas.pendentesVinc}
+              </span>
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setAbaAdmin('contatos')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap relative ${
+              abaAdmin === 'contatos'
+                ? 'bg-[#0C2640] text-[#2DD4AA]'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            <Inbox className="w-4 h-4" />
+            <span>Caixa de Entrada / Fale Conosco</span>
+            {metricas.contatosAbertos > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-rose-500 text-white font-bold font-mono">
+                {metricas.contatosAbertos}
+              </span>
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setAbaAdmin('notificacoes')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+              abaAdmin === 'notificacoes'
+                ? 'bg-[#0C2640] text-[#2DD4AA]'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            <Bell className="w-4 h-4" />
+            <span>Disparador de Notificações</span>
           </button>
 
           <button
             type="button"
             onClick={() => setAbaAdmin('importar')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
               abaAdmin === 'importar'
                 ? 'bg-[#0C2640] text-[#2DD4AA]'
                 : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
             }`}
           >
             <FileSpreadsheet className="w-4 h-4" />
-            <span>Importar Planilhas (XLSX)</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setAbaAdmin('candidatos')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-              abaAdmin === 'candidatos'
-                ? 'bg-[#0C2640] text-[#2DD4AA]'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-            }`}
-          >
-            <Users className="w-4 h-4" />
-            <span>Central de Candidatos</span>
+            <span>Importar XLSX</span>
           </button>
 
           <button
             type="button"
             onClick={() => setAbaAdmin('faq')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
               abaAdmin === 'faq'
                 ? 'bg-[#0C2640] text-[#2DD4AA]'
                 : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
             }`}
           >
             <HelpCircle className="w-4 h-4" />
-            <span>Perguntas Frequentes (FAQ)</span>
-            <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-teal-500/20 text-[#2DD4AA] font-mono">
-              {faqs.length}
-            </span>
+            <span>FAQ Oficial</span>
           </button>
-        </div>
-
-        <div className="flex items-center gap-2 shrink-0">
-          {abaAdmin === 'faq' ? (
-            <button
-              type="button"
-              onClick={() => {
-                setFaqPergunta('');
-                setFaqResposta('');
-                setFaqTags('');
-                setFaqDestaque(false);
-                setFaqCategoria('Remuneração e Benefícios');
-                setFaqConcursoId(concursos[0]?.id || 'tjrs_2024');
-                setModalNovoFaqAberto(true);
-              }}
-              className="bg-[#2DD4AA] hover:bg-[#20BE96] text-slate-950 font-extrabold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-xs cursor-pointer"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Nova Dúvida / FAQ</span>
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setModalNovoConcursoAberto(true)}
-              className="bg-[#2DD4AA] hover:bg-[#20BE96] text-slate-950 font-extrabold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-xs cursor-pointer"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Novo Concurso</span>
-            </button>
-          )}
         </div>
       </div>
 
       {/* ============================================================== */}
-      {/* ABA 1: CONCURSOS E CARGOS                                      */}
+      {/* ABA 1: CONCURSOS & CARGOS                                      */}
       {/* ============================================================== */}
       {abaAdmin === 'concursos' && (
         <section className="space-y-6">
-          {/* Busca */}
-          <div className="bg-white rounded-2xl p-4 border border-slate-200 card-shadow flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="relative flex-1 max-w-md">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                value={busca}
-                onChange={(e) => setBusca(e.target.value)}
-                placeholder="Buscar por concurso, sigla ou cargo..."
-                className="w-full pl-10 pr-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-[#2DD4AA]"
-              />
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h2 className="text-xl font-bold font-serif text-slate-900">
+                Concursos & Cargos Cadastrados
+              </h2>
+              <p className="text-xs text-slate-500">
+                Gestão dos certames ativos no CERTAM. Configure editais, órgãos e adicione cargos específicos.
+              </p>
             </div>
-            <span className="text-2xs text-slate-500">
-              Total: <strong>{concursosFiltrados.length}</strong> concurso(s)
-            </span>
+
+            <button
+              type="button"
+              onClick={() => {
+                setFormId('');
+                setFormNome('');
+                setFormOrgao('');
+                setFormDesc('');
+                setModalNovoConcursoAberto(true);
+              }}
+              className="px-4 py-2 bg-[#07192B] hover:bg-[#0C2640] text-[#2DD4AA] font-bold text-xs rounded-xl transition-all cursor-pointer shadow-xs flex items-center gap-2 shrink-0"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Cadastrar Novo Concurso</span>
+            </button>
           </div>
 
-          {/* Cards dos Concursos Cadastrados */}
-          <div className="space-y-6">
-            {concursosFiltrados.map((concurso) => (
+          {/* Lista de Concursos */}
+          <div className="grid grid-cols-1 gap-5">
+            {concursos.map((c) => (
               <div
-                key={concurso.id}
-                className="bg-white rounded-2xl border border-slate-200 card-shadow p-6 space-y-4"
+                key={c.id}
+                className="bg-white rounded-2xl border border-slate-200 card-shadow p-5 sm:p-6 space-y-4"
               >
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="px-2 py-0.5 rounded-md bg-teal-50 text-[#135A7A] border border-teal-200 font-mono font-bold text-xs uppercase">
-                        {concurso.orgao}
+                      <span className="font-bold text-xs text-slate-500 font-mono uppercase">
+                        {c.orgao} • {c.ano}
                       </span>
-                      <span className="text-xs text-slate-400 font-mono">ID: {concurso.id}</span>
-                      <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
-                        {concurso.status}
+                      <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200">
+                        {c.status}
                       </span>
                     </div>
-                    <h3 className="text-lg font-bold font-serif text-slate-900 mt-1">
-                      {concurso.nome}
-                    </h3>
+                    <h3 className="text-lg font-bold font-serif text-slate-900 mt-1">{c.nome}</h3>
+                    <p className="text-xs text-slate-500">{c.descricao}</p>
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => abrirEdicaoConcurso(concurso)}
-                      className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold rounded-xl transition-colors cursor-pointer flex items-center gap-1.5 border border-slate-200"
-                      title="Editar dados deste concurso"
-                    >
-                      <Pencil className="w-3.5 h-3.5 text-slate-600" />
-                      <span>Editar Concurso</span>
-                    </button>
+                  <div className="flex items-center gap-2 shrink-0">
                     <button
                       type="button"
                       onClick={() => {
-                        setConcursoAlvoId(concurso.id);
+                        setConcursoAlvoId(c.id);
+                        setFormCargoNome('');
+                        setFormCargoId('');
+                        setFormCargoVagas(0);
                         setModalNovoCargoAberto(true);
                       }}
-                      className="px-3 py-1.5 bg-teal-50 hover:bg-teal-100 text-teal-900 text-xs font-bold rounded-xl border border-teal-200 transition-colors cursor-pointer flex items-center gap-1"
+                      className="px-3 py-1.5 bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 font-bold text-xs rounded-lg transition-colors cursor-pointer flex items-center gap-1"
                     >
                       <Plus className="w-3.5 h-3.5" />
                       <span>Adicionar Cargo</span>
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => handleExcluirConcurso(concurso.id)}
-                      className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer"
-                      title="Excluir Concurso"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
                   </div>
                 </div>
 
-                {/* Tabela de Cargos Deste Concurso */}
-                <div className="overflow-x-auto border border-slate-100 rounded-xl">
-                  <table className="w-full text-left text-xs divide-y divide-slate-100">
-                    <thead className="bg-slate-50 text-slate-600 font-bold font-mono text-2xs uppercase">
-                      <tr>
-                        <th className="py-2.5 px-3">Cargo / Especialidade</th>
-                        <th className="py-2.5 px-3">Slug (ID)</th>
-                        <th className="py-2.5 px-3">Nível</th>
-                        <th className="py-2.5 px-3 text-center">Vagas Imediatas</th>
-                        <th className="py-2.5 px-3 text-center">Cadastro Reserva</th>
-                        <th className="py-2.5 px-3 text-right">Ações</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-50">
-                      {concurso.cargos?.map((cg) => (
-                        <tr key={cg.id} className="hover:bg-slate-50/60">
-                          <td className="py-2.5 px-3 font-bold text-slate-800">{cg.nome}</td>
-                          <td className="py-2.5 px-3 font-mono text-slate-500">{cg.id}</td>
-                          <td className="py-2.5 px-3">{cg.nivel}</td>
-                          <td className="py-2.5 px-3 text-center font-mono font-bold text-slate-800">
-                            {cg.vagas_imediatas}
-                          </td>
-                          <td className="py-2.5 px-3 text-center font-mono text-teal-700">
-                            {cg.tem_cr ? 'Sim (CR)' : 'Não'}
-                          </td>
-                          <td className="py-2.5 px-3 text-right">
-                            <div className="flex items-center justify-end gap-2">
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  onNavigate('concurso', {
-                                    concursoId: concurso.id,
-                                    cargoId: cg.id,
-                                  })
-                                }
-                                className="text-xs text-[#135A7A] hover:underline font-semibold"
-                              >
-                                Ver Dashboard
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => abrirEdicaoCargo(concurso.id, cg)}
-                                className="px-2 py-1 text-xs text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg font-semibold flex items-center gap-1 transition-colors cursor-pointer border border-slate-200"
-                                title="Editar dados deste cargo"
-                              >
-                                <Pencil className="w-3 h-3 text-slate-600" />
-                                <span>Editar</span>
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleExcluirCargo(concurso.id, cg.id)}
-                                className="text-slate-400 hover:text-rose-600 p-1 rounded"
-                                title="Remover Cargo"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          </td>
+                {/* Tabela de Cargos deste Concurso */}
+                <div>
+                  <span className="text-2xs font-bold text-slate-400 uppercase tracking-wider block mb-2">
+                    Cargos Vinculados ({c.cargos?.length || 0})
+                  </span>
+                  <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                    <table className="w-full text-left text-xs divide-y divide-slate-100">
+                      <thead className="bg-slate-50 text-slate-700 font-bold text-2xs uppercase tracking-wider">
+                        <tr>
+                          <th className="py-2.5 px-3">Cargo</th>
+                          <th className="py-2.5 px-3 text-center">Nível</th>
+                          <th className="py-2.5 px-3 text-right">Vagas Imediatas</th>
+                          <th className="py-2.5 px-3 text-right">Vagas Reais Abertas</th>
+                          <th className="py-2.5 px-3 text-center">Status</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {c.cargos?.map((cg) => (
+                          <tr key={cg.id} className="hover:bg-slate-50">
+                            <td className="py-2.5 px-3 font-bold text-slate-900">{cg.nome}</td>
+                            <td className="py-2.5 px-3 text-center font-mono">{cg.nivel}</td>
+                            <td className="py-2.5 px-3 text-right font-mono font-bold">{cg.vagas_imediatas}</td>
+                            <td className="py-2.5 px-3 text-right font-mono text-amber-800 font-bold">
+                              {cg.vagas_reais_abertas || '-'}
+                            </td>
+                            <td className="py-2.5 px-3 text-center">
+                              <span className="text-emerald-700 font-semibold">Ativo</span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
             ))}
@@ -756,30 +647,375 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       )}
 
       {/* ============================================================== */}
-      {/* ABA 2: IMPORTAR PLANILHAS (XLSX / CSV)                         */}
+      {/* ABA 2: AUDITORIA DE ALTERAÇÕES DE PERFIL COM DIFF              */}
       {/* ============================================================== */}
-      {abaAdmin === 'importar' && (
+      {abaAdmin === 'auditoria' && (
         <section className="space-y-6">
-          <div className="bg-white rounded-2xl p-6 sm:p-8 border border-slate-200 card-shadow space-y-6">
-            <div className="border-b border-slate-100 pb-4">
-              <h2 className="text-lg font-bold font-serif text-slate-900">
-                Importação de Lista de Classificação Oficial (XLSX / CSV)
+          <div className="border-b border-slate-200 pb-3">
+            <h2 className="text-xl font-bold font-serif text-slate-900">
+              Auditoria de Alterações Submetidas pelos Candidatos
+            </h2>
+            <p className="text-xs text-slate-500">
+              Analise comparativa &quot;Antes&quot; vs &quot;Depois&quot; para coibir fraudes cadastrais e manipulação de classificações.
+            </p>
+          </div>
+
+          {auditRequests.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center text-xs text-slate-400 card-shadow">
+              Nenhuma solicitação de alteração na fila de moderação.
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {auditRequests.map((req) => (
+                <div
+                  key={req.id}
+                  className={`bg-white rounded-2xl border p-5 sm:p-6 card-shadow space-y-4 ${
+                    req.status === 'pendente'
+                      ? 'border-amber-300 ring-2 ring-amber-50'
+                      : 'border-slate-200'
+                  }`}
+                >
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-sm text-slate-900">{req.usuario_nome}</span>
+                        <span className="text-2xs font-mono text-slate-400">CPF: {req.cpf}</span>
+                        <span
+                          className={`text-2xs font-bold px-2 py-0.5 rounded uppercase ${
+                            req.status === 'pendente'
+                              ? 'bg-amber-100 text-amber-900'
+                              : req.status === 'aprovado'
+                              ? 'bg-emerald-100 text-emerald-900'
+                              : 'bg-rose-100 text-rose-900'
+                          }`}
+                        >
+                          {req.status}
+                        </span>
+                      </div>
+                      <span className="text-2xs text-slate-400 block mt-0.5">
+                        E-mail: {req.usuario_email} · Submetido em: {req.data_solicitacao}
+                      </span>
+                    </div>
+
+                    {req.status === 'pendente' && (
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => handleRejeitarAuditoria(req.id)}
+                          className="px-3.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                        >
+                          Rejeitar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleAprovarAuditoria(req)}
+                          className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1 shadow-xs"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                          <span>Aprovar Alteração</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Comparativo DIFF Lado a Lado */}
+                  <div className="border border-slate-200 rounded-xl overflow-hidden divide-y divide-slate-100">
+                    <div className="grid grid-cols-12 bg-slate-50 px-3.5 py-2 text-[11px] font-bold text-slate-600 uppercase tracking-wider">
+                      <span className="col-span-4">Campo Modificado</span>
+                      <span className="col-span-4 text-rose-700">Dado Anterior</span>
+                      <span className="col-span-4 text-teal-700">Nova Informação Solicitada</span>
+                    </div>
+                    {req.alteracoes.map((alt, i) => (
+                      <div key={i} className="grid grid-cols-12 px-3.5 py-2.5 items-center gap-2 hover:bg-slate-50">
+                        <span className="col-span-4 font-bold text-slate-800 text-xs">
+                          {alt.campo_label}
+                        </span>
+                        <span className="col-span-4 font-mono text-slate-500 line-through text-xs truncate">
+                          {alt.valor_antigo}
+                        </span>
+                        <span className="col-span-4 font-mono text-teal-800 font-bold text-xs truncate flex items-center gap-1">
+                          <ArrowRight className="w-3 h-3 text-teal-600 shrink-0" />
+                          {alt.valor_novo}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* ============================================================== */}
+      {/* ABA 3: VALIDAÇÃO MANUAL DE CANDIDATOS                          */}
+      {/* ============================================================== */}
+      {abaAdmin === 'validacoes' && (
+        <section className="space-y-6">
+          <div className="border-b border-slate-200 pb-3">
+            <h2 className="text-xl font-bold font-serif text-slate-900">
+              Fila de Validação Manual de Aprovados
+            </h2>
+            <p className="text-xs text-slate-500">
+              Candidatos que não foram reconhecidos automaticamente pelo cruzamento de Nome/CPF e solicitaram liberação ao administrador.
+            </p>
+          </div>
+
+          {vinculacoes.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center text-xs text-slate-400 card-shadow">
+              Nenhuma solicitação de validação pendente no momento.
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {vinculacoes.map((v) => (
+                <div
+                  key={v.id}
+                  className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 card-shadow flex flex-col md:flex-row md:items-center justify-between gap-4"
+                >
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-sm text-slate-900">{v.usuario_nome}</span>
+                      <span className="text-2xs font-mono text-slate-400">CPF: {v.cpf}</span>
+                      <span
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+                          v.status === 'pendente'
+                            ? 'bg-amber-100 text-amber-900'
+                            : v.status === 'aprovado'
+                            ? 'bg-emerald-100 text-emerald-900'
+                            : 'bg-rose-100 text-rose-900'
+                        }`}
+                      >
+                        {v.status}
+                      </span>
+                    </div>
+
+                    <div className="text-xs text-slate-600 flex flex-wrap items-center gap-2">
+                      <span className="font-semibold text-teal-800">
+                        {v.concurso_id} • {v.cargo_id}
+                      </span>
+                      <span className="text-slate-300">·</span>
+                      <span className="font-mono font-bold text-slate-800">
+                        Posição declarada: {v.posicao_declarada}º lugar
+                      </span>
+                      {v.nota_declarada && (
+                        <>
+                          <span className="text-slate-300">·</span>
+                          <span className="font-mono text-slate-600">Nota: {v.nota_declarada}</span>
+                        </>
+                      )}
+                    </div>
+
+                    {v.comprovante_info && (
+                      <p className="text-2xs text-slate-500 bg-slate-50 p-2 rounded-lg border border-slate-100 max-w-xl">
+                        <strong>Comprovante / Referência:</strong> {v.comprovante_info}
+                      </p>
+                    )}
+                  </div>
+
+                  {v.status === 'pendente' && (
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => handleRejeitarVinculacao(v.id)}
+                        className="px-3.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                      >
+                        Indeferir
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleAprovarVinculacao(v)}
+                        className="px-4 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1 shadow-xs"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        <span>Homologar Aprovado</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* ============================================================== */}
+      {/* ABA 4: CAIXA DE ENTRADA / FALE COM O ADMIN                     */}
+      {/* ============================================================== */}
+      {abaAdmin === 'contatos' && (
+        <section className="space-y-6">
+          <div className="border-b border-slate-200 pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <h2 className="text-xl font-bold font-serif text-slate-900">
+                Caixa de Entrada • Mensagens dos Concurseiros
               </h2>
-              <p className="text-xs text-slate-500 mt-1">
-                Envie a planilha de aprovados fornecida pela banca ou órgão. O leitor processa as notas, cotas e ordem de convocação e vincula estritamente ao concurso e cargo escolhidos.
+              <p className="text-xs text-slate-500">
+                Solicitações de inclusão de novos certames com nome, ano e colocação, dúvidas de posse e suporte.
               </p>
             </div>
+          </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  1. Concurso de Destino:
-                </label>
-                <select
-                  value={importConcursoId}
-                  onChange={(e) => setImportConcursoId(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-[#2DD4AA]"
+          {contatos.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center text-xs text-slate-400 card-shadow">
+              Nenhuma mensagem recebida na caixa de entrada.
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {contatos.map((msg) => (
+                <div
+                  key={msg.id}
+                  className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 card-shadow space-y-3"
                 >
+                  <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 border-b border-slate-100 pb-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-xs text-teal-800 bg-teal-50 px-2.5 py-0.5 rounded-md border border-teal-200">
+                          {msg.motivo_label}
+                        </span>
+                        <span className="text-2xs font-mono text-slate-400">{msg.data_envio}</span>
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+                            msg.status === 'aberto'
+                              ? 'bg-amber-100 text-amber-900'
+                              : msg.status === 'respondido'
+                              ? 'bg-emerald-100 text-emerald-900'
+                              : 'bg-slate-100 text-slate-700'
+                          }`}
+                        >
+                          {msg.status}
+                        </span>
+                      </div>
+                      <h3 className="font-bold text-sm text-slate-900 mt-1">
+                        De: {msg.usuario_nome} ({msg.usuario_email})
+                      </h3>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      {msg.status === 'aberto' && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRespostaContatoId(msg.id);
+                            setRespostaTexto('');
+                          }}
+                          className="px-3.5 py-1.5 bg-[#07192B] hover:bg-[#0C2640] text-[#2DD4AA] font-bold text-xs rounded-xl transition-all cursor-pointer shadow-xs"
+                        >
+                          Responder
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => contactStore.arquivarMensagem(msg.id)}
+                        className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl"
+                      >
+                        Arquivar
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Detalhes de Solicitação de Inclusão de Novo Concurso */}
+                  {msg.concurso_nome && (
+                    <div className="p-3 bg-teal-50/40 border border-teal-200 rounded-xl grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                      <div>
+                        <span className="text-2xs font-bold uppercase text-slate-400 block">Concurso</span>
+                        <span className="font-bold text-slate-800">{msg.concurso_nome}</span>
+                      </div>
+                      <div>
+                        <span className="text-2xs font-bold uppercase text-slate-400 block">Ano</span>
+                        <span className="font-mono text-slate-800">{msg.ano_concurso || '2024'}</span>
+                      </div>
+                      <div>
+                        <span className="text-2xs font-bold uppercase text-slate-400 block">Cargo Aprovado</span>
+                        <span className="text-slate-800">{msg.cargo_nome || '-'}</span>
+                      </div>
+                      <div>
+                        <span className="text-2xs font-bold uppercase text-slate-400 block">Classificação</span>
+                        <span className="font-mono text-teal-800 font-bold">{msg.classificacao || '-'}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  <p className="text-xs text-slate-700 leading-relaxed bg-slate-50 p-3 rounded-xl border border-slate-100 whitespace-pre-line font-medium">
+                    {msg.mensagem}
+                  </p>
+
+                  {/* Resposta do Administrador (se houver) */}
+                  {msg.resposta_admin && (
+                    <div className="p-3 bg-emerald-50/60 border border-emerald-200 rounded-xl space-y-1 text-xs">
+                      <span className="font-bold text-emerald-900 block text-2xs uppercase">
+                        Sua Resposta ({msg.data_resposta}):
+                      </span>
+                      <p className="text-emerald-950 leading-relaxed">{msg.resposta_admin}</p>
+                    </div>
+                  )}
+
+                  {/* Formulário de Resposta Aberto */}
+                  {respostaContatoId === msg.id && (
+                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                      <label className="block text-2xs font-bold text-slate-700 uppercase">
+                        Escrever Resposta para o Candidato:
+                      </label>
+                      <textarea
+                        rows={3}
+                        value={respostaTexto}
+                        onChange={(e) => setRespostaTexto(e.target.value)}
+                        placeholder="Escreva a orientação oficial..."
+                        className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs focus:outline-hidden"
+                      />
+                      <div className="flex justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setRespostaContatoId(null)}
+                          className="px-3 py-1.5 text-xs text-slate-600 hover:text-slate-900"
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleEnviarRespostaContato(msg.id)}
+                          className="px-4 py-1.5 bg-[#07192B] text-[#2DD4AA] text-xs font-bold rounded-xl cursor-pointer"
+                        >
+                          Enviar Resposta
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* ============================================================== */}
+      {/* ABA 5: DISPARADOR DE NOTIFICAÇÕES INTERNAS                     */}
+      {/* ============================================================== */}
+      {abaAdmin === 'notificacoes' && (
+        <section className="space-y-6">
+          <div className="border-b border-slate-200 pb-3">
+            <h2 className="text-xl font-bold font-serif text-slate-900">
+              Central de Notificações Internas do Portal
+            </h2>
+            <p className="text-xs text-slate-500">
+              Dispare avisos no ícone de sino do portal otimizados em broadcast único para não duplicar registros no banco.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            {/* Formulário de Disparo */}
+            <form
+              onSubmit={handleDispararNotificacao}
+              className="lg:col-span-5 bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 card-shadow space-y-3.5 text-xs"
+            >
+              <h3 className="font-bold text-sm text-slate-900 font-serif">Nova Notificação Broadcast</h3>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Concurso Alvo:</label>
+                <select
+                  value={notifConcursoId}
+                  onChange={(e) => setNotifConcursoId(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl"
+                >
+                  <option value="todos">Todos os Concursos (Geral)</option>
                   {concursos.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.nome} ({c.orgao})
@@ -789,13 +1025,113 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  2. Cargo Específico:
-                </label>
+                <label className="block font-semibold text-slate-700 mb-1">Tipo de Aviso:</label>
+                <select
+                  value={notifTipo}
+                  onChange={(e) => setNotifTipo(e.target.value as any)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl"
+                >
+                  <option value="convocacao">Convocação / Novo Lote</option>
+                  <option value="cronograma">Etapa do Cronograma</option>
+                  <option value="documento">Edital / Documento Publicado</option>
+                  <option value="comunicado">Comunicado Oficial / PL</option>
+                  <option value="geral">Geral</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Título da Notificação:</label>
+                <input
+                  type="text"
+                  placeholder="Ex: Convocação do 2º Lote Publicada"
+                  value={notifTitulo}
+                  onChange={(e) => setNotifTitulo(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-bold"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Mensagem do Alerta:</label>
+                <textarea
+                  rows={3}
+                  placeholder="Descreva o conteúdo do comunicado para os concurseiros..."
+                  value={notifMensagem}
+                  onChange={(e) => setNotifMensagem(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl leading-relaxed"
+                  required
+                />
+              </div>
+
+              <div className="pt-2">
+                <button
+                  type="submit"
+                  className="w-full py-2.5 bg-[#07192B] hover:bg-[#0C2640] text-[#2DD4AA] font-bold rounded-xl transition-all cursor-pointer shadow-sm flex items-center justify-center gap-2"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  <span>Publicar Notificação no Portal</span>
+                </button>
+              </div>
+            </form>
+
+            {/* Histórico de Notificações Publicadas */}
+            <div className="lg:col-span-7 bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 card-shadow space-y-3">
+              <h3 className="font-bold text-sm text-slate-900 font-serif">
+                Avisos Ativos no Sino ({notificacoes.length})
+              </h3>
+              <div className="max-h-[460px] overflow-y-auto space-y-2.5 divide-y divide-slate-100">
+                {notificacoes.map((item) => (
+                  <div key={item.id} className="pt-2.5 first:pt-0">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-xs text-slate-800">{item.titulo}</span>
+                      <span className="text-2xs font-mono text-slate-400">{item.data_hora}</span>
+                    </div>
+                    <p className="text-xs text-slate-600 mt-1 leading-relaxed">{item.mensagem}</p>
+                    <span className="text-[10px] font-mono text-teal-700 font-semibold block mt-1">
+                      Destino: {item.concurso_id || 'Global'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* ============================================================== */}
+      {/* ABA 6: IMPORTAÇÃO DE PLANILHAS (XLSX / CSV)                    */}
+      {/* ============================================================== */}
+      {abaAdmin === 'importar' && (
+        <section className="space-y-6">
+          <div className="bg-white rounded-2xl p-6 sm:p-8 border border-slate-200 card-shadow space-y-4">
+            <h2 className="text-xl font-bold font-serif text-slate-900">
+              Importação em Lote de Listas Oficiais
+            </h2>
+            <p className="text-xs text-slate-500">
+              Envie arquivos Excel (.xlsx) ou CSV com as colunas de classificação, nome, nota e cotas.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Concurso:</label>
+                <select
+                  value={importConcursoId}
+                  onChange={(e) => setImportConcursoId(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs"
+                >
+                  {concursos.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.nome}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Cargo:</label>
                 <select
                   value={importCargoId}
                   onChange={(e) => setImportCargoId(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-[#2DD4AA]"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs"
                 >
                   {concursos
                     .find((c) => c.id === importConcursoId)
@@ -808,263 +1144,65 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  3. Arquivo (.xlsx, .xls ou .csv):
-                </label>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Arquivo:</label>
                 <input
                   type="file"
                   accept=".xlsx, .xls, .csv"
-                  onChange={handleUploadArquivoExcel}
-                  className="block w-full text-xs text-slate-500 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-[#07192B] file:text-white hover:file:bg-[#0C2640] cursor-pointer border border-slate-300 rounded-xl bg-slate-50 p-1"
+                  className="block w-full text-xs text-slate-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-[#07192B] file:text-white border border-slate-300 rounded-xl bg-slate-50 p-1"
                 />
               </div>
             </div>
-
-            {/* Preview da Tabela */}
-            {previewPlanilha.length > 0 && (
-              <div className="space-y-4 pt-4 border-t border-slate-100">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-900">
-                    Amostra de registros de: <strong>{nomeArquivo}</strong>
-                  </span>
-                  <button
-                    type="button"
-                    onClick={handleSincronizarPlanilha}
-                    className="px-5 py-2.5 rounded-xl bg-[#2DD4AA] hover:bg-[#20BE96] text-slate-950 font-extrabold text-xs shadow-md cursor-pointer flex items-center gap-2"
-                  >
-                    <span>🚀</span>
-                    <span>Salvar &amp; Sincronizar Candidatos no Cargo</span>
-                  </button>
-                </div>
-
-                <div className="overflow-x-auto border border-slate-200 rounded-xl">
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-slate-50 text-2xs uppercase tracking-wider text-slate-600 font-bold border-b border-slate-200">
-                      <tr>
-                        <th className="py-2.5 px-3">Class.</th>
-                        <th className="py-2.5 px-3">Nome</th>
-                        <th className="py-2.5 px-3">Cota</th>
-                        <th className="py-2.5 px-3">Nota Final</th>
-                        <th className="py-2.5 px-3">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {previewPlanilha.map((p, idx) => (
-                        <tr key={idx} className="hover:bg-slate-50">
-                          <td className="py-2 px-3 font-mono font-bold text-slate-900">
-                            {p.posicao}º
-                          </td>
-                          <td className="py-2 px-3 font-bold text-slate-800">{p.nome}</td>
-                          <td className="py-2 px-3">{p.cota}</td>
-                          <td className="py-2 px-3 font-mono">{p.nota_final}</td>
-                          <td className="py-2 px-3 text-emerald-700 font-bold">{p.status}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
           </div>
         </section>
       )}
 
       {/* ============================================================== */}
-      {/* ABA 3: CANDIDATOS & AUDITORIA                                  */}
-      {/* ============================================================== */}
-      {abaAdmin === 'candidatos' && (
-        <section className="space-y-6">
-          <div className="bg-white rounded-2xl p-6 sm:p-8 border border-slate-200 card-shadow space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
-              <div>
-                <h2 className="text-lg font-bold font-serif text-slate-900">
-                  Auditoria &amp; Controle de Manifestações
-                </h2>
-                <p className="text-xs text-slate-500">
-                  Acompanhamento de cadastros, bloqueios de intenção e solicitações de alteração.
-                </p>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => onNavigate('lote')}
-                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold rounded-xl transition-colors cursor-pointer"
-              >
-                Abrir Simulador de Lotes TJRS →
-              </button>
-            </div>
-
-            <p className="text-xs text-slate-600 leading-relaxed">
-              O gerenciamento detalhado de respostas de candidatos do lote TJRS (como intenção de assumir, desistência, comarcas preferidas e dados cadastrais) está sincronizado em tempo real no simulador de lotes.
-            </p>
-          </div>
-        </section>
-      )}
-
-      {/* ============================================================== */}
-      {/* ABA 4: CENTRAL DE PERGUNTAS FREQUENTES (FAQ)                   */}
+      {/* ABA 7: CENTRAL DE PERGUNTAS FREQUENTES (FAQ)                   */}
       {/* ============================================================== */}
       {abaAdmin === 'faq' && (
         <section className="space-y-6">
-          {/* Header e Estatísticas do FAQ */}
           <div className="bg-white rounded-2xl p-6 sm:p-8 border border-slate-200 card-shadow flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div className="space-y-1">
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-teal-50 text-teal-800 border border-teal-200">
-                <Sparkles className="w-3.5 h-3.5 text-teal-600" />
-                <span>Base de Conhecimento Oficial</span>
-              </div>
-              <h2 className="text-xl font-bold font-serif text-slate-900">
-                Perguntas Frequentes &amp; Orientações Cadastradas
-              </h2>
+            <div>
+              <h2 className="text-xl font-bold font-serif text-slate-900">FAQ e Base de Conhecimento</h2>
               <p className="text-xs text-slate-500">
-                Tire as dúvidas dos candidatos antes das audiências. Cadastre orientações sobre posse, salário, comarcas e recursos.
+                Orientações sobre comarcas, remuneração, teletrabalho e posse.
               </p>
             </div>
+            <button
+              type="button"
+              onClick={() => {
+                setFaqPergunta('');
+                setFaqResposta('');
+                setModalNovoFaqAberto(true);
+              }}
+              className="px-4 py-2 bg-[#07192B] text-[#2DD4AA] font-bold text-xs rounded-xl shadow-xs"
+            >
+              + Adicionar Pergunta
+            </button>
+          </div>
 
-            <div className="flex items-center gap-3">
-              <div className="text-right">
-                <span className="text-2xl font-mono font-extrabold text-slate-900">{faqs.length}</span>
-                <span className="block text-[11px] text-slate-400">perguntas ativas</span>
+          <div className="space-y-3">
+            {faqs.map((f) => (
+              <div key={f.id} className="bg-white rounded-2xl border border-slate-200 p-4 space-y-2 card-shadow">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-xs text-slate-900">{f.pergunta}</span>
+                  <span className="text-[10px] bg-slate-100 text-slate-700 px-2 py-0.5 rounded font-mono">
+                    {f.categoria}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-600 leading-relaxed">{f.resposta}</p>
               </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setFaqPergunta('');
-                  setFaqResposta('');
-                  setFaqTags('');
-                  setFaqDestaque(false);
-                  setFaqCategoria('Remuneração e Benefícios');
-                  setFaqConcursoId(concursos[0]?.id || 'tjrs_2024');
-                  setModalNovoFaqAberto(true);
-                }}
-                className="bg-[#07192B] hover:bg-[#0C2640] text-white px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-sm transition-colors"
-              >
-                <Plus className="w-4 h-4 text-[#2DD4AA]" />
-                <span>Adicionar Dúvida</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Campo de Busca de Dúvidas */}
-          <div className="bg-white rounded-2xl p-4 border border-slate-200 card-shadow">
-            <div className="relative max-w-md">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                value={buscaFaq}
-                onChange={(e) => setBuscaFaq(e.target.value)}
-                placeholder="Buscar nas dúvidas e respostas cadastradas..."
-                className="w-full pl-10 pr-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-[#2DD4AA]"
-              />
-            </div>
-          </div>
-
-          {/* Lista de FAQs Cadastrados */}
-          <div className="space-y-3.5">
-            {faqs
-              .filter((f) => {
-                if (!buscaFaq.trim()) return true;
-                const b = buscaFaq.toLowerCase();
-                return (
-                  f.pergunta.toLowerCase().includes(b) ||
-                  f.resposta.toLowerCase().includes(b) ||
-                  f.categoria.toLowerCase().includes(b)
-                );
-              })
-              .map((faq) => {
-                const conc = concursos.find((c) => c.id === faq.concurso_id);
-                return (
-                  <div
-                    key={faq.id}
-                    className="bg-white rounded-2xl p-5 border border-slate-200 card-shadow hover:border-slate-300 transition-all space-y-3"
-                  >
-                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-                      <div className="space-y-1 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="px-2.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700">
-                            {faq.categoria}
-                          </span>
-                          <span className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-teal-50 text-teal-800 border border-teal-200">
-                            {conc ? conc.orgao : 'Geral / Todos os Concursos'}
-                          </span>
-                          {faq.destaque && (
-                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200 flex items-center gap-1">
-                              <Bookmark className="w-3 h-3 fill-amber-500 text-amber-500" />
-                              Destaque
-                            </span>
-                          )}
-                        </div>
-                        <h3 className="font-bold text-slate-900 text-sm sm:text-base">
-                          {faq.pergunta}
-                        </h3>
-                      </div>
-
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => handleAlternarDestaqueFaq(faq)}
-                          className={`p-2 rounded-xl text-xs font-semibold flex items-center gap-1 border transition-colors cursor-pointer ${
-                            faq.destaque
-                              ? 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100'
-                              : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
-                          }`}
-                          title="Alternar Destaque"
-                        >
-                          <Bookmark className={`w-3.5 h-3.5 ${faq.destaque ? 'fill-amber-500 text-amber-500' : ''}`} />
-                          <span className="hidden sm:inline">{faq.destaque ? 'Em Destaque' : 'Destacar'}</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => abrirEdicaoFaq(faq)}
-                          className="p-2 rounded-xl text-xs font-semibold bg-slate-50 text-slate-700 border border-slate-200 hover:bg-slate-100 flex items-center gap-1 transition-colors cursor-pointer"
-                          title="Editar Dúvida"
-                        >
-                          <Pencil className="w-3.5 h-3.5 text-slate-500" />
-                          <span className="hidden sm:inline">Editar</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => handleExcluirFaq(faq.id)}
-                          className="p-2 rounded-xl text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 flex items-center gap-1 transition-colors cursor-pointer"
-                          title="Excluir Dúvida"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-
-                    <p className="text-xs text-slate-600 leading-relaxed bg-slate-50 p-3.5 rounded-xl border border-slate-100 whitespace-pre-line">
-                      {faq.resposta}
-                    </p>
-
-                    {faq.tags && faq.tags.length > 0 && (
-                      <div className="flex flex-wrap items-center gap-1.5 pt-1 text-[11px] text-slate-400">
-                        <span>Tags:</span>
-                        {faq.tags.map((t) => (
-                          <span key={t} className="px-2 py-0.5 rounded bg-slate-100 text-slate-600 font-mono text-[10px]">
-                            #{t}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+            ))}
           </div>
         </section>
       )}
 
-      {/* MODAL 1: CADASTRAR NOVO CONCURSO */}
+      {/* MODAL NOVO CONCURSO */}
       {modalNovoConcursoAberto && (
         <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div className="flex items-center gap-2">
-                <span className="text-xl">🏛️</span>
-                <h3 className="font-bold text-slate-900 text-base">Cadastrar Novo Concurso</h3>
-              </div>
+              <h3 className="font-bold text-slate-900 text-base font-serif">Cadastrar Novo Concurso</h3>
               <button
                 type="button"
                 onClick={() => setModalNovoConcursoAberto(false)}
@@ -1074,111 +1212,116 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               </button>
             </div>
 
-            <form onSubmit={handleSalvarConcurso} className="space-y-3.5">
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!formNome.trim() || !formOrgao.trim()) return;
+
+                const novo: Concurso = {
+                  id: (formId.trim() || formNome.toLowerCase().replace(/[^a-z0-9]/g, '_')).slice(0, 30),
+                  nome: formNome,
+                  orgao: formOrgao,
+                  ano: formAno,
+                  edital: formEdital,
+                  status: formStatus,
+                  homologado: formStatus === 'Homologado',
+                  regiao: 'Sul',
+                  esfera: 'Estadual',
+                  descricao: formDesc || `Concurso público para provimento de vagas no ${formOrgao}.`,
+                  cargos: [
+                    {
+                      id: formCargoInicial.toLowerCase().replace(/[^a-z0-9]/g, '_'),
+                      nome: formCargoInicial,
+                      nivel: 'Superior',
+                      vagas_imediatas: 10,
+                      tem_cr: true,
+                      ativo: true,
+                    },
+                  ],
+                };
+
+                certamStore.salvarConcurso(novo);
+                reloadData();
+                setModalNovoConcursoAberto(false);
+                showToast('Novo concurso cadastrado com sucesso!');
+              }}
+              className="space-y-3 text-xs"
+            >
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Nome Completo do Concurso:
-                </label>
+                <label className="block font-semibold text-slate-700 mb-1">Nome Completo do Concurso:</label>
                 <input
                   type="text"
-                  required
+                  placeholder="Ex: Tribunal de Justiça de Santa Catarina (TJSC)"
                   value={formNome}
                   onChange={(e) => setFormNome(e.target.value)}
-                  placeholder="ex: Tribunal Regional Federal da 4ª Região"
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-[#2DD4AA]"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl"
+                  required
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Órgão / Sigla:
-                  </label>
+                  <label className="block font-semibold text-slate-700 mb-1">Órgão / Sigla:</label>
                   <input
                     type="text"
-                    required
+                    placeholder="Ex: TJSC"
                     value={formOrgao}
                     onChange={(e) => setFormOrgao(e.target.value)}
-                    placeholder="ex: TRF4"
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-[#2DD4AA]"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl"
+                    required
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    ID / Slug:
-                  </label>
+                  <label className="block font-semibold text-slate-700 mb-1">Ano:</label>
                   <input
                     type="text"
-                    value={formId}
-                    onChange={(e) => setFormId(e.target.value)}
-                    placeholder="ex: trf4_2024"
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono text-slate-800 focus:ring-2 focus:ring-[#2DD4AA]"
+                    value={formAno}
+                    onChange={(e) => setFormAno(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl"
+                    required
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Ano / Edital:</label>
-                  <input
-                    type="text"
-                    value={formEdital}
-                    onChange={(e) => setFormEdital(e.target.value)}
-                    placeholder="Edital 01/2024"
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Status:</label>
+                  <label className="block font-semibold text-slate-700 mb-1">Status:</label>
                   <select
                     value={formStatus}
-                    onChange={(e) => setFormStatus(e.target.value as Concurso['status'])}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800"
+                    onChange={(e) => setFormStatus(e.target.value as any)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl"
                   >
-                    <option value="ativo">Ativo / Em Andamento</option>
+                    <option value="ativo">Em Andamento</option>
                     <option value="Homologado">Homologado</option>
                     <option value="Convocando">Convocando</option>
+                    <option value="Inscrições Abertas">Inscrições Abertas</option>
+                    <option value="previsto">Previsto</option>
                     <option value="encerrado">Encerrado</option>
                   </select>
                 </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Cargo Inicial:</label>
+                  <input
+                    type="text"
+                    value={formCargoInicial}
+                    onChange={(e) => setFormCargoInicial(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl"
+                    required
+                  />
+                </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Primeiro Cargo Cadastrado:
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={formCargoInicial}
-                  onChange={(e) => setFormCargoInicial(e.target.value)}
-                  placeholder="ex: Analista Judiciário - Área Judiciária"
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Descrição:</label>
-                <textarea
-                  rows={2}
-                  value={formDesc}
-                  onChange={(e) => setFormDesc(e.target.value)}
-                  placeholder="Informações gerais do concurso..."
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800"
-                />
-              </div>
-
-              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2.5">
+              <div className="pt-2 flex justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setModalNovoConcursoAberto(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100"
+                  className="px-4 py-2 border border-slate-300 rounded-xl text-slate-600"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl text-xs font-bold bg-[#07192B] hover:bg-[#0C2640] text-white cursor-pointer"
+                  className="px-5 py-2 bg-[#07192B] text-[#2DD4AA] font-bold rounded-xl"
                 >
                   Salvar Concurso
                 </button>
@@ -1188,15 +1331,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         </div>
       )}
 
-      {/* MODAL 2: CADASTRAR CARGO EM CONCURSO EXISTENTE */}
+      {/* MODAL NOVO CARGO */}
       {modalNovoCargoAberto && (
         <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div className="flex items-center gap-2">
-                <span className="text-xl">💼</span>
-                <h3 className="font-bold text-slate-900 text-base">Adicionar Cargo ao Concurso</h3>
-              </div>
+              <h3 className="font-bold text-slate-900 text-base font-serif">Adicionar Cargo ao Concurso</h3>
               <button
                 type="button"
                 onClick={() => setModalNovoCargoAberto(false)}
@@ -1206,47 +1346,44 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               </button>
             </div>
 
-            <form onSubmit={handleSalvarCargo} className="space-y-3.5">
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!formCargoNome.trim()) return;
+                const novoCargo: Cargo = {
+                  id: (formCargoId.trim() || formCargoNome.toLowerCase().replace(/[^a-z0-9]/g, '_')).slice(0, 30),
+                  nome: formCargoNome,
+                  nivel: formCargoNivel,
+                  vagas_imediatas: Number(formCargoVagas) || 0,
+                  tem_cr: formCargoCr,
+                  ativo: true,
+                };
+                certamStore.salvarCargo(concursoAlvoId, novoCargo);
+                reloadData();
+                setModalNovoCargoAberto(false);
+                showToast('Novo cargo adicionado!');
+              }}
+              className="space-y-3 text-xs"
+            >
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Nome do Cargo / Especialidade:
-                </label>
+                <label className="block font-semibold text-slate-700 mb-1">Nome do Cargo:</label>
                 <input
                   type="text"
-                  required
+                  placeholder="Ex: Oficial de Justiça"
                   value={formCargoNome}
-                  onChange={(e) => {
-                    setFormCargoNome(e.target.value);
-                    if (!formCargoId) {
-                      setFormCargoId(e.target.value.toLowerCase().replace(/[^a-z0-9]/g, '_'));
-                    }
-                  }}
-                  placeholder="ex: Oficial de Justiça"
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-[#2DD4AA]"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  ID do Cargo (Slug):
-                </label>
-                <input
-                  type="text"
+                  onChange={(e) => setFormCargoNome(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl"
                   required
-                  value={formCargoId}
-                  onChange={(e) => setFormCargoId(e.target.value)}
-                  placeholder="ex: oficial_de_justica"
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono font-bold text-slate-800 focus:ring-2 focus:ring-[#2DD4AA]"
                 />
               </div>
 
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Nível:</label>
+                  <label className="block font-semibold text-slate-700 mb-1">Nível de Escolaridade:</label>
                   <select
                     value={formCargoNivel}
-                    onChange={(e) => setFormCargoNivel(e.target.value as Cargo['nivel'])}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800"
+                    onChange={(e) => setFormCargoNivel(e.target.value as any)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl"
                   >
                     <option value="Superior">Superior</option>
                     <option value="Médio">Médio</option>
@@ -1256,535 +1393,30 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Vagas:</label>
+                  <label className="block font-semibold text-slate-700 mb-1">Vagas Imediatas:</label>
                   <input
                     type="number"
                     min="0"
                     value={formCargoVagas}
                     onChange={(e) => setFormCargoVagas(Number(e.target.value))}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono font-bold text-slate-800"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-mono"
                   />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">CR:</label>
-                  <select
-                    value={formCargoCr ? 'Sim' : 'Não'}
-                    onChange={(e) => setFormCargoCr(e.target.value === 'Sim')}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800"
-                  >
-                    <option value="Sim">Sim (CR)</option>
-                    <option value="Não">Não</option>
-                  </select>
                 </div>
               </div>
 
-              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2.5">
+              <div className="pt-2 flex justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setModalNovoCargoAberto(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100"
+                  className="px-4 py-2 border border-slate-300 rounded-xl text-slate-600"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl text-xs font-bold bg-[#07192B] hover:bg-[#0C2640] text-white cursor-pointer"
+                  className="px-5 py-2 bg-[#07192B] text-[#2DD4AA] font-bold rounded-xl"
                 >
                   Adicionar Cargo
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Modal Editar Concurso */}
-      {modalEditarConcursoAberto && concursoEditando && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-teal-50 text-teal-700 flex items-center justify-center border border-teal-200">
-                  <Pencil className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-slate-900 text-sm">Editar Concurso</h3>
-                  <p className="text-[11px] text-slate-500">ID: {concursoEditando.id}</p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setModalEditarConcursoAberto(false)}
-                className="w-7 h-7 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-700"
-              >
-                ✕
-              </button>
-            </div>
-
-            <form onSubmit={handleSalvarEdicaoConcurso} className="space-y-3.5">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Nome Completo do Concurso:
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={editConcursoNome}
-                  onChange={(e) => setEditConcursoNome(e.target.value)}
-                  placeholder="ex: Concurso TJRS - Tribunal de Justiça do RS"
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-[#2DD4AA]"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Órgão / Sigla:</label>
-                  <input
-                    type="text"
-                    required
-                    value={editConcursoOrgao}
-                    onChange={(e) => setEditConcursoOrgao(e.target.value)}
-                    placeholder="ex: TJRS"
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Ano:</label>
-                  <input
-                    type="text"
-                    required
-                    value={editConcursoAno}
-                    onChange={(e) => setEditConcursoAno(e.target.value)}
-                    placeholder="ex: 2024"
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Edital:</label>
-                  <input
-                    type="text"
-                    value={editConcursoEdital}
-                    onChange={(e) => setEditConcursoEdital(e.target.value)}
-                    placeholder="ex: Edital 01/2024"
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Status:</label>
-                  <select
-                    value={editConcursoStatus}
-                    onChange={(e) => setEditConcursoStatus(e.target.value as any)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800"
-                  >
-                    <option value="ativo">Ativo (Em Andamento)</option>
-                    <option value="Homologado">Homologado</option>
-                    <option value="Convocando">Convocando</option>
-                    <option value="Inscrições Abertas">Inscrições Abertas</option>
-                    <option value="encerrado">Encerrado</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Descrição:</label>
-                <textarea
-                  rows={3}
-                  value={editConcursoDesc}
-                  onChange={(e) => setEditConcursoDesc(e.target.value)}
-                  placeholder="Informações adicionais do certame..."
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium text-slate-800 focus:ring-2 focus:ring-[#2DD4AA]"
-                />
-              </div>
-
-              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => setModalEditarConcursoAberto(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 rounded-xl text-xs font-bold bg-[#07192B] hover:bg-[#0C2640] text-white flex items-center gap-1.5 cursor-pointer shadow-sm hover:shadow"
-                >
-                  <Check className="w-3.5 h-3.5 text-[#2DD4AA]" />
-                  Salvar Alterações
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Modal Editar Cargo */}
-      {modalEditarCargoAberto && cargoEditando && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-teal-50 text-teal-700 flex items-center justify-center border border-teal-200">
-                  <Pencil className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-slate-900 text-sm">Editar Cargo</h3>
-                  <p className="text-[11px] text-slate-500 font-mono">ID: {cargoEditando.id}</p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setModalEditarCargoAberto(false)}
-                className="w-7 h-7 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-700"
-              >
-                ✕
-              </button>
-            </div>
-
-            <form onSubmit={handleSalvarEdicaoCargo} className="space-y-3.5">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Nome do Cargo:
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={editCargoNome}
-                  onChange={(e) => setEditCargoNome(e.target.value)}
-                  placeholder="ex: Analista Judiciário"
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-[#2DD4AA]"
-                />
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Nível:</label>
-                  <select
-                    value={editCargoNivel}
-                    onChange={(e) => setEditCargoNivel(e.target.value as Cargo['nivel'])}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800"
-                  >
-                    <option value="Superior">Superior</option>
-                    <option value="Médio">Médio</option>
-                    <option value="Técnico">Técnico</option>
-                    <option value="Fundamental">Fundamental</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Vagas:</label>
-                  <input
-                    type="number"
-                    min="0"
-                    value={editCargoVagas}
-                    onChange={(e) => setEditCargoVagas(Number(e.target.value))}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">CR:</label>
-                  <select
-                    value={editCargoCr ? 'Sim' : 'Não'}
-                    onChange={(e) => setEditCargoCr(e.target.value === 'Sim')}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800"
-                  >
-                    <option value="Sim">Sim (CR)</option>
-                    <option value="Não">Não</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Situação / Status:</label>
-                <select
-                  value={editCargoAtivo ? 'ativo' : 'inativo'}
-                  onChange={(e) => setEditCargoAtivo(e.target.value === 'ativo')}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800"
-                >
-                  <option value="ativo">Ativo (visível no portal e simulações)</option>
-                  <option value="inativo">Inativo (ocultar)</option>
-                </select>
-              </div>
-
-              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => setModalEditarCargoAberto(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 rounded-xl text-xs font-bold bg-[#07192B] hover:bg-[#0C2640] text-white flex items-center gap-1.5 cursor-pointer shadow-sm hover:shadow"
-                >
-                  <Check className="w-3.5 h-3.5 text-[#2DD4AA]" />
-                  Salvar Cargo
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL NOVO FAQ */}
-      {modalNovoFaqAberto && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-teal-50 text-teal-700 flex items-center justify-center border border-teal-200">
-                  <HelpCircle className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-slate-900 text-sm">Cadastrar Dúvida / FAQ</h3>
-                  <p className="text-[11px] text-slate-500">Adicione orientações práticas para os candidatos</p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setModalNovoFaqAberto(false)}
-                className="w-7 h-7 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-700"
-              >
-                ✕
-              </button>
-            </div>
-
-            <form onSubmit={handleSalvarNovoFaq} className="space-y-3.5">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Pergunta / Título da Dúvida:
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={faqPergunta}
-                  onChange={(e) => setFaqPergunta(e.target.value)}
-                  placeholder="ex: Qual a remuneração inicial e auxílios?"
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-[#2DD4AA]"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Categoria:</label>
-                  <select
-                    value={faqCategoria}
-                    onChange={(e) => setFaqCategoria(e.target.value as FaqCategoria)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800"
-                  >
-                    <option value="Remuneração e Benefícios">Remuneração e Benefícios</option>
-                    <option value="Escolha de Lotação">Escolha de Lotação</option>
-                    <option value="Posse e Documentos">Posse e Documentos</option>
-                    <option value="Carreira e Teletrabalho">Carreira e Teletrabalho</option>
-                    <option value="Recursos e Classificação">Recursos e Classificação</option>
-                    <option value="Geral">Geral</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Concurso:</label>
-                  <select
-                    value={faqConcursoId}
-                    onChange={(e) => setFaqConcursoId(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800"
-                  >
-                    <option value="geral">Geral (Todos os Concursos)</option>
-                    {concursos.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.orgao} - {c.nome}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Resposta Completa:</label>
-                <textarea
-                  rows={4}
-                  required
-                  value={faqResposta}
-                  onChange={(e) => setFaqResposta(e.target.value)}
-                  placeholder="Explique com detalhes e precisão as orientações, normas do tribunal e dicas..."
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:ring-2 focus:ring-[#2DD4AA]"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Tags de Busca (separadas por vírgula):
-                </label>
-                <input
-                  type="text"
-                  value={faqTags}
-                  onChange={(e) => setFaqTags(e.target.value)}
-                  placeholder="ex: salário, benefícios, pós-graduação"
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium text-slate-800"
-                />
-              </div>
-
-              <div className="flex items-center gap-2 pt-1">
-                <input
-                  type="checkbox"
-                  id="faqNovoDestaque"
-                  checked={faqDestaque}
-                  onChange={(e) => setFaqDestaque(e.target.checked)}
-                  className="rounded text-teal-600 focus:ring-[#2DD4AA]"
-                />
-                <label htmlFor="faqNovoDestaque" className="text-xs font-semibold text-slate-700 cursor-pointer">
-                  Destacar no topo da central de FAQ (Mais Acessada)
-                </label>
-              </div>
-
-              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => setModalNovoFaqAberto(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 rounded-xl text-xs font-bold bg-[#07192B] hover:bg-[#0C2640] text-white flex items-center gap-1.5 cursor-pointer shadow-sm hover:shadow"
-                >
-                  <Check className="w-3.5 h-3.5 text-[#2DD4AA]" />
-                  Cadastrar Dúvida
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL EDITAR FAQ */}
-      {modalEditarFaqAberto && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-teal-50 text-teal-700 flex items-center justify-center border border-teal-200">
-                  <Pencil className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-slate-900 text-sm">Editar Pergunta do FAQ</h3>
-                  <p className="text-[11px] text-slate-500 font-mono">ID: {faqEditandoId}</p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setModalEditarFaqAberto(false)}
-                className="w-7 h-7 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-700"
-              >
-                ✕
-              </button>
-            </div>
-
-            <form onSubmit={handleSalvarEdicaoFaq} className="space-y-3.5">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Pergunta / Título da Dúvida:
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={faqPergunta}
-                  onChange={(e) => setFaqPergunta(e.target.value)}
-                  placeholder="ex: Qual a remuneração inicial e auxílios?"
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-[#2DD4AA]"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Categoria:</label>
-                  <select
-                    value={faqCategoria}
-                    onChange={(e) => setFaqCategoria(e.target.value as FaqCategoria)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800"
-                  >
-                    <option value="Remuneração e Benefícios">Remuneração e Benefícios</option>
-                    <option value="Escolha de Lotação">Escolha de Lotação</option>
-                    <option value="Posse e Documentos">Posse e Documentos</option>
-                    <option value="Carreira e Teletrabalho">Carreira e Teletrabalho</option>
-                    <option value="Recursos e Classificação">Recursos e Classificação</option>
-                    <option value="Geral">Geral</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Concurso:</label>
-                  <select
-                    value={faqConcursoId}
-                    onChange={(e) => setFaqConcursoId(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800"
-                  >
-                    <option value="geral">Geral (Todos os Concursos)</option>
-                    {concursos.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.orgao} - {c.nome}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Resposta Completa:</label>
-                <textarea
-                  rows={4}
-                  required
-                  value={faqResposta}
-                  onChange={(e) => setFaqResposta(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:ring-2 focus:ring-[#2DD4AA]"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Tags de Busca (separadas por vírgula):
-                </label>
-                <input
-                  type="text"
-                  value={faqTags}
-                  onChange={(e) => setFaqTags(e.target.value)}
-                  placeholder="ex: salário, benefícios, pós-graduação"
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium text-slate-800"
-                />
-              </div>
-
-              <div className="flex items-center gap-2 pt-1">
-                <input
-                  type="checkbox"
-                  id="faqEditarDestaque"
-                  checked={faqDestaque}
-                  onChange={(e) => setFaqDestaque(e.target.checked)}
-                  className="rounded text-teal-600 focus:ring-[#2DD4AA]"
-                />
-                <label htmlFor="faqEditarDestaque" className="text-xs font-semibold text-slate-700 cursor-pointer">
-                  Destacar no topo da central de FAQ (Mais Acessada)
-                </label>
-              </div>
-
-              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => setModalEditarFaqAberto(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 rounded-xl text-xs font-bold bg-[#07192B] hover:bg-[#0C2640] text-white flex items-center gap-1.5 cursor-pointer shadow-sm hover:shadow"
-                >
-                  <Check className="w-3.5 h-3.5 text-[#2DD4AA]" />
-                  Salvar Alterações
                 </button>
               </div>
             </form>

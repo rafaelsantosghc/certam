@@ -3,6 +3,8 @@ import { Candidato } from '../types';
 export const CANDIDATOS_ANALISTA_TJRS: Candidato[] = [
   {
     id: 'cand-001',
+    concurso_id: 'tjrs_2024',
+    cargo_id: 'analista_judiciario',
     posicao: 1,
     nome: 'Rafael Santos da Silva',
     cota: 'Ampla',
@@ -12,7 +14,8 @@ export const CANDIDATOS_ANALISTA_TJRS: Candidato[] = [
     status: 'Convocado Titular',
     lotacao_atual: 'Porto Alegre',
     comarca_desejada_1: 'Porto Alegre',
-    cpf: '***.451.980-**',
+    cpf: '012.345.670-89',
+    data_nascimento: '1992-04-15',
     email: 'rafasms0@hotmail.com',
     whatsapp: '(51) 99872-3341',
     ordem_nomeacao: 1,
@@ -21,6 +24,8 @@ export const CANDIDATOS_ANALISTA_TJRS: Candidato[] = [
   },
   {
     id: 'cand-002',
+    concurso_id: 'tjrs_2024',
+    cargo_id: 'analista_judiciario',
     posicao: 2,
     nome: 'Mariana Duarte Becker',
     cota: 'Ampla',
@@ -30,7 +35,8 @@ export const CANDIDATOS_ANALISTA_TJRS: Candidato[] = [
     status: 'Convocado Titular',
     lotacao_atual: 'Canoas',
     comarca_desejada_1: 'Porto Alegre',
-    cpf: '***.812.300-**',
+    cpf: '812.300.450-11',
+    data_nascimento: '1994-08-20',
     email: 'mariana.becker@gmail.com',
     whatsapp: '(51) 98122-4455',
     ordem_nomeacao: 2,
@@ -38,6 +44,8 @@ export const CANDIDATOS_ANALISTA_TJRS: Candidato[] = [
   },
   {
     id: 'cand-003',
+    concurso_id: 'tjrs_2024',
+    cargo_id: 'analista_judiciario',
     posicao: 3,
     nome: 'Carlos Eduardo Meneghetti',
     cota: 'Ampla',
@@ -47,7 +55,8 @@ export const CANDIDATOS_ANALISTA_TJRS: Candidato[] = [
     status: 'Convocado Titular',
     lotacao_atual: 'Caxias do Sul',
     comarca_desejada_1: 'Caxias do Sul',
-    cpf: '***.294.110-**',
+    cpf: '294.110.880-33',
+    data_nascimento: '1989-11-05',
     email: 'carlos.meneghetti@adv.oabr.org.br',
     whatsapp: '(54) 99655-1209',
     ordem_nomeacao: 3,
@@ -55,6 +64,8 @@ export const CANDIDATOS_ANALISTA_TJRS: Candidato[] = [
   },
   {
     id: 'cand-004',
+    concurso_id: 'tjrs_2024',
+    cargo_id: 'analista_judiciario',
     posicao: 4,
     nome: 'Luciana Ferreira de Oliveira',
     cota: 'PPP',
@@ -64,7 +75,8 @@ export const CANDIDATOS_ANALISTA_TJRS: Candidato[] = [
     status: 'Convocado Titular',
     lotacao_atual: 'Pelotas',
     comarca_desejada_1: 'Pelotas',
-    cpf: '***.932.740-**',
+    cpf: '932.740.150-66',
+    data_nascimento: '1995-02-18',
     email: 'luciana.oliveira@yahoo.com.br',
     whatsapp: '(53) 98411-8890',
     ordem_nomeacao: 4,
@@ -72,6 +84,8 @@ export const CANDIDATOS_ANALISTA_TJRS: Candidato[] = [
   },
   {
     id: 'cand-005',
+    concurso_id: 'tjrs_2024',
+    cargo_id: 'analista_judiciario',
     posicao: 5,
     nome: 'Guilherme Augusto Ramos',
     cota: 'Ampla',
@@ -81,7 +95,8 @@ export const CANDIDATOS_ANALISTA_TJRS: Candidato[] = [
     status: 'Convocado Titular',
     lotacao_atual: 'Santa Maria',
     comarca_desejada_1: 'Santa Maria',
-    cpf: '***.118.900-**',
+    cpf: '118.900.540-77',
+    data_nascimento: '1991-07-30',
     email: 'guilherme.ramos@hotmail.com',
     whatsapp: '(55) 99182-3401',
     ordem_nomeacao: 5,
@@ -89,6 +104,8 @@ export const CANDIDATOS_ANALISTA_TJRS: Candidato[] = [
   },
   {
     id: 'cand-006',
+    concurso_id: 'tjrs_2024',
+    cargo_id: 'analista_judiciario',
     posicao: 6,
     nome: 'Patrícia Schneider Fagundes',
     cota: 'PCD',
@@ -98,7 +115,8 @@ export const CANDIDATOS_ANALISTA_TJRS: Candidato[] = [
     status: 'Convocado Titular',
     lotacao_atual: 'Passo Fundo',
     comarca_desejada_1: 'Passo Fundo',
-    cpf: '***.445.620-**',
+    cpf: '445.620.330-99',
+    data_nascimento: '1990-09-12',
     email: 'patricia.schneider@gmail.com',
     whatsapp: '(54) 99912-7744',
     ordem_nomeacao: 6,
@@ -106,6 +124,8 @@ export const CANDIDATOS_ANALISTA_TJRS: Candidato[] = [
   },
   {
     id: 'cand-007',
+    concurso_id: 'tjrs_2024',
+    cargo_id: 'analista_judiciario',
     posicao: 7,
     nome: 'Rodrigo Medeiros Barbosa',
     cota: 'Ampla',
@@ -115,238 +135,98 @@ export const CANDIDATOS_ANALISTA_TJRS: Candidato[] = [
     status: 'Aguardando',
     lotacao_atual: undefined,
     comarca_desejada_1: 'Porto Alegre',
-    cpf: '***.331.090-**',
+    cpf: '331.090.870-22',
+    data_nascimento: '1993-01-25',
     email: 'rodrigo.barbosa@outlook.com',
     whatsapp: '(51) 98223-9912',
-    ordem_nomeacao: 7,
     escolhas_comarcas: ['Porto Alegre', 'Gravataí', 'Viamão']
   },
   {
     id: 'cand-008',
+    concurso_id: 'tjrs_2024',
+    cargo_id: 'analista_judiciario',
     posicao: 8,
-    nome: 'Juliana Pires Castilhos',
+    nome: 'Luciana Martins Silveira',
     cota: 'Ampla',
     nota_final: 90.40,
-    notas_disciplinas: { portugues: 27.0, direito: 45.5, informatica: 9.5, especificos: 8.4 },
+    notas_disciplinas: { portugues: 27.0, direito: 46.0, informatica: 9.0, especificos: 8.4 },
     intencao: 'Sim',
-    status: 'Convocado Titular',
-    lotacao_atual: 'Novo Hamburgo',
+    status: 'Aguardando',
+    lotacao_atual: undefined,
     comarca_desejada_1: 'Novo Hamburgo',
-    cpf: '***.729.830-**',
-    email: 'juliana.castilhos@ufrgs.br',
-    whatsapp: '(51) 99120-4389',
-    ordem_nomeacao: 8,
-    escolhas_comarcas: ['Novo Hamburgo', 'São Leopoldo', 'Campo Bom', 'Porto Alegre']
-  },
+    cpf: '772.109.840-55',
+    data_nascimento: '1996-06-14',
+    email: 'luciana.m@gmail.com',
+    whatsapp: '(51) 99778-1122',
+    escolhas_comarcas: ['Novo Hamburgo', 'São Leopoldo', 'Campo Bom']
+  }
+];
+
+export const CANDIDATOS_ANALISTA_ADM_TJRS: Candidato[] = [
   {
-    id: 'cand-009',
-    posicao: 9,
-    nome: 'Felipe Antunes Zimmermann',
+    id: 'cand-adm-001',
+    concurso_id: 'tjrs_2024',
+    cargo_id: 'analista_administrativo',
+    posicao: 1,
+    nome: 'Fernando Silveira Castro',
     cota: 'Ampla',
-    nota_final: 89.95,
-    notas_disciplinas: { portugues: 26.0, direito: 46.0, informatica: 9.5, especificos: 8.45 },
-    intencao: 'Não',
-    status: 'Desistência',
-    lotacao_atual: undefined,
+    nota_final: 93.50,
+    notas_disciplinas: { portugues: 29.0, direito: 46.5, informatica: 9.5, especificos: 8.5 },
+    intencao: 'Sim',
+    status: 'Convocado Titular',
     comarca_desejada_1: 'Porto Alegre',
-    cpf: '***.604.220-**',
-    email: 'felipe.zimmermann@mp.rs.gov.br',
-    whatsapp: '(51) 98701-1123',
-    ordem_nomeacao: 9,
-    escolhas_comarcas: ['Porto Alegre']
+    cpf: '554.128.990-14',
+    data_nascimento: '1988-03-22',
+    email: 'fernando.castro@gmail.com',
+    whatsapp: '(51) 99112-8877',
+    ordem_nomeacao: 1,
+    escolhas_comarcas: ['Porto Alegre', 'Canoas', 'São Leopoldo']
   },
   {
-    id: 'cand-010',
-    posicao: 10,
-    nome: 'Beatriz Martins Alencastro',
+    id: 'cand-adm-002',
+    concurso_id: 'tjrs_2024',
+    cargo_id: 'analista_administrativo',
+    posicao: 2,
+    nome: 'Juliana Costa e Silva',
+    cota: 'Ampla',
+    nota_final: 92.70,
+    notas_disciplinas: { portugues: 28.5, direito: 46.0, informatica: 9.8, especificos: 8.4 },
+    intencao: 'Sim',
+    status: 'Convocado Titular',
+    comarca_desejada_1: 'Porto Alegre',
+    cpf: '663.210.880-92',
+    data_nascimento: '1992-12-10',
+    email: 'juliana.costa@hotmail.com',
+    whatsapp: '(51) 98455-2233',
+    ordem_nomeacao: 2,
+    escolhas_comarcas: ['Porto Alegre', 'Canoas']
+  },
+  {
+    id: 'cand-adm-003',
+    concurso_id: 'tjrs_2024',
+    cargo_id: 'analista_administrativo',
+    posicao: 3,
+    nome: 'Lucas Gabriel Pires',
     cota: 'PPP',
-    nota_final: 89.60,
-    notas_disciplinas: { portugues: 27.5, direito: 44.5, informatica: 9.2, especificos: 8.4 },
+    nota_final: 91.80,
+    notas_disciplinas: { portugues: 27.5, direito: 46.0, informatica: 9.5, especificos: 8.8 },
     intencao: 'Sim',
     status: 'Convocado Titular',
-    lotacao_atual: 'Santa Cruz do Sul',
-    comarca_desejada_1: 'Santa Cruz do Sul',
-    cpf: '***.811.590-**',
-    email: 'beatriz.alencastro@gmail.com',
-    whatsapp: '(51) 99543-0912',
-    ordem_nomeacao: 10,
-    escolhas_comarcas: ['Santa Cruz do Sul', 'Lajeado', 'Venâncio Aires', 'Santa Maria']
-  },
-  {
-    id: 'cand-011',
-    posicao: 11,
-    nome: 'Thiago Nogueira Silveira',
-    cota: 'Ampla',
-    nota_final: 89.25,
-    notas_disciplinas: { portugues: 26.5, direito: 45.0, informatica: 9.0, especificos: 8.75 },
-    intencao: 'final_fila',
-    status: 'Fim de Fila',
-    lotacao_atual: undefined,
-    comarca_desejada_1: 'Canoas',
-    cpf: '***.908.450-**',
-    email: 'thiago.silveira@trt4.jus.br',
-    whatsapp: '(51) 99234-8877',
-    ordem_nomeacao: 11,
-    escolhas_comarcas: ['Canoas', 'Porto Alegre']
-  },
-  {
-    id: 'cand-012',
-    posicao: 12,
-    nome: 'Camila Vasconcellos Prado',
-    cota: 'Ampla',
-    nota_final: 88.90,
-    notas_disciplinas: { portugues: 27.0, direito: 44.0, informatica: 9.5, especificos: 8.4 },
-    intencao: 'Sim',
-    status: 'Convocado Titular',
-    lotacao_atual: 'Uruguaiana',
-    comarca_desejada_1: 'Uruguaiana',
-    cpf: '***.354.120-**',
-    email: 'camila.prado@gmail.com',
-    whatsapp: '(55) 99981-6543',
-    ordem_nomeacao: 12,
-    escolhas_comarcas: ['Uruguaiana', 'Alegrete', 'Santana do Livramento', 'São Borja']
-  },
-  {
-    id: 'cand-013',
-    posicao: 13,
-    nome: 'Bruno Henrique Zanella',
-    cota: 'Ampla',
-    nota_final: 88.50,
-    notas_disciplinas: { portugues: 26.0, direito: 44.5, informatica: 9.5, especificos: 8.5 },
-    intencao: 'Sim',
-    status: 'Convocado Titular',
-    lotacao_atual: 'Bento Gonçalves',
-    comarca_desejada_1: 'Bento Gonçalves',
-    cpf: '***.198.760-**',
-    email: 'bruno.zanella@yahoo.com',
-    whatsapp: '(54) 98402-3311',
-    ordem_nomeacao: 13,
-    escolhas_comarcas: ['Bento Gonçalves', 'Garibaldi', 'Farroupilha', 'Caxias do Sul']
-  },
-  {
-    id: 'cand-014',
-    posicao: 14,
-    nome: 'Aline Cristine Carvalho',
-    cota: 'Ampla',
-    nota_final: 88.10,
-    notas_disciplinas: { portugues: 27.5, direito: 43.5, informatica: 9.0, especificos: 8.1 },
-    intencao: 'Sim',
-    status: 'Convocado Titular',
-    lotacao_atual: 'Erechim',
-    comarca_desejada_1: 'Erechim',
-    cpf: '***.431.290-**',
-    email: 'aline.cristine@gmail.com',
-    whatsapp: '(54) 99190-2211',
-    ordem_nomeacao: 14,
-    escolhas_comarcas: ['Erechim', 'Passo Fundo', 'Getúlio Vargas']
-  },
-  {
-    id: 'cand-015',
-    posicao: 15,
-    nome: 'Gabriel Moreira Fontoura',
-    cota: 'PPP',
-    nota_final: 87.80,
-    notas_disciplinas: { portugues: 25.5, direito: 44.5, informatica: 9.2, especificos: 8.6 },
-    intencao: 'Sim',
-    status: 'Convocado Titular',
-    lotacao_atual: 'Rio Grande',
-    comarca_desejada_1: 'Rio Grande',
-    cpf: '***.672.410-**',
-    email: 'gabriel.fontoura@gmail.com',
-    whatsapp: '(53) 98112-7090',
-    ordem_nomeacao: 15,
-    escolhas_comarcas: ['Rio Grande', 'Pelotas', 'São José do Norte']
-  },
-  {
-    id: 'cand-016',
-    posicao: 16,
-    nome: 'Renata Albuquerque Lima',
-    cota: 'Ampla',
-    nota_final: 87.50,
-    notas_disciplinas: { portugues: 26.0, direito: 43.5, informatica: 9.5, especificos: 8.5 },
-    intencao: 'Sim',
-    status: 'Convocado Titular',
-    lotacao_atual: 'Torres',
-    comarca_desejada_1: 'Torres',
-    cpf: '***.582.110-**',
-    email: 'renata.albuquerque@gmail.com',
-    whatsapp: '(51) 99650-1029',
-    ordem_nomeacao: 16,
-    escolhas_comarcas: ['Torres', 'Capão da Canoa', 'Osório', 'Tramandaí']
-  },
-  {
-    id: 'cand-017',
-    posicao: 17,
-    nome: 'Lucas Silveira Dornelles',
-    cota: 'Ampla',
-    nota_final: 87.20,
-    notas_disciplinas: { portugues: 26.5, direito: 43.0, informatica: 9.0, especificos: 8.7 },
-    intencao: 'Sim',
-    status: 'Convocado Titular',
-    lotacao_atual: 'Lajeado',
-    comarca_desejada_1: 'Lajeado',
-    cpf: '***.840.310-**',
-    email: 'lucas.dornelles@gmail.com',
-    whatsapp: '(51) 99742-8800',
-    ordem_nomeacao: 17,
-    escolhas_comarcas: ['Lajeado', 'Estrela', 'Encantado', 'Santa Cruz do Sul']
-  },
-  {
-    id: 'cand-018',
-    posicao: 18,
-    nome: 'Danielle Rocha Medeiros',
-    cota: 'Ampla',
-    nota_final: 86.95,
-    notas_disciplinas: { portugues: 26.0, direito: 43.0, informatica: 9.5, especificos: 8.45 },
-    intencao: 'Sim',
-    status: 'Convocado Titular',
-    lotacao_atual: 'Bagé',
-    comarca_desejada_1: 'Bagé',
-    cpf: '***.201.780-**',
-    email: 'danielle.rocha@gmail.com',
-    whatsapp: '(53) 99901-4432',
-    ordem_nomeacao: 18,
-    escolhas_comarcas: ['Bagé', 'Dom Pedrito', 'Pelotas']
-  },
-  {
-    id: 'cand-019',
-    posicao: 19,
-    nome: 'Vinícius Kappel Soares',
-    cota: 'Ampla',
-    nota_final: 86.70,
-    notas_disciplinas: { portugues: 25.5, direito: 43.0, informatica: 9.8, especificos: 8.4 },
-    intencao: 'Sim',
-    status: 'Convocado Titular',
-    lotacao_atual: 'Cruz Alta',
-    comarca_desejada_1: 'Cruz Alta',
-    cpf: '***.611.890-**',
-    email: 'vinicius.kappel@gmail.com',
-    whatsapp: '(55) 99144-5501',
-    ordem_nomeacao: 19,
-    escolhas_comarcas: ['Cruz Alta', 'Ijuí', 'Santa Maria']
-  },
-  {
-    id: 'cand-020',
-    posicao: 20,
-    nome: 'Vanessa Borges Machado',
-    cota: 'PCD',
-    nota_final: 86.40,
-    notas_disciplinas: { portugues: 26.0, direito: 42.5, informatica: 9.5, especificos: 8.4 },
-    intencao: 'Sim',
-    status: 'Convocado Titular',
-    lotacao_atual: 'São Leopoldo',
-    comarca_desejada_1: 'São Leopoldo',
-    cpf: '***.490.220-**',
-    email: 'vanessa.machado@gmail.com',
-    whatsapp: '(51) 98322-1199',
-    ordem_nomeacao: 20,
-    escolhas_comarcas: ['São Leopoldo', 'Novo Hamburgo', 'Sapucaia do Sul', 'Porto Alegre']
+    comarca_desejada_1: 'Caxias do Sul',
+    cpf: '129.884.300-47',
+    data_nascimento: '1995-05-19',
+    email: 'lucas.pires@gmail.com',
+    whatsapp: '(54) 99988-4411',
+    ordem_nomeacao: 3,
+    escolhas_comarcas: ['Caxias do Sul', 'Bento Gonçalves', 'Porto Alegre']
   }
 ];
 
 export const CANDIDATOS_TECNICO_TJRS: Candidato[] = [
   {
     id: 'tec-001',
+    concurso_id: 'tjrs_2024',
+    cargo_id: 'tecnico_judiciario',
     posicao: 1,
     nome: 'Eduardo Martins Cunha',
     cota: 'Ampla',
@@ -355,7 +235,8 @@ export const CANDIDATOS_TECNICO_TJRS: Candidato[] = [
     intencao: 'Sim',
     status: 'Convocado Titular',
     comarca_desejada_1: 'Porto Alegre',
-    cpf: '***.192.830-**',
+    cpf: '192.830.440-51',
+    data_nascimento: '1993-07-14',
     email: 'eduardo.cunha@gmail.com',
     whatsapp: '(51) 99123-9901',
     ordem_nomeacao: 1,
@@ -363,6 +244,8 @@ export const CANDIDATOS_TECNICO_TJRS: Candidato[] = [
   },
   {
     id: 'tec-002',
+    concurso_id: 'tjrs_2024',
+    cargo_id: 'tecnico_judiciario',
     posicao: 2,
     nome: 'Clarissa Peixoto Ramos',
     cota: 'Ampla',
@@ -371,7 +254,8 @@ export const CANDIDATOS_TECNICO_TJRS: Candidato[] = [
     intencao: 'Sim',
     status: 'Convocado Titular',
     comarca_desejada_1: 'Caxias do Sul',
-    cpf: '***.341.980-**',
+    cpf: '341.980.770-88',
+    data_nascimento: '1996-10-02',
     email: 'clarissa.ramos@gmail.com',
     whatsapp: '(54) 99877-2211',
     ordem_nomeacao: 2,
@@ -379,6 +263,8 @@ export const CANDIDATOS_TECNICO_TJRS: Candidato[] = [
   },
   {
     id: 'tec-003',
+    concurso_id: 'tjrs_2024',
+    cargo_id: 'tecnico_judiciario',
     posicao: 3,
     nome: 'Marcos Vinícius de Paula',
     cota: 'PPP',
@@ -387,10 +273,200 @@ export const CANDIDATOS_TECNICO_TJRS: Candidato[] = [
     intencao: 'Sim',
     status: 'Convocado Titular',
     comarca_desejada_1: 'Pelotas',
-    cpf: '***.551.220-**',
+    cpf: '551.220.310-90',
+    data_nascimento: '1991-04-29',
     email: 'marcos.depaula@gmail.com',
     whatsapp: '(53) 98401-9090',
     ordem_nomeacao: 3,
     escolhas_comarcas: ['Pelotas', 'Rio Grande', 'Camaquã']
+  },
+  {
+    id: 'tec-004',
+    concurso_id: 'tjrs_2024',
+    cargo_id: 'tecnico_judiciario',
+    posicao: 4,
+    nome: 'Bruna Zimmermann Rocha',
+    cota: 'Ampla',
+    nota_final: 94.20,
+    notas_disciplinas: { portugues: 29.0, direito: 46.5, informatica: 9.8, especificos: 8.9 },
+    intencao: 'Sim',
+    status: 'Convocado Titular',
+    comarca_desejada_1: 'Santa Maria',
+    cpf: '741.990.210-44',
+    data_nascimento: '1997-01-11',
+    email: 'bruna.rocha@gmail.com',
+    whatsapp: '(55) 99188-7766',
+    ordem_nomeacao: 4,
+    escolhas_comarcas: ['Santa Maria', 'Santiago', 'São Gabriel']
   }
 ];
+
+export const CANDIDATOS_ANALISTA_MPRS: Candidato[] = [
+  {
+    id: 'mprs-ana-001',
+    concurso_id: 'mprs_2024',
+    cargo_id: 'analista_mprs',
+    posicao: 1,
+    nome: 'Vinícius Albuquerque Dornelles',
+    cota: 'Ampla',
+    nota_final: 95.20,
+    notas_disciplinas: { portugues: 29.5, direito: 48.0, informatica: 9.7, especificos: 8.0 },
+    intencao: 'Sim',
+    status: 'Convocado Titular',
+    comarca_desejada_1: 'Porto Alegre',
+    cpf: '219.880.430-15',
+    data_nascimento: '1990-12-04',
+    email: 'vinicius.dornelles@mp.rs.gov.br',
+    whatsapp: '(51) 98112-9988',
+    ordem_nomeacao: 1,
+    escolhas_comarcas: ['Porto Alegre', 'Canoas', 'Novo Hamburgo']
+  },
+  {
+    id: 'mprs-ana-002',
+    concurso_id: 'mprs_2024',
+    cargo_id: 'analista_mprs',
+    posicao: 2,
+    nome: 'Renata Lemos Valença',
+    cota: 'Ampla',
+    nota_final: 94.40,
+    notas_disciplinas: { portugues: 28.5, direito: 48.0, informatica: 9.5, especificos: 8.4 },
+    intencao: 'Sim',
+    status: 'Convocado Titular',
+    comarca_desejada_1: 'Passo Fundo',
+    cpf: '381.992.110-72',
+    data_nascimento: '1993-08-16',
+    email: 'renata.lemos@gmail.com',
+    whatsapp: '(54) 99655-3344',
+    ordem_nomeacao: 2,
+    escolhas_comarcas: ['Passo Fundo', 'Marau', 'Erechim']
+  },
+  {
+    id: 'mprs-ana-003',
+    concurso_id: 'mprs_2024',
+    cargo_id: 'analista_mprs',
+    posicao: 3,
+    nome: 'Felipe Santana Barreto',
+    cota: 'PPP',
+    nota_final: 93.60,
+    notas_disciplinas: { portugues: 28.0, direito: 47.0, informatica: 9.8, especificos: 8.8 },
+    intencao: 'Sim',
+    status: 'Convocado Titular',
+    comarca_desejada_1: 'Pelotas',
+    cpf: '450.119.880-33',
+    data_nascimento: '1995-09-22',
+    email: 'felipe.barreto@gmail.com',
+    whatsapp: '(53) 98422-5566',
+    ordem_nomeacao: 3,
+    escolhas_comarcas: ['Pelotas', 'Rio Grande']
+  }
+];
+
+export const CANDIDATOS_TECNICO_MPRS: Candidato[] = [
+  {
+    id: 'mprs-tec-001',
+    concurso_id: 'mprs_2024',
+    cargo_id: 'tecnico_mprs',
+    posicao: 1,
+    nome: 'Tatiane Cristina Fontoura',
+    cota: 'Ampla',
+    nota_final: 97.00,
+    notas_disciplinas: { portugues: 30.0, direito: 49.0, informatica: 10.0, especificos: 8.0 },
+    intencao: 'Sim',
+    status: 'Convocado Titular',
+    comarca_desejada_1: 'Porto Alegre',
+    cpf: '882.341.090-21',
+    data_nascimento: '1994-06-03',
+    email: 'tatiane.fontoura@gmail.com',
+    whatsapp: '(51) 99233-4411',
+    ordem_nomeacao: 1,
+    escolhas_comarcas: ['Porto Alegre', 'Canoas', 'São Leopoldo']
+  },
+  {
+    id: 'mprs-tec-002',
+    concurso_id: 'mprs_2024',
+    cargo_id: 'tecnico_mprs',
+    posicao: 2,
+    nome: 'Diego Rodrigues Vasconcellos',
+    cota: 'Ampla',
+    nota_final: 96.20,
+    notas_disciplinas: { portugues: 29.5, direito: 48.5, informatica: 10.0, especificos: 8.2 },
+    intencao: 'Sim',
+    status: 'Convocado Titular',
+    comarca_desejada_1: 'Caxias do Sul',
+    cpf: '119.442.870-65',
+    data_nascimento: '1992-01-19',
+    email: 'diego.vasconcellos@gmail.com',
+    whatsapp: '(54) 99188-3322',
+    ordem_nomeacao: 2,
+    escolhas_comarcas: ['Caxias do Sul', 'Bento Gonçalves', 'Farroupilha']
+  }
+];
+
+// CADASTRO GERAL COMPLETO (MASTER LIST)
+export const MASTER_CADASTRO_GERAL: Candidato[] = [
+  ...CANDIDATOS_ANALISTA_TJRS,
+  ...CANDIDATOS_ANALISTA_ADM_TJRS,
+  ...CANDIDATOS_TECNICO_TJRS,
+  ...CANDIDATOS_ANALISTA_MPRS,
+  ...CANDIDATOS_TECNICO_MPRS,
+];
+
+// Função de normalização para cruzamento
+export const normalizarTexto = (texto: string): string => {
+  return texto
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim();
+};
+
+export const limparCpf = (cpf: string): string => {
+  return cpf.replace(/\D/g, '');
+};
+
+// Cruzamento e Identificação no Cadastro Geral Master
+export const identificarCandidatoMaster = (
+  nomeCompleto: string,
+  cpf?: string,
+  concursoId?: string,
+  cargoId?: string
+): Candidato | null => {
+  const cpfLimpo = cpf ? limparCpf(cpf) : '';
+  const nomeNorm = normalizarTexto(nomeCompleto);
+
+  // 1. Prioridade máxima: Cruzamento por CPF se informado e se bater no cadastro
+  if (cpfLimpo.length >= 6) {
+    const matchCpf = MASTER_CADASTRO_GERAL.find((c) => {
+      if (!c.cpf) return false;
+      const cLimpo = limparCpf(c.cpf);
+      // Se tiver máscara (ex: 812.300) ou se bater dígitos significativos
+      if (cLimpo === cpfLimpo) return true;
+      if (cpfLimpo.length === 11 && cLimpo.length === 11 && cLimpo === cpfLimpo) return true;
+      return false;
+    });
+    if (matchCpf) {
+      if (!concursoId && !cargoId) return matchCpf;
+      if (concursoId && matchCpf.concurso_id === concursoId) {
+        if (!cargoId || matchCpf.cargo_id === cargoId) return matchCpf;
+      }
+    }
+  }
+
+  // 2. Segunda prioridade: Cruzamento por Nome Completo exato/normalizado
+  if (nomeNorm.length >= 3) {
+    const matchNome = MASTER_CADASTRO_GERAL.find((c) => {
+      const cNorm = normalizarTexto(c.nome);
+      if (cNorm === nomeNorm) return true;
+      return false;
+    });
+    if (matchNome) {
+      if (!concursoId && !cargoId) return matchNome;
+      if (concursoId && matchNome.concurso_id === concursoId) {
+        if (!cargoId || matchNome.cargo_id === cargoId) return matchNome;
+      }
+      return matchNome;
+    }
+  }
+
+  return null;
+};

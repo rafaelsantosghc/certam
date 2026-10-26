@@ -101,11 +101,42 @@ export const AppContent: React.FC = () => {
     view: string,
     params?: { concursoId?: string; cargoId?: string; tab?: string }
   ) => {
+    const cId = params?.concursoId || concursoId;
+    const cgId = params?.cargoId || cargoId;
+    const t = params?.tab || initialTab;
+
     if (params?.concursoId) setConcursoId(params.concursoId);
     if (params?.cargoId) setCargoId(params.cargoId);
     if (params?.tab) setInitialTab(params.tab);
 
     setCurrentView(view as 'portal' | 'concurso' | 'lote' | 'admin' | 'politica');
+
+    // Sincronizar Permalinks na barra de navegação do browser
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('id');
+      url.searchParams.delete('cargo');
+      url.searchParams.delete('tab');
+      url.searchParams.delete('admin');
+
+      if (view === 'concurso') {
+        url.searchParams.set('id', cId);
+        if (cgId) url.searchParams.set('cargo', cgId);
+        if (t) url.searchParams.set('tab', t);
+      } else if (view === 'lote') {
+        url.searchParams.set('tab', 'lote');
+        if (cId) url.searchParams.set('id', cId);
+        if (cgId) url.searchParams.set('cargo', cgId);
+      } else if (view === 'admin') {
+        url.searchParams.set('admin', '1');
+      } else if (view === 'politica') {
+        url.searchParams.set('tab', 'politica');
+      }
+      window.history.pushState({}, '', url.toString());
+    } catch {
+      // ignore
+    }
+
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -125,7 +156,7 @@ export const AppContent: React.FC = () => {
         list.push({ label: cg.nome });
       }
     } else if (currentView === 'lote') {
-      list.push({ label: 'Simulador de Lotes TJRS' });
+      list.push({ label: 'Simulador de Lotes' });
     } else if (currentView === 'admin') {
       list.push({ label: 'Painel do Administrador' });
     } else if (currentView === 'politica') {
@@ -154,6 +185,8 @@ export const AppContent: React.FC = () => {
           breadcrumbs={breadcrumbs}
           onNavigateAdmin={() => handleNavigate('admin')}
           showAdminShortcut={currentView !== 'admin'}
+          onNavigate={handleNavigate}
+          concursoAtualId={concursoId}
         />
 
         {/* Área Central Renderizada */}

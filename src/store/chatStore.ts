@@ -224,6 +224,10 @@ export const chatStore = {
     this.salvarMensagens(concursoId, cargoId, canalId, atualizado);
   },
 
+  removerMensagem(concursoId: string, cargoId: string, canalId: CanalChatId, mensagemId: string): void {
+    this.excluirMensagem(concursoId, cargoId, canalId, mensagemId);
+  },
+
   salvarMensagens(concursoId: string, cargoId: string, canalId: CanalChatId, mensagens: ChatMensagem[]) {
     const key = `${CHAT_KEY}_${concursoId}_${cargoId}_${canalId}`;
     try {

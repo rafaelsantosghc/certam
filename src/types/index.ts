@@ -5,6 +5,93 @@ export interface Cargo {
   vagas_imediatas: number;
   tem_cr: boolean;
   ativo: boolean;
+  remuneracao_inicial?: string;
+  vagas_ocupadas?: number;
+  vagas_reais_abertas?: number;
+}
+
+export type ConcursoStatus =
+  | 'ativo'
+  | 'Homologado'
+  | 'Convocando'
+  | 'Inscrições Abertas'
+  | 'previsto'
+  | 'encerrado';
+
+export interface CronogramaItem {
+  id: string;
+  concurso_id: string;
+  cargo_id?: string;
+  titulo: string;
+  data_prevista: string;
+  data_realizada?: string;
+  status: 'concluido' | 'em_andamento' | 'pendente';
+  link_edital?: string;
+  descricao?: string;
+}
+
+export interface QuadroVagas {
+  concurso_id: string;
+  cargo_id: string;
+  cargo_nome: string;
+  cargos_criados_lei: number;
+  vagas_ocupadas: number;
+  vagas_reais_abertas: number;
+  aposentadorias_previstas: number;
+  data_atualizacao: string;
+  fonte_oficial?: string;
+}
+
+export type TipoDocumento =
+  | 'Edital de Abertura'
+  | 'Retificação'
+  | 'Resultado Preliminar'
+  | 'Resultado Final'
+  | 'Homologação'
+  | 'Convocação'
+  | 'Decisão Judicial'
+  | 'Legislação / PL';
+
+export interface DocumentoItem {
+  id: string;
+  concurso_id: string;
+  cargo_id?: string;
+  titulo: string;
+  tipo: TipoDocumento;
+  data_publicacao: string;
+  url_ou_arquivo: string;
+  tamanho?: string;
+  descricao?: string;
+}
+
+export interface ComunicadoItem {
+  id: string;
+  concurso_id: string;
+  cargo_id?: string;
+  titulo: string;
+  resumo: string;
+  texto_completo: string;
+  autor: string;
+  data: string;
+  importante: boolean;
+  tags?: string[];
+  link_externo?: string;
+}
+
+export interface ConvocacaoHistorico {
+  id: string;
+  concurso_id: string;
+  cargo_id: string;
+  lote_nome: string;
+  numero_chamamento: number;
+  data_edital: string;
+  total_convocados: number;
+  ampla_qtd: number;
+  ppp_qtd: number;
+  pcd_qtd: number;
+  indigena_qtd?: number;
+  link_doe?: string;
+  status_processamento?: 'Em Andamento' | 'Concluído' | 'Posse Efetuada';
 }
 
 export interface Concurso {
@@ -13,14 +100,24 @@ export interface Concurso {
   orgao: string;
   ano: string;
   edital: string;
-  status: 'ativo' | 'Homologado' | 'Convocando' | 'Inscrições Abertas' | 'encerrado';
+  status: ConcursoStatus;
+  homologado: boolean;
+  data_homologacao?: string;
+  regiao: 'Sul' | 'Sudeste' | 'Nordeste' | 'Centro-Oeste' | 'Norte' | 'Nacional';
+  esfera: 'Estadual' | 'Municipal' | 'Federal';
+  estado?: string;
   descricao: string;
   cargos: Cargo[];
+  cronograma?: CronogramaItem[];
+  documentos?: DocumentoItem[];
+  quadro_vagas?: QuadroVagas[];
+  comunicados?: ComunicadoItem[];
+  convocacoes?: ConvocacaoHistorico[];
 }
 
 export type CotaTipo = 'Ampla' | 'PPP' | 'PCD' | 'Indígena';
 
-export type StatusCandidato = 
+export type StatusCandidato =
   | 'Aguardando'
   | 'Convocado Titular'
   | 'Nomeado'
@@ -33,6 +130,8 @@ export type IntencaoTipo = 'Sim' | 'Talvez' | 'final_fila' | 'Não' | 'Indefinid
 
 export interface Candidato {
   id: string;
+  concurso_id?: string;
+  cargo_id?: string;
   posicao: number;
   nome: string;
   cota: CotaTipo;
@@ -48,6 +147,7 @@ export interface Candidato {
   lotacao_atual?: string;
   comarca_desejada_1?: string;
   cpf?: string;
+  data_nascimento?: string;
   email?: string;
   whatsapp?: string;
   ordem_nomeacao?: number;
@@ -122,6 +222,13 @@ export interface ChatMensagem {
   curtidas?: number;
 }
 
+export interface OutroConcursoAprovado {
+  concurso_nome: string;
+  ano: string;
+  cargo: string;
+  classificacao: number;
+}
+
 export interface UsuarioInscricao {
   concurso_id: string;
   cargo_id: string;
@@ -137,7 +244,126 @@ export interface Usuario {
   telefone?: string;
   whatsapp?: string;
   cpf?: string;
+  data_nascimento?: string;
+  email_contato?: string;
+  outros_concursos?: OutroConcursoAprovado[];
   concursos_inscritos?: UsuarioInscricao[];
+  read_notification_ids?: string[];
+  canais_silenciados?: string[];
+  usuarios_bloqueados?: string[];
+  cpf_verificado?: boolean;
 }
 
+// -------------------------------------------------------------
+// SISTEMA DE AUDITORIA DE ALTERAÇÃO DE PERFIL
+// -------------------------------------------------------------
+export interface AlteracaoCampoItem {
+  campo: string;
+  campo_label: string;
+  valor_antigo: string;
+  valor_novo: string;
+}
 
+export interface PerfilAuditRequest {
+  id: string;
+  usuario_email: string;
+  usuario_nome: string;
+  cpf: string;
+  data_solicitacao: string;
+  status: 'pendente' | 'aprovado' | 'rejeitado';
+  alteracoes: AlteracaoCampoItem[];
+  motivo_rejeicao?: string;
+  data_resposta?: string;
+}
+
+// -------------------------------------------------------------
+// SOLICITAÇÃO DE VINCULAÇÃO MANUAL (CASO NÃO IDENTIFICADO)
+// -------------------------------------------------------------
+export interface SolicitacaoVinculacao {
+  id: string;
+  usuario_email: string;
+  usuario_nome: string;
+  cpf: string;
+  concurso_id: string;
+  cargo_id: string;
+  posicao_declarada: number;
+  nota_declarada?: number;
+  comprovante_info?: string;
+  data_solicitacao: string;
+  status: 'pendente' | 'aprovado' | 'rejeitado';
+  motivo_rejeicao?: string;
+}
+
+// -------------------------------------------------------------
+// FALE COM O ADMINISTRADOR
+// -------------------------------------------------------------
+export type MotivoContato =
+  | 'inclusao_concurso'
+  | 'erro_classificacao'
+  | 'vinculacao_cadastro'
+  | 'duvida'
+  | 'sugestao'
+  | 'outro';
+
+export interface MensagemContatoAdmin {
+  id: string;
+  usuario_email: string;
+  usuario_nome: string;
+  motivo: MotivoContato;
+  motivo_label: string;
+  concurso_nome?: string;
+  ano_concurso?: string;
+  cargo_nome?: string;
+  classificacao?: string;
+  mensagem: string;
+  data_envio: string;
+  status: 'aberto' | 'respondido' | 'arquivado';
+  resposta_admin?: string;
+  data_resposta?: string;
+}
+
+// -------------------------------------------------------------
+// MENSAGENS PRIVADAS (1 a 1) E BLOQUEIOS
+// -------------------------------------------------------------
+export interface MensagemPrivada {
+  id: string;
+  remetente_email: string;
+  remetente_nome: string;
+  destinatario_email: string;
+  destinatario_nome: string;
+  concurso_referencia_id?: string;
+  cargo_referencia_id?: string;
+  texto: string;
+  data_hora: string;
+  lida: boolean;
+}
+
+export interface BloqueioUsuario {
+  usuario_email: string;
+  usuario_bloqueado_email: string;
+  data_bloqueio: string;
+}
+
+// -------------------------------------------------------------
+// NOTIFICAÇÕES INTERNAS OTIMIZADAS NO PORTAL
+// -------------------------------------------------------------
+export type TipoNotificacao =
+  | 'convocacao'
+  | 'cronograma'
+  | 'documento'
+  | 'chat'
+  | 'aprovacao_perfil'
+  | 'comunicado'
+  | 'geral';
+
+export interface NotificacaoItem {
+  id: string;
+  concurso_id?: string;
+  cargo_id?: string;
+  titulo: string;
+  mensagem: string;
+  tipo: TipoNotificacao;
+  data_hora: string;
+  link_destino?: string;
+  urgente?: boolean;
+}

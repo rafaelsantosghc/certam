@@ -15,6 +15,9 @@ import {
   MapPin,
   Trophy,
   Filter,
+  Lock,
+  UserCheck,
+  AlertCircle,
 } from 'lucide-react';
 
 interface CommunityForumProps {
@@ -22,6 +25,8 @@ interface CommunityForumProps {
   cargoId: string;
   cargoNome: string;
   isCompact?: boolean;
+  isRestritoBloqueado?: boolean;
+  onSolicitarAcesso?: () => void;
 }
 
 const CANAIS: { id: CanalChatId; nome: string; descricao: string; emoji: string }[] = [
@@ -36,6 +41,8 @@ export const CommunityForum: React.FC<CommunityForumProps> = ({
   cargoId,
   cargoNome,
   isCompact = false,
+  isRestritoBloqueado = false,
+  onSolicitarAcesso,
 }) => {
   const { usuario, isAdmin } = useAuth();
   const [canalAtivo, setCanalAtivo] = useState<CanalChatId>('geral');
@@ -63,6 +70,51 @@ export const CommunityForum: React.FC<CommunityForumProps> = ({
     window.addEventListener('certam_chat_updated', handleUpdate);
     return () => window.removeEventListener('certam_chat_updated', handleUpdate);
   }, [concursoId, cargoId, canalAtivo]);
+
+  // Se o chat for restrito e o usuário não for aprovado/admin, mostra a tela de bloqueio
+  if (isRestritoBloqueado) {
+    return (
+      <div className="bg-white rounded-2xl border border-slate-200 card-shadow p-8 sm:p-12 text-center max-w-2xl mx-auto space-y-5">
+        <div className="w-14 h-14 rounded-2xl bg-amber-50 border border-amber-200 text-amber-600 flex items-center justify-center mx-auto shadow-xs">
+          <Lock className="w-7 h-7" />
+        </div>
+
+        <div>
+          <h3 className="font-serif font-bold text-xl text-slate-900">
+            Canal Exclusivo para Aprovados Homologados
+          </h3>
+          <p className="text-xs sm:text-sm text-slate-600 mt-2 leading-relaxed max-w-lg mx-auto">
+            Este concurso já foi oficialmente homologado. Por determinação das regras do portal e garantia de privacidade dos concursados, as salas de discussão deste cargo são restritas aos candidatos que figuram na lista de aprovados.
+          </p>
+        </div>
+
+        <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-600 space-y-2 max-w-md mx-auto text-left">
+          <div className="flex items-center gap-2 font-bold text-slate-800">
+            <UserCheck className="w-4 h-4 text-teal-600" />
+            <span>Como ter meu acesso liberado?</span>
+          </div>
+          <p className="text-2xs text-slate-500 leading-relaxed">
+            1. Certifique-se de que seu Nome Completo e CPF cadastrados no seu perfil coincidem com a lista homologada pelo tribunal/órgão.
+            <br />
+            2. Caso seu nome conste na lista mas seu CPF não foi reconhecido automaticamente, acione a verificação manual abaixo.
+          </p>
+        </div>
+
+        {onSolicitarAcesso && (
+          <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
+            <button
+              type="button"
+              onClick={onSolicitarAcesso}
+              className="w-full sm:w-auto px-5 py-2.5 bg-[#07192B] hover:bg-[#0C2640] text-[#2DD4AA] font-bold text-xs rounded-xl transition-all cursor-pointer shadow-sm flex items-center justify-center gap-2"
+            >
+              <AlertCircle className="w-4 h-4" />
+              <span>Solicitar Validação ao Administrador</span>
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   // Mensagens fixadas vs normais
   const mensagensFixadas = mensagens.filter((m) => m.is_fixado);
@@ -99,307 +151,183 @@ export const CommunityForum: React.FC<CommunityForumProps> = ({
     chatStore.alternarFixado(concursoId, cargoId, canalAtivo, msgId);
   };
 
-  const handleExcluir = (msgId: string) => {
+  const handleRemover = (msgId: string) => {
     if (!isAdmin) return;
-    if (confirm('Deseja excluir esta mensagem do chat?')) {
-      chatStore.excluirMensagem(concursoId, cargoId, canalAtivo, msgId);
+    if (window.confirm('Tem certeza que deseja moderar e remover esta mensagem?')) {
+      chatStore.removerMensagem(concursoId, cargoId, canalAtivo, msgId);
     }
   };
 
-  const canalAtualInfo = CANAIS.find((c) => c.id === canalAtivo) || CANAIS[0];
-
   return (
-    <div className={`bg-white rounded-2xl border border-slate-200 card-shadow flex flex-col ${isCompact ? 'h-[620px]' : 'h-[750px]'}`}>
-      {/* Cabeçalho do Fórum / Chat */}
-      <div className="p-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-            <h3 className="text-base font-bold text-slate-900 leading-tight">
-              Fórum &amp; Chat da Comunidade
+    <div className={`bg-white rounded-2xl border border-slate-200 card-shadow overflow-hidden flex flex-col ${isCompact ? 'h-[500px]' : 'h-[720px]'}`}>
+      {/* Top Header do Chat com Seleção de Canais */}
+      <div className="p-3 sm:p-4 bg-[#07192B] text-white border-b border-[#0F2942] flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-teal-500/20 text-[#2DD4AA] flex items-center justify-center font-bold">
+            <MessageSquare className="w-4 h-4" />
+          </div>
+          <div>
+            <h3 className="font-serif font-bold text-sm sm:text-base text-white">
+              Comunidade Oficial • {cargoNome}
             </h3>
-            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-teal-50 text-teal-800 border border-teal-200">
-              {cargoNome}
-            </span>
+            <p className="text-2xs text-slate-300">
+              Canal ativo: {CANAIS.find((c) => c.id === canalAtivo)?.nome} ({mensagens.length} mensagens)
+            </p>
           </div>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Espaço de alinhamento transparente entre os candidatos do concurso
-          </p>
         </div>
 
-        {/* Status de Login / Perfil */}
-        <div className="flex items-center gap-2">
-          {isAdmin && (
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-1 font-mono">
-              <ShieldAlert className="w-3 h-3 text-amber-600" />
-              MODO ADMIN (Fixar / Moderar)
-            </span>
-          )}
-          <span className="text-xs text-slate-400 font-mono">
-            {mensagens.length} {mensagens.length === 1 ? 'mensagem' : 'mensagens'}
-          </span>
+        {/* Abas dos 4 Canais de Bate-papo */}
+        <div className="flex items-center gap-1 overflow-x-auto pb-1 sm:pb-0">
+          {CANAIS.map((c) => {
+            const isAtivo = canalAtivo === c.id;
+            return (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => setCanalAtivo(c.id)}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 ${
+                  isAtivo
+                    ? 'bg-[#2DD4AA] text-slate-950 font-bold shadow-xs'
+                    : 'bg-white/10 hover:bg-white/20 text-slate-300'
+                }`}
+                title={c.descricao}
+              >
+                <span>{c.emoji}</span>
+                <span>{c.nome}</span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      {/* Seletor de Canais Temáticos */}
-      <div className="bg-slate-50 border-b border-slate-200 px-4 py-2 flex items-center gap-1.5 overflow-x-auto scrollbar-none">
-        {CANAIS.map((c) => {
-          const isSelected = canalAtivo === c.id;
-          return (
-            <button
-              key={c.id}
-              type="button"
-              onClick={() => setCanalAtivo(c.id)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 border ${
-                isSelected
-                  ? 'bg-[#07192B] text-white border-[#07192B] shadow-xs'
-                  : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:text-slate-900'
-              }`}
-            >
-              <span>{c.emoji}</span>
-              <span>{c.nome}</span>
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Informação do Canal Atual */}
-      <div className="px-4 py-1.5 bg-teal-50/50 border-b border-teal-100/50 flex items-center justify-between text-[11px] text-teal-900">
-        <span className="font-medium">
-          Tópico: <strong>{canalAtualInfo.descricao}</strong>
-        </span>
-        <button
-          type="button"
-          onClick={() => setMostrarOpcoesAutor(!mostrarOpcoesAutor)}
-          className="text-teal-700 hover:text-teal-900 font-bold underline cursor-pointer"
-        >
-          {mostrarOpcoesAutor ? 'Ocultar meu perfil' : 'Editar meu perfil de envio'}
-        </button>
-      </div>
-
-      {/* Configuração de Perfil do Autor (Opcional) */}
-      {mostrarOpcoesAutor && (
-        <div className="p-3 bg-slate-50 border-b border-slate-200 grid grid-cols-1 sm:grid-cols-3 gap-2.5 animate-in fade-in duration-150 text-xs">
-          <div>
-            <label className="block text-[11px] font-bold text-slate-600 mb-1">Seu Nome / Apelido:</label>
-            <input
-              type="text"
-              value={nomeAutor}
-              onChange={(e) => setNomeAutor(e.target.value)}
-              placeholder="ex: João Silva"
-              className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-800"
-            />
-          </div>
-          <div>
-            <label className="block text-[11px] font-bold text-slate-600 mb-1">Sua Classificação (Opcional):</label>
-            <input
-              type="number"
-              min="1"
-              value={posicaoAutor}
-              onChange={(e) => setPosicaoAutor(e.target.value)}
-              placeholder="ex: 12 (para exibir 12º Aprovado)"
-              className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-mono font-medium text-slate-800"
-            />
-          </div>
-          <div>
-            <label className="block text-[11px] font-bold text-slate-600 mb-1">Comarca Desejada (Opcional):</label>
-            <input
-              type="text"
-              value={comarcaAutor}
-              onChange={(e) => setComarcaAutor(e.target.value)}
-              placeholder="ex: Porto Alegre"
-              className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-800"
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Área de Mensagens com Rolagem */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3.5 bg-slate-50/30">
-        {/* Bloco de Mensagens Fixadas pelo Administrador */}
+      {/* Área Central: Mensagens Fixadas e Mensagens Normais */}
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 bg-slate-50/50">
+        {/* Mensagens Fixadas pelo Administrador */}
         {mensagensFixadas.length > 0 && (
           <div className="space-y-2 mb-4">
-            <div className="flex items-center gap-1.5 text-[11px] font-bold text-amber-800 uppercase tracking-wider">
-              <Pin className="w-3.5 h-3.5 fill-amber-600 text-amber-600" />
-              <span>Avisos Fixados da Coordenação</span>
-            </div>
-
-            {mensagensFixadas.map((msg) => (
+            <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700 flex items-center gap-1 font-mono">
+              <Pin className="w-3 h-3 rotate-45" />
+              Mensagens Fixadas pela Coordenação
+            </span>
+            {mensagensFixadas.map((m) => (
               <div
-                key={msg.id}
-                className="p-3.5 rounded-xl bg-amber-50/90 border border-amber-300 shadow-xs space-y-1.5"
+                key={m.id}
+                className="p-3.5 bg-amber-50/70 border border-amber-300 rounded-xl space-y-1.5 shadow-2xs"
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <span className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
-                      {msg.autor}
-                      <span className="px-1.5 py-0.2 rounded text-[9px] bg-amber-200 text-amber-900 font-bold font-mono">
-                        ADMIN
-                      </span>
+                    <span className="font-bold text-xs text-slate-900">{m.autor}</span>
+                    <span className="text-3xs font-bold px-1.5 py-0.5 rounded bg-amber-200 text-amber-900 font-mono">
+                      ADMIN
                     </span>
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[10px] text-amber-700/80 font-mono">{msg.data_hora}</span>
-                    {isAdmin && (
-                      <button
-                        type="button"
-                        onClick={() => handleAlternarFixado(msg.id)}
-                        className="p-1 hover:bg-amber-200 rounded text-amber-800 text-[10px] cursor-pointer"
-                        title="Desafixar aviso"
-                      >
-                        Desafixar
-                      </button>
-                    )}
-                  </div>
+                  <span className="text-[10px] text-slate-400 font-mono">{m.data_hora}</span>
                 </div>
-                <p className="text-slate-800 text-xs leading-relaxed font-medium whitespace-pre-line">
-                  {msg.texto}
+                <p className="text-xs text-slate-800 leading-relaxed font-medium whitespace-pre-line">
+                  {m.texto}
                 </p>
-                <div className="flex items-center justify-between pt-1 text-[11px]">
-                  <button
-                    type="button"
-                    onClick={() => handleCurtir(msg.id)}
-                    className="flex items-center gap-1 text-amber-800 hover:text-amber-950 font-bold cursor-pointer"
-                  >
-                    <Heart className="w-3 h-3 fill-rose-500 text-rose-500" />
-                    <span>{msg.curtidas || 0}</span>
-                  </button>
-                </div>
               </div>
             ))}
           </div>
         )}
 
-        {/* Mensagens Normais */}
-        {mensagensNormais.length === 0 && mensagensFixadas.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center text-center p-6 text-slate-400 space-y-2">
+        {/* Mensagens Normais da Comunidade */}
+        {mensagensNormais.length === 0 ? (
+          <div className="h-full flex flex-col items-center justify-center text-slate-400 text-xs py-12 space-y-2">
             <MessageSquare className="w-8 h-8 text-slate-300" />
-            <p className="text-xs font-semibold text-slate-600">Ainda não há mensagens no canal {canalAtualInfo.nome}.</p>
-            <p className="text-[11px] text-slate-400">Seja o primeiro a enviar uma mensagem para seus colegas!</p>
+            <p>Nenhuma mensagem neste canal ainda. Seja o primeiro a compartilhar informações!</p>
           </div>
         ) : (
-          mensagensNormais.map((msg) => (
-            <div
-              key={msg.id}
-              className={`p-3.5 rounded-2xl border transition-all ${
-                msg.is_admin
-                  ? 'bg-teal-50/50 border-teal-200'
-                  : 'bg-white border-slate-200 shadow-xs'
-              }`}
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex items-center gap-2 flex-wrap">
-                  {/* Avatar inicial */}
-                  <div
-                    className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white uppercase shrink-0"
-                    style={{ backgroundColor: msg.avatar_cor || '#135A7A' }}
-                  >
-                    {msg.autor.charAt(0)}
+          mensagensNormais.map((msg) => {
+            const isMinha = usuario?.email && msg.email?.toLowerCase() === usuario.email.toLowerCase();
+
+            return (
+              <div
+                key={msg.id}
+                className={`p-3.5 rounded-2xl border transition-all ${
+                  msg.is_admin
+                    ? 'bg-amber-50/40 border-amber-200'
+                    : isMinha
+                    ? 'bg-teal-50/40 border-teal-200 ml-4 sm:ml-8'
+                    : 'bg-white border-slate-200 mr-4 sm:mr-8'
+                }`}
+              >
+                <div className="flex items-center justify-between gap-2 mb-1.5">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-bold text-xs text-slate-900">{msg.autor}</span>
+                    {msg.posicao_candidato && (
+                      <span className="text-3xs font-mono font-bold bg-[#07192B] text-teal-300 px-1.5 py-0.5 rounded">
+                        {msg.posicao_candidato}º Lugar
+                      </span>
+                    )}
+                    {msg.comarca_preferida && (
+                      <span className="text-3xs font-semibold bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded flex items-center gap-0.5">
+                        <MapPin className="w-2.5 h-2.5 text-teal-600" />
+                        {msg.comarca_preferida}
+                      </span>
+                    )}
                   </div>
 
-                  <span className="font-bold text-slate-900 text-xs">{msg.autor}</span>
-
-                  {msg.is_admin && (
-                    <span className="px-1.5 py-0.2 rounded text-[9px] bg-teal-100 text-teal-800 font-bold font-mono">
-                      ADMIN
-                    </span>
-                  )}
-
-                  {msg.posicao_candidato && (
-                    <span className="px-1.5 py-0.2 rounded text-[9px] bg-slate-100 text-slate-700 font-bold flex items-center gap-0.5">
-                      <Trophy className="w-2.5 h-2.5 text-amber-500" />
-                      {msg.posicao_candidato}º Aprovado
-                    </span>
-                  )}
-
-                  {msg.comarca_preferida && (
-                    <span className="px-1.5 py-0.2 rounded text-[9px] bg-emerald-50 text-emerald-800 font-bold flex items-center gap-0.5">
-                      <MapPin className="w-2.5 h-2.5 text-emerald-600" />
-                      {msg.comarca_preferida}
-                    </span>
-                  )}
+                  <span className="text-[10px] text-slate-400 font-mono shrink-0">{msg.data_hora}</span>
                 </div>
 
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <span className="text-[10px] text-slate-400 font-mono">{msg.data_hora}</span>
+                <p className="text-xs text-slate-700 leading-relaxed whitespace-pre-line">
+                  {msg.texto}
+                </p>
+
+                {/* Ações da Mensagem: Curtir, Fixar e Moderar */}
+                <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between text-2xs text-slate-500">
+                  <button
+                    type="button"
+                    onClick={() => handleCurtir(msg.id)}
+                    className="flex items-center gap-1 hover:text-rose-600 transition-colors cursor-pointer"
+                  >
+                    <Heart className="w-3.5 h-3.5 text-rose-500 fill-rose-500/20" />
+                    <span>{msg.curtidas || 0}</span>
+                  </button>
+
                   {isAdmin && (
-                    <>
+                    <div className="flex items-center gap-2">
                       <button
                         type="button"
                         onClick={() => handleAlternarFixado(msg.id)}
-                        className="p-1 hover:bg-slate-100 rounded text-slate-500 hover:text-amber-600 cursor-pointer"
-                        title="Fixar no topo"
+                        className="text-amber-700 hover:underline cursor-pointer"
                       >
-                        <Pin className="w-3 h-3" />
+                        {msg.is_fixado ? 'Desafixar' : 'Fixar'}
                       </button>
                       <button
                         type="button"
-                        onClick={() => handleExcluir(msg.id)}
-                        className="p-1 hover:bg-rose-50 rounded text-slate-400 hover:text-rose-600 cursor-pointer"
-                        title="Excluir mensagem"
+                        onClick={() => handleRemover(msg.id)}
+                        className="text-rose-600 hover:underline cursor-pointer"
                       >
-                        <Trash2 className="w-3 h-3" />
+                        Remover
                       </button>
-                    </>
+                    </div>
                   )}
                 </div>
               </div>
-
-              <p className="text-slate-700 text-xs leading-relaxed mt-2 whitespace-pre-line">
-                {msg.texto}
-              </p>
-
-              {/* Ação de Reação (Curtida) */}
-              <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between text-[11px]">
-                <button
-                  type="button"
-                  onClick={() => handleCurtir(msg.id)}
-                  className="flex items-center gap-1.5 text-slate-500 hover:text-rose-600 font-semibold cursor-pointer transition-colors"
-                >
-                  <Heart className={`w-3.5 h-3.5 ${(msg.curtidas || 0) > 0 ? 'fill-rose-500 text-rose-500' : ''}`} />
-                  <span>{msg.curtidas || 0}</span>
-                </button>
-              </div>
-            </div>
-          ))
+            );
+          })
         )}
-
         <div ref={mensagensEndRef} />
       </div>
 
-      {/* Caixa de Entrada de Mensagem */}
-      <form onSubmit={handleEnviar} className="p-3 bg-white border-t border-slate-200 space-y-2">
-        {isAdmin && (
-          <div className="flex items-center gap-2 text-xs text-amber-800 bg-amber-50 px-2.5 py-1 rounded-lg">
-            <input
-              type="checkbox"
-              id="fixarNovaMsg"
-              checked={fixarNovaMsg}
-              onChange={(e) => setFixarNovaMsg(e.target.checked)}
-              className="rounded text-amber-600"
-            />
-            <label htmlFor="fixarNovaMsg" className="cursor-pointer font-bold flex items-center gap-1 text-[11px]">
-              <Pin className="w-3 h-3 text-amber-700" />
-              Fixar esta mensagem como Aviso Oficial no topo do canal
-            </label>
-          </div>
-        )}
-
+      {/* Input Inferior de Envio */}
+      <form onSubmit={handleEnviar} className="p-3 sm:p-4 bg-white border-t border-slate-200 shrink-0 space-y-2">
         <div className="flex items-center gap-2">
           <input
             type="text"
-            required
+            placeholder={`Enviar mensagem no canal ${CANAIS.find((c) => c.id === canalAtivo)?.nome}...`}
             value={novoTexto}
             onChange={(e) => setNovoTexto(e.target.value)}
-            placeholder={`Conversar em #${canalAtualInfo.nome}...`}
-            className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 placeholder-slate-400 focus:bg-white focus:ring-2 focus:ring-[#2DD4AA] focus:outline-none transition-all"
+            className="flex-1 px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:bg-white focus:border-teal-600 focus:outline-hidden"
           />
-
           <button
             type="submit"
-            className="bg-[#07192B] hover:bg-[#0C2640] text-white px-4 py-2.5 rounded-xl text-xs font-bold shadow-sm flex items-center gap-1.5 cursor-pointer shrink-0 transition-colors"
+            disabled={!novoTexto.trim()}
+            className="px-4 py-2.5 bg-[#07192B] hover:bg-[#0C2640] text-[#2DD4AA] disabled:opacity-40 font-bold rounded-xl text-xs transition-colors cursor-pointer flex items-center gap-1.5 shadow-xs"
           >
-            <Send className="w-3.5 h-3.5 text-[#2DD4AA]" />
+            <Send className="w-4 h-4" />
             <span className="hidden sm:inline">Enviar</span>
           </button>
         </div>

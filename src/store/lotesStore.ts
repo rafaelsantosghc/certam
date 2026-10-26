@@ -1,10 +1,15 @@
 import { Candidato, Lote, Comarca } from '../types';
-import { CANDIDATOS_ANALISTA_TJRS, CANDIDATOS_TECNICO_TJRS } from '../data/defaultCandidates';
+import {
+  CANDIDATOS_ANALISTA_TJRS,
+  CANDIDATOS_ANALISTA_ADM_TJRS,
+  CANDIDATOS_TECNICO_TJRS,
+  CANDIDATOS_ANALISTA_MPRS,
+  CANDIDATOS_TECNICO_MPRS,
+} from '../data/defaultCandidates';
 import { COMARCAS_RS } from '../data/comarcas';
 
-const LOTES_KEY = 'certam_lotes_data';
-const CANDIDATOS_KEY = 'certam_candidatos_data';
-const CONFIG_KEY = 'certam_config_data';
+const LOTES_KEY = 'certam_lotes_data_v3';
+const CANDIDATOS_KEY = 'certam_candidatos_data_v3';
 
 export interface SimulacaoResultado {
   alocacoes: {
@@ -38,16 +43,45 @@ export const lotesStore = {
     }
     const defaultLotes: Lote[] = [
       {
-        id: 'lote_1',
+        id: 'lote_1_tjrs_analista',
         concurso_id: 'tjrs_2024',
         cargo_id: 'analista_judiciario',
-        nome: 'Lote 1 (1º Chamamento Oficial)',
+        nome: 'Lote 1 (1º Chamamento Oficial - Analista Judiciário)',
         ativo: true,
         is_ranking_visible: true,
         is_printing_enabled: true,
         travado: false,
-        comarcas: COMARCAS_RS.map((c) => ({ nome: c.nome, vagas: c.vagas_total })),
+        comarcas: COMARCAS_RS.slice(0, 15).map((c) => ({ nome: c.nome, vagas: c.vagas_total })),
         candidatos_ids: CANDIDATOS_ANALISTA_TJRS.map((c) => c.id),
+      },
+      {
+        id: 'lote_1_tjrs_tecnico',
+        concurso_id: 'tjrs_2024',
+        cargo_id: 'tecnico_judiciario',
+        nome: 'Lote 1 (1º Chamamento Oficial - Técnico Judiciário)',
+        ativo: true,
+        is_ranking_visible: true,
+        is_printing_enabled: true,
+        travado: false,
+        comarcas: COMARCAS_RS.slice(0, 12).map((c) => ({ nome: c.nome, vagas: c.vagas_total })),
+        candidatos_ids: CANDIDATOS_TECNICO_TJRS.map((c) => c.id),
+      },
+      {
+        id: 'lote_1_mprs_analista',
+        concurso_id: 'mprs_2024',
+        cargo_id: 'analista_mprs',
+        nome: 'Lote 1 (Chamamento Inicial - Analista MPRS)',
+        ativo: true,
+        is_ranking_visible: true,
+        is_printing_enabled: true,
+        travado: false,
+        comarcas: [
+          { nome: 'Porto Alegre', vagas: 8 },
+          { nome: 'Passo Fundo', vagas: 3 },
+          { nome: 'Pelotas', vagas: 2 },
+          { nome: 'Santa Maria', vagas: 2 },
+        ],
+        candidatos_ids: CANDIDATOS_ANALISTA_MPRS.map((c) => c.id),
       },
     ];
     this.salvarLotes(defaultLotes);
@@ -74,7 +108,17 @@ export const lotesStore = {
     } catch {
       // ignore
     }
-    const base = cargoId === 'tecnico_judiciario' ? CANDIDATOS_TECNICO_TJRS : CANDIDATOS_ANALISTA_TJRS;
+
+    let base: Candidato[] = CANDIDATOS_ANALISTA_TJRS;
+    if (concursoId === 'tjrs_2024') {
+      if (cargoId === 'analista_administrativo') base = CANDIDATOS_ANALISTA_ADM_TJRS;
+      else if (cargoId === 'tecnico_judiciario') base = CANDIDATOS_TECNICO_TJRS;
+      else base = CANDIDATOS_ANALISTA_TJRS;
+    } else if (concursoId === 'mprs_2024') {
+      if (cargoId === 'tecnico_mprs') base = CANDIDATOS_TECNICO_MPRS;
+      else base = CANDIDATOS_ANALISTA_MPRS;
+    }
+
     this.salvarCandidatos(concursoId, cargoId, base);
     return base;
   },
@@ -91,107 +135,107 @@ export const lotesStore = {
 
   salvarCandidato(concursoId: string, cargoId: string, candidato: Candidato) {
     const list = this.getCandidatos(concursoId, cargoId);
-    const index = list.findIndex((c) => c.id === candidato.id || (candidato.email && c.email === candidato.email));
+    const index = list.findIndex(
+      (c) => c.id === candidato.id || (candidato.email && c.email === candidato.email)
+    );
     if (index >= 0) {
       list[index] = { ...list[index], ...candidato };
     } else {
       list.push(candidato);
     }
     this.salvarCandidatos(concursoId, cargoId, list);
-    return list;
   },
 
-  getConfig(chave: string, valorPadrao: unknown = null) {
-    try {
-      const s = localStorage.getItem(`${CONFIG_KEY}_${chave}`);
-      if (s) return JSON.parse(s);
-    } catch {
-      // ignore
+  getLote(loteId: string): Lote | null {
+    const lotes = this.getLotes();
+    return lotes.find((l) => l.id === loteId) || lotes[0] || null;
+  },
+
+  criarLote(lote: Lote) {
+    const lotes = this.getLotes();
+    lotes.push(lote);
+    this.salvarLotes(lotes);
+  },
+
+  atualizarLote(lote: Lote) {
+    const lotes = this.getLotes();
+    const idx = lotes.findIndex((l) => l.id === lote.id);
+    if (idx >= 0) {
+      lotes[idx] = lote;
+      this.salvarLotes(lotes);
     }
-    return valorPadrao;
   },
 
-  salvarConfig(chave: string, valor: unknown) {
-    try {
-      localStorage.setItem(`${CONFIG_KEY}_${chave}`, JSON.stringify(valor));
-    } catch {
-      // ignore
-    }
+  removerLote(loteId: string) {
+    const lotes = this.getLotes().filter((l) => l.id !== loteId);
+    this.salvarLotes(lotes);
   },
 
-  // Executa o algoritmo oficial de simulação de escolha de comarcas
-  simularLotacao(
+  executarSimulacao(
+    lote: Lote,
     candidatos: Candidato[],
-    comarcasCatalogo: Comarca[] = COMARCAS_RS
+    desconsiderarDesistentes: boolean = true
   ): SimulacaoResultado {
-    const ordenados = [...candidatos].sort((a, b) => a.posicao - b.posicao);
-
-    // Mapeamento de vagas totais
     const vagasOcupadas: Record<string, number> = {};
     const vagasRestantes: Record<string, number> = {};
     let totalVagasOfertadas = 0;
 
-    comarcasCatalogo.forEach((c) => {
+    lote.comarcas.forEach((c) => {
       vagasOcupadas[c.nome] = 0;
-      vagasRestantes[c.nome] = c.vagas_total;
-      totalVagasOfertadas += c.vagas_total;
+      vagasRestantes[c.nome] = c.vagas;
+      totalVagasOfertadas += c.vagas;
     });
+
+    const ordenados = [...candidatos].sort((a, b) => a.posicao - b.posicao);
 
     let totalDesistencias = 0;
     let totalAssumem = 0;
+    let totalVagasPreenchidas = 0;
 
     const alocacoes = ordenados.map((cand) => {
-      if (cand.intencao === 'Não' || cand.status === 'Desistência') {
+      const vaiDesistir =
+        cand.intencao === 'Não' ||
+        cand.status === 'Desistência' ||
+        cand.status === 'Fim de Fila';
+
+      if (vaiDesistir) {
         totalDesistencias++;
-        return {
-          candidatoId: cand.id,
-          candidatoNome: cand.nome,
-          posicao: cand.posicao,
-          comarcaAlocada: null,
-          preferenciaNumero: null,
-          status: 'Desistência / Renúncia',
-          cota: cand.cota,
-          intencao: cand.intencao,
-        };
+        if (desconsiderarDesistentes) {
+          return {
+            candidatoId: cand.id,
+            candidatoNome: cand.nome,
+            posicao: cand.posicao,
+            comarcaAlocada: null,
+            preferenciaNumero: null,
+            status: cand.status,
+            cota: cand.cota,
+            intencao: cand.intencao,
+          };
+        }
+      } else {
+        totalAssumem++;
       }
 
-      if (cand.intencao === 'final_fila' || cand.status === 'Fim de Fila') {
-        return {
-          candidatoId: cand.id,
-          candidatoNome: cand.nome,
-          posicao: cand.posicao,
-          comarcaAlocada: null,
-          preferenciaNumero: null,
-          status: 'Fim de Fila Requerido',
-          cota: cand.cota,
-          intencao: cand.intencao,
-        };
-      }
-
-      totalAssumem++;
-
-      // Tenta alocar a melhor comarca da lista de prioridades do candidato
       let comarcaEscolhida: string | null = null;
-      let preferenciaIndex: number | null = null;
+      let preferenciaNumero: number | null = null;
 
-      const escolhas = cand.escolhas_comarcas || [];
+      const escolhas =
+        cand.escolhas_comarcas && cand.escolhas_comarcas.length > 0
+          ? cand.escolhas_comarcas
+          : cand.comarca_desejada_1
+          ? [cand.comarca_desejada_1]
+          : [];
+
       for (let i = 0; i < escolhas.length; i++) {
         const comarca = escolhas[i];
         if (vagasRestantes[comarca] && vagasRestantes[comarca] > 0) {
           comarcaEscolhida = comarca;
-          preferenciaIndex = i + 1;
+          preferenciaNumero = i + 1;
+          vagasRestantes[comarca]--;
           vagasOcupadas[comarca] = (vagasOcupadas[comarca] || 0) + 1;
-          vagasRestantes[comarca] -= 1;
+          totalVagasPreenchidas++;
           break;
         }
-      }
-
-      // Se não escolheu nenhuma comarca específica ou todas esgotaram, verifica a primeira comarca desejada informada
-      if (!comarcaEscolhida && cand.comarca_desejada_1 && (vagasRestantes[cand.comarca_desejada_1] || 0) > 0) {
-        comarcaEscolhida = cand.comarca_desejada_1;
-        preferenciaIndex = 1;
-        vagasOcupadas[comarcaEscolhida] = (vagasOcupadas[comarcaEscolhida] || 0) + 1;
-        vagasRestantes[comarcaEscolhida] -= 1;
       }
 
       return {
@@ -199,14 +243,12 @@ export const lotesStore = {
         candidatoNome: cand.nome,
         posicao: cand.posicao,
         comarcaAlocada: comarcaEscolhida,
-        preferenciaNumero: preferenciaIndex,
-        status: comarcaEscolhida ? `Alocado (${preferenciaIndex}ª Opção)` : 'Sem Vaga nas Opções Escolhidas',
+        preferenciaNumero,
+        status: cand.status,
         cota: cand.cota,
         intencao: cand.intencao,
       };
     });
-
-    const totalVagasPreenchidas = Object.values(vagasOcupadas).reduce((acc, curr) => acc + curr, 0);
 
     return {
       alocacoes,
@@ -217,5 +259,21 @@ export const lotesStore = {
       totalDesistencias,
       totalAssumem,
     };
+  },
+
+  simularLotacao(candidatos: Candidato[], comarcas: Comarca[]): SimulacaoResultado {
+    const loteMock: Lote = {
+      id: 'simulacao',
+      concurso_id: 'tjrs_2024',
+      cargo_id: 'analista_judiciario',
+      nome: 'Simulação Geral',
+      ativo: true,
+      is_ranking_visible: true,
+      is_printing_enabled: true,
+      travado: false,
+      comarcas: comarcas.map((c) => ({ nome: c.nome, vagas: c.vagas_total })),
+      candidatos_ids: candidatos.map((c) => c.id),
+    };
+    return this.executarSimulacao(loteMock, candidatos, true);
   },
 };

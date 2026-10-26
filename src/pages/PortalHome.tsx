@@ -3,7 +3,8 @@ import { certamStore } from '../store/certamStore';
 import { lotesStore } from '../store/lotesStore';
 import { useAuth } from '../store/authContext';
 import { Concurso, Cargo, Candidato } from '../types';
-import { sanitizeInput, isValidEmail } from '../utils/security';
+import { PerfilCandidatoModal } from '../components/PerfilCandidatoModal';
+import { ContatoAdminModal } from '../components/ContatoAdminModal';
 import {
   Search,
   Plus,
@@ -22,6 +23,10 @@ import {
   X,
   MapPin,
   ListOrdered,
+  Calendar,
+  Layers,
+  HelpCircle,
+  TrendingUp,
 } from 'lucide-react';
 
 interface PortalHomeProps {
@@ -36,89 +41,22 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
     loginAdmin,
     loginCandidato,
     simularEmailCandidato,
-    atualizarDadosUsuario,
     inscreverConcurso,
     desinscreverConcurso,
     logout,
   } = useAuth();
 
-  const [concursos] = useState<Concurso[]>(() => certamStore.getConcursos());
+  const [concursos, setConcursos] = useState<Concurso[]>(() => certamStore.getConcursos());
   const [filtroTexto, setFiltroTexto] = useState('');
-  const [filtroStatus, setFiltroStatus] = useState<'todos' | 'ativos'>('todos');
+  const [filtroStatus, setFiltroStatus] = useState<
+    'todos' | 'em_andamento' | 'homologados' | 'previstos' | 'encerrados'
+  >('todos');
+  const [filtroRegiao, setFiltroRegiao] = useState<string>('todas');
 
-  // Modal de Atualização de Dados Gerais do Candidato
-  const [modalDadosAberto, setModalDadosAberto] = useState(false);
-  const [formNome, setFormNome] = useState('');
-  const [formEmail, setFormEmail] = useState('');
-  const [formWhatsapp, setFormWhatsapp] = useState('');
-  const [formCpf, setFormCpf] = useState('');
-
-  // Toast feedback
-  const [toastMsg, setToastMsg] = useState<string | null>(null);
-
-  const showToast = (msg: string) => {
-    setToastMsg(msg);
-    setTimeout(() => setToastMsg(null), 3500);
-  };
-
-  // Abrir modal de dados gerais
-  const abrirModalDados = () => {
-    if (usuario) {
-      setFormNome(usuario.nome || '');
-      setFormEmail(usuario.email || '');
-      setFormWhatsapp(usuario.whatsapp || usuario.telefone || '');
-      setFormCpf(usuario.cpf || '');
-      setModalDadosAberto(true);
-    }
-  };
-
-  // Salvar atualização dos dados gerais do usuário/candidato
-  const handleSalvarDados = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!usuario) return;
-
-    const emailLimpo = formEmail.trim();
-    if (emailLimpo && !isValidEmail(emailLimpo)) {
-      showToast('Por favor, informe um e-mail válido.');
-      return;
-    }
-
-    const nomeSanitizado = sanitizeInput(formNome, 100) || usuario.nome;
-    const whatsSanitizado = sanitizeInput(formWhatsapp, 25);
-    const cpfSanitizado = sanitizeInput(formCpf, 20);
-
-    atualizarDadosUsuario({
-      nome: nomeSanitizado,
-      email: emailLimpo || usuario.email,
-      whatsapp: whatsSanitizado,
-      telefone: whatsSanitizado,
-      cpf: cpfSanitizado,
-    });
-
-    // Sincronizar nome/contato na lista oficial de candidatos se o usuário já estiver vinculado
-    concursos.forEach((c) => {
-      c.cargos?.forEach((cg) => {
-        const cands = lotesStore.getCandidatos(c.id, cg.id);
-        const match = cands.find(
-          (cand) =>
-            cand.id === usuario.candidato_id ||
-            cand.email?.toLowerCase() === usuario.email?.toLowerCase() ||
-            cand.email?.toLowerCase() === emailLimpo.toLowerCase()
-        );
-        if (match) {
-          lotesStore.salvarCandidato(c.id, cg.id, {
-            ...match,
-            nome: nomeSanitizado || match.nome,
-            whatsapp: whatsSanitizado || match.whatsapp,
-            cpf: cpfSanitizado || match.cpf,
-          });
-        }
-      });
-    });
-
-    setModalDadosAberto(false);
-    showToast('Dados cadastrais atualizados com sucesso!');
-  };
+  // Modais
+  const [modalPerfilAberto, setModalPerfilAberto] = useState(false);
+  const [modalContatoAberto, setModalContatoAberto] = useState(false);
+  const [motivoContato, setMotivoContato] = useState<any>('inclusao_concurso');
 
   // Login de candidato por email
   const [loginEmailInput, setLoginEmailInput] = useState('');
@@ -128,70 +66,61 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
   // Login de administrador protegido por senha
   const [showAdminLoginForm, setShowAdminLoginForm] = useState(false);
   const [adminSenhaInput, setAdminSenhaInput] = useState('');
-  const [adminSenhaErro, setAdminSenhaErro] = useState(false);
+  const [erroSenhaAdmin, setErroSenhaAdmin] = useState(false);
 
-  const handleLoginEmailSubmit = (e: React.FormEvent) => {
+  // Toast feedback
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setToastMsg(msg);
+    setTimeout(() => setToastMsg(null), 3500);
+  };
+
+  const handleLoginEmail = (e: React.FormEvent) => {
     e.preventDefault();
-    const emailLimpo = loginEmailInput.trim();
-    if (!emailLimpo) return;
-
-    if (!isValidEmail(emailLimpo)) {
-      showToast('Por favor, informe um endereço de e-mail válido.');
-      return;
-    }
-
-    if (emailLimpo.toLowerCase() === 'rafasms0@hotmail.com') {
-      showToast('O e-mail rafasms0@hotmail.com é de administrador. Por favor, acesse pela Área do Administrador informando sua senha.');
-      setShowAdminLoginForm(true);
-      setShowEmailLoginForm(false);
-      return;
-    }
-
-    const nomeSanitizado = sanitizeInput(loginNomeInput, 100) || emailLimpo.split('@')[0];
-
-    loginCandidato(emailLimpo, nomeSanitizado);
+    if (!loginEmailInput.trim()) return;
+    loginCandidato(loginEmailInput, loginNomeInput);
     setShowEmailLoginForm(false);
     setLoginEmailInput('');
     setLoginNomeInput('');
-    showToast('Login de candidato realizado com sucesso!');
+    showToast('Login de candidato efetuado com sucesso!');
   };
 
-  const handleAdminLoginSubmit = (e: React.FormEvent) => {
+  const handleLoginAdminSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const ok = loginAdmin(adminSenhaInput);
-    if (!ok) {
-      setAdminSenhaErro(true);
-      showToast('Senha de administrador incorreta.');
-    } else {
-      setAdminSenhaErro(false);
+    const sucesso = loginAdmin(adminSenhaInput);
+    if (sucesso) {
+      setErroSenhaAdmin(false);
       setShowAdminLoginForm(false);
       setAdminSenhaInput('');
-      showToast('Acesso administrativo concedido!');
+      showToast('Acesso de administrador concedido!');
+      onNavigate('admin');
+    } else {
+      setErroSenhaAdmin(true);
     }
   };
 
-  // Identificar quais concursos e cargos o candidato atual está cadastrado/inscrito
+  // Inscrições vinculadas ao candidato atual
   const inscricoesCandidato = useMemo(() => {
     if (!usuario) return [];
-
-    interface InscricaoItem {
+    const resultado: {
       concurso: Concurso;
       cargo: Cargo;
       candidato?: Candidato;
-      dataInscricao?: string;
-    }
+      dataInscricao: string;
+    }[] = [];
 
-    const resultado: InscricaoItem[] = [];
     const inscricoesSet = new Set<string>();
 
-    // 1. Procurar nas listas oficiais de candidatos por email ou candidato_id
     concursos.forEach((conc) => {
       conc.cargos?.forEach((cg) => {
         const cands = lotesStore.getCandidatos(conc.id, cg.id);
         const candEncontrado = cands.find(
           (c) =>
             (usuario.candidato_id && c.id === usuario.candidato_id) ||
-            (usuario.email && c.email?.toLowerCase() === usuario.email.toLowerCase())
+            (usuario.email && c.email?.toLowerCase() === usuario.email.toLowerCase()) ||
+            (usuario.cpf && c.cpf && c.cpf.replace(/\D/g, '') === usuario.cpf.replace(/\D/g, '')) ||
+            (usuario.nome && c.nome.toLowerCase() === usuario.nome.toLowerCase())
         );
 
         if (candEncontrado) {
@@ -209,7 +138,6 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
       });
     });
 
-    // 2. Incluir inscrições manuais registradas em usuario.concursos_inscritos
     if (usuario.concursos_inscritos && Array.isArray(usuario.concursos_inscritos)) {
       usuario.concursos_inscritos.forEach((insc) => {
         const conc = concursos.find((c) => c.id === insc.concurso_id);
@@ -240,7 +168,7 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
     return resultado;
   }, [usuario, concursos]);
 
-  // Lista filtrada de concursos disponíveis
+  // Filtros de Concursos: Status e Região
   const concursosFiltrados = useMemo(() => {
     return concursos.filter((c) => {
       const matchTexto =
@@ -249,11 +177,22 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
         c.orgao.toLowerCase().includes(filtroTexto.toLowerCase()) ||
         c.cargos?.some((cg) => cg.nome.toLowerCase().includes(filtroTexto.toLowerCase()));
 
-      const matchStatus = filtroStatus === 'todos' || c.status === 'ativo' || c.status === 'Convocando';
+      let matchStatus = true;
+      if (filtroStatus === 'em_andamento') {
+        matchStatus = c.status === 'ativo' || c.status === 'Convocando';
+      } else if (filtroStatus === 'homologados') {
+        matchStatus = c.homologado || c.status === 'Homologado';
+      } else if (filtroStatus === 'previstos') {
+        matchStatus = c.status === 'previsto' || c.status === 'Inscrições Abertas';
+      } else if (filtroStatus === 'encerrados') {
+        matchStatus = c.status === 'encerrado';
+      }
 
-      return matchTexto && matchStatus;
+      const matchRegiao = filtroRegiao === 'todas' || c.regiao === filtroRegiao;
+
+      return matchTexto && matchStatus && matchRegiao;
     });
-  }, [concursos, filtroTexto, filtroStatus]);
+  }, [concursos, filtroTexto, filtroStatus, filtroRegiao]);
 
   return (
     <div className="space-y-8 max-w-[1880px] w-full mx-auto">
@@ -265,53 +204,64 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
         </div>
       )}
 
-      {/* CABEÇALHO DO PORTAL DO CANDIDATO */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      {/* CABEÇALHO DO PORTAL CERTAM */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#2DD4AA]/15 text-[#135A7A] text-xs font-semibold mb-2">
             <span>🏛️</span>
-            <span>CERTAM • Portal do candidato</span>
+            <span>CERTAM • Portal do Concurseiro do Brasil</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-bold text-[#0F172A] tracking-tight font-serif">
-            Portal do candidato
+            Acompanhamento de Concursos & Nomeações
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 mt-1 max-w-3xl leading-relaxed">
-            Acesse sua conta para atualizar seus dados de contato, acompanhe os concursos em que você está inscrito e consulte os certames cadastrados.
+            Consulte cronogramas oficiais em linha do tempo, rankings de classificação, quantitativo de cargos vagos, comunicados e preferências de comarcas.
           </p>
         </div>
 
-        {/* Acesso Admin */}
-        {isAdmin && (
-          <div className="flex items-center gap-2 shrink-0">
+        {/* Ações Rápidas */}
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={() => {
+              setMotivoContato('inclusao_concurso');
+              setModalContatoAberto(true);
+            }}
+            className="inline-flex items-center gap-1.5 bg-white hover:bg-slate-50 text-slate-700 font-bold px-3.5 py-2.5 rounded-xl text-xs border border-slate-300 shadow-2xs transition-colors cursor-pointer"
+          >
+            <Plus className="w-4 h-4 text-teal-600" />
+            <span>Sugerir Concurso / Cargo</span>
+          </button>
+
+          {isAdmin && (
             <button
               type="button"
               onClick={() => onNavigate('admin', { tab: 'concursos' })}
               className="inline-flex items-center gap-2 bg-[#07192B] hover:bg-[#0C2640] text-white font-bold px-4 py-2.5 rounded-xl text-xs shadow-xs transition-colors cursor-pointer"
             >
               <Plus className="w-4 h-4 text-[#2DD4AA]" />
-              <span>Cadastrar concurso</span>
+              <span>Novo Concurso (Admin)</span>
             </button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
-      {/* SEÇÃO 1: FAZER LOGIN & ATUALIZAR DADOS CADASTRAIS (DADOS GERAIS DO CANDIDATO) */}
+      {/* SEÇÃO 1: PERFIL DO CANDIDATO / LOGIN */}
       <div className="bg-white rounded-2xl border border-slate-200/90 card-shadow p-5 sm:p-6">
         {!usuario ? (
-          /* NÃO AUTENTICADO: FORMULÁRIO DE LOGIN DO CANDIDATO */
           <div className="space-y-4">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-100">
               <div>
                 <div className="flex items-center gap-2 text-slate-900 font-serif font-bold text-lg">
                   <LogIn className="w-5 h-5 text-[#135A7A]" />
-                  <span>Acesse sua conta de candidato</span>
+                  <span>Acesse sua conta de concurseiro</span>
                 </div>
                 <p className="text-xs text-slate-500 mt-1">
-                  Identifique-se para atualizar seus dados de contato, manifestar suas preferências e acompanhar as comarcas do certame.
+                  Identifique-se com sua conta Google para vincular seu CPF ao cadastro geral, acessar chats de aprovados e simular escolhas de comarcas.
                 </p>
               </div>
 
-              {/* Ações de Login */}
+              {/* Botões de Acesso */}
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
@@ -319,22 +269,10 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
                   className="inline-flex items-center gap-2 bg-white hover:bg-slate-50 text-slate-800 font-semibold px-4 py-2 rounded-xl text-xs border border-slate-300 shadow-2xs transition-all cursor-pointer"
                 >
                   <svg className="w-4 h-4" viewBox="0 0 24 24">
-                    <path
-                      fill="#4285F4"
-                      d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                    />
-                    <path
-                      fill="#34A853"
-                      d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                    />
-                    <path
-                      fill="#FBBC05"
-                      d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-                    />
-                    <path
-                      fill="#EA4335"
-                      d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-                    />
+                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
                   </svg>
                   <span>Entrar com Google</span>
                 </button>
@@ -357,159 +295,135 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
                     setShowAdminLoginForm(!showAdminLoginForm);
                     setShowEmailLoginForm(false);
                   }}
-                  className="inline-flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-3 py-2 rounded-xl text-xs transition-colors cursor-pointer"
-                  title="Acesso restrito à gerência do portal"
+                  className="inline-flex items-center gap-1 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 font-semibold px-3 py-2 rounded-xl text-xs transition-colors cursor-pointer"
                 >
-                  <ShieldCheck className="w-3.5 h-3.5 text-slate-500" />
-                  <span>Área do administrador</span>
+                  <span>Admin</span>
                 </button>
               </div>
             </div>
 
-            {/* Formulário retrátil de login do candidato por e-mail */}
+            {/* Form de Login por Email */}
             {showEmailLoginForm && (
-              <form onSubmit={handleLoginEmailSubmit} className="p-4 bg-slate-50 rounded-xl border border-slate-200/80 space-y-3">
-                <div className="text-xs font-semibold text-slate-700">
-                  Informe seus dados para acessar o portal como candidato:
-                </div>
+              <form onSubmit={handleLoginEmail} className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
+                <span className="font-bold text-xs text-slate-800 block">Identificação Rápida de Candidato</span>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
-                      Nome completo
-                    </label>
-                    <input
-                      type="text"
-                      value={loginNomeInput}
-                      onChange={(e) => setLoginNomeInput(e.target.value)}
-                      placeholder="Ex.: Mariana Duarte Becker"
-                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#2DD4AA]"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
-                      Seu e-mail de candidato *
-                    </label>
-                    <input
-                      type="email"
-                      required
-                      value={loginEmailInput}
-                      onChange={(e) => setLoginEmailInput(e.target.value)}
-                      placeholder="Ex.: mariana.becker@gmail.com"
-                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#2DD4AA]"
-                    />
-                  </div>
+                  <input
+                    type="text"
+                    placeholder="Seu nome completo"
+                    value={loginNomeInput}
+                    onChange={(e) => setLoginNomeInput(e.target.value)}
+                    className="px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs focus:border-teal-600 focus:outline-hidden"
+                  />
+                  <input
+                    type="email"
+                    placeholder="Seu e-mail de candidato"
+                    value={loginEmailInput}
+                    onChange={(e) => setLoginEmailInput(e.target.value)}
+                    className="px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs focus:border-teal-600 focus:outline-hidden"
+                    required
+                  />
                 </div>
-                <div className="flex items-center justify-end gap-2 pt-1">
+                <div className="flex justify-end gap-2">
                   <button
                     type="button"
                     onClick={() => setShowEmailLoginForm(false)}
-                    className="px-3 py-1.5 text-xs text-slate-600 hover:text-slate-900 cursor-pointer"
+                    className="px-3 py-1.5 text-xs text-slate-600 hover:text-slate-900"
                   >
                     Cancelar
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-1.5 bg-[#135A7A] hover:bg-[#0C2640] text-white font-bold rounded-lg text-xs cursor-pointer shadow-xs"
+                    className="px-4 py-1.5 bg-[#135A7A] hover:bg-[#0C2640] text-white text-xs font-bold rounded-lg cursor-pointer"
                   >
-                    Entrar como candidato
+                    Acessar
                   </button>
                 </div>
               </form>
             )}
 
-            {/* Formulário retrátil de login do administrador com senha */}
+            {/* Form de Login Admin */}
             {showAdminLoginForm && (
-              <form onSubmit={handleAdminLoginSubmit} className="p-4 bg-amber-50/50 rounded-xl border border-amber-200 space-y-3">
-                <div className="text-xs font-bold text-amber-950 flex items-center gap-1.5">
-                  <ShieldCheck className="w-4 h-4 text-amber-600" />
-                  <span>Acesso restrito à administração oficial</span>
-                </div>
-                <div className="max-w-md">
-                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
-                    Senha de administrador
-                  </label>
+              <form onSubmit={handleLoginAdminSubmit} className="p-4 bg-amber-50/70 rounded-xl border border-amber-200 space-y-3">
+                <span className="font-bold text-xs text-amber-900 block">Autenticação Administrativa CERTAM</span>
+                <div className="flex items-center gap-2">
                   <input
                     type="password"
-                    required
+                    placeholder="Senha de administrador (ex: certam2025)"
                     value={adminSenhaInput}
-                    onChange={(e) => {
-                      setAdminSenhaInput(e.target.value);
-                      setAdminSenhaErro(false);
-                    }}
-                    placeholder="Digite a senha de acesso..."
-                    className="w-full px-3 py-2 bg-white border border-amber-200 rounded-lg text-xs font-medium focus:outline-none focus:ring-2 focus:ring-amber-500"
-                    autoFocus
+                    onChange={(e) => setAdminSenhaInput(e.target.value)}
+                    className="flex-1 px-3 py-2 bg-white border border-amber-300 rounded-lg text-xs focus:outline-hidden"
+                    required
                   />
-                  {adminSenhaErro && (
-                    <p className="text-[11px] text-rose-600 font-semibold mt-1">
-                      Senha incorreta. Tente novamente.
-                    </p>
-                  )}
-                </div>
-                <div className="flex items-center justify-start gap-2 pt-1">
                   <button
                     type="submit"
-                    className="px-4 py-1.5 bg-[#07192B] hover:bg-[#0C2640] text-teal-300 font-bold rounded-lg text-xs cursor-pointer shadow-xs"
+                    className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-lg cursor-pointer"
                   >
-                    Confirmar senha
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowAdminLoginForm(false)}
-                    className="px-3 py-1.5 text-xs text-slate-600 hover:text-slate-900 cursor-pointer"
-                  >
-                    Cancelar
+                    Entrar
                   </button>
                 </div>
+                {erroSenhaAdmin && (
+                  <span className="text-2xs text-rose-700 font-bold block">Senha incorreta. Tente certam2025 ou admin.</span>
+                )}
               </form>
             )}
           </div>
         ) : (
-          /* AUTENTICADO: CARD COM DADOS GERAIS DO CANDIDATO E BOTÃO ATUALIZAR */
+          /* USUÁRIO AUTENTICADO */
           <div className="space-y-4">
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-slate-100">
-              <div className="flex items-center gap-3.5">
-                <div className="w-12 h-12 rounded-2xl bg-[#07192B] text-[#2DD4AA] font-bold text-lg flex items-center justify-center shrink-0 shadow-xs">
-                  {usuario.nome?.charAt(0) || 'C'}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+              <div className="flex items-center gap-3">
+                <div
+                  className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-sm shadow-xs text-white uppercase relative ${
+                    isAdmin ? 'bg-amber-600 border-2 border-amber-300' : 'bg-[#135A7A] border-2 border-teal-500'
+                  }`}
+                >
+                  {usuario.nome ? usuario.nome.slice(0, 2) : 'US'}
+                  {usuario.cpf_verificado && (
+                    <span
+                      className="absolute -bottom-1 -right-1 w-4 h-4 bg-emerald-500 rounded-full border-2 border-white flex items-center justify-center text-[9px] text-white"
+                      title="CPF Verificado no Cadastro Geral"
+                    >
+                      ✓
+                    </span>
+                  )}
                 </div>
+
                 <div>
                   <div className="flex items-center gap-2">
                     <h2 className="text-base sm:text-lg font-bold font-serif text-slate-900">
-                      {usuario.nome}
+                      Olá, {usuario.nome}!
                     </h2>
-                    {isAdmin ? (
-                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-[#07192B] text-[#2DD4AA]">
-                        ADMINISTRADOR
+                    {usuario.cpf_verificado ? (
+                      <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                        CPF Vinculado
                       </span>
                     ) : (
-                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-teal-50 text-teal-800 border border-teal-200">
-                        CANDIDATO
+                      <span className="text-[10px] font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
+                        Cadastro em Validação
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-1.5">
-                    <Mail className="w-3 h-3 text-slate-400" />
-                    <span>{usuario.email}</span>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    {usuario.email_contato || usuario.email} · WhatsApp: {usuario.whatsapp || 'Não informado'} · CPF: {usuario.cpf || 'Pendente'}
                   </p>
                 </div>
               </div>
 
-              {/* Botões de Ação do Perfil */}
-              <div className="flex items-center gap-2 flex-wrap">
+              {/* Ações do Usuário */}
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={abrirModalDados}
-                  className="inline-flex items-center gap-2 bg-[#135A7A] hover:bg-[#0C2640] text-white font-bold px-4 py-2 rounded-xl text-xs shadow-xs transition-colors cursor-pointer"
+                  onClick={() => setModalPerfilAberto(true)}
+                  className="inline-flex items-center gap-1.5 bg-[#135A7A] hover:bg-[#0C2640] text-white font-bold px-3.5 py-2 rounded-xl text-xs shadow-xs transition-colors cursor-pointer"
                 >
                   <Edit3 className="w-3.5 h-3.5 text-teal-300" />
-                  <span>Atualizar meus dados</span>
+                  <span>Editar Meu Cadastro (Auditado)</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={logout}
-                  title="Desconectar do portal"
-                  className="inline-flex items-center gap-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 font-semibold px-3 py-2 rounded-xl text-xs transition-colors cursor-pointer"
+                  className="inline-flex items-center gap-1 bg-rose-50 hover:bg-rose-100 text-rose-700 font-semibold px-3 py-2 rounded-xl text-xs transition-colors cursor-pointer"
                 >
                   <LogOut className="w-3.5 h-3.5" />
                   <span>Sair</span>
@@ -517,100 +431,115 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
               </div>
             </div>
 
-            {/* Resumo Exclusivo de Dados Pessoais do Candidato (Sem dados específicos de concursos) */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 font-mono block">
-                  E-mail de notificação
+            {/* Aviso de Preenchimento Inicial caso falte CPF */}
+            {!usuario.cpf && (
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between gap-3 text-xs text-amber-800">
+                <span>
+                  <strong>Atenção:</strong> Preencha seu CPF e data de nascimento para cruzar seus dados automaticamente com a lista de aprovados e liberar o acesso aos chats de comarcas.
                 </span>
-                <span className="font-semibold text-slate-800 mt-1 flex items-center gap-1 truncate" title={usuario.email}>
-                  <Mail className="w-3 h-3 text-teal-600 shrink-0" />
-                  <span className="truncate">{usuario.email}</span>
-                </span>
+                <button
+                  type="button"
+                  onClick={() => setModalPerfilAberto(true)}
+                  className="font-bold underline text-amber-900 shrink-0 cursor-pointer"
+                >
+                  Completar agora
+                </button>
               </div>
-
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 font-mono block">
-                  Telefone / WhatsApp
-                </span>
-                <span className="font-semibold text-slate-800 mt-1 flex items-center gap-1">
-                  <Phone className="w-3 h-3 text-teal-600 shrink-0" />
-                  <span>{usuario.whatsapp || usuario.telefone || 'Não informado'}</span>
-                </span>
-              </div>
-
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 font-mono block">
-                  CPF cadastrado
-                </span>
-                <span className="font-semibold text-slate-800 mt-1 flex items-center gap-1">
-                  <ShieldCheck className="w-3 h-3 text-teal-600 shrink-0" />
-                  <span>{usuario.cpf || 'Não informado'}</span>
-                </span>
-              </div>
-
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 font-mono block">
-                  Concursos vinculados
-                </span>
-                <span className="font-semibold text-slate-800 mt-1 flex items-center gap-1">
-                  <BookmarkCheck className="w-3 h-3 text-teal-600 shrink-0" />
-                  <span>{inscricoesCandidato.length} certame(s)</span>
-                </span>
-              </div>
-            </div>
+            )}
           </div>
         )}
       </div>
 
-      {/* SEÇÃO 2: MEUS CONCURSOS INSCRITOS */}
-      {usuario && (
+      {/* SEÇÃO 2: MEUS CONCURSOS VINCULADOS */}
+      {usuario && inscricoesCandidato.length > 0 && (
         <div className="bg-white rounded-2xl border border-slate-200/90 card-shadow p-5 sm:p-6 space-y-4">
-          <div className="flex items-center justify-between gap-4 pb-3 border-b border-slate-100">
-            <div>
-              <div className="flex items-center gap-2">
-                <BookmarkCheck className="w-5 h-5 text-teal-600" />
-                <h2 className="text-base sm:text-lg font-bold font-serif text-slate-900">
-                  Meus concursos inscritos
-                </h2>
-                <span className="px-2 py-0.5 rounded-full bg-teal-100 text-teal-900 text-xs font-bold font-mono">
-                  {inscricoesCandidato.length}
-                </span>
-              </div>
-              <p className="text-xs text-slate-500 mt-1">
-                Concursos e cargos em que você está homologado ou inscrito para acompanhamento de vagas e lotações.
-              </p>
+          <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+            <div className="flex items-center gap-2">
+              <BookmarkCheck className="w-5 h-5 text-teal-600" />
+              <h2 className="text-base sm:text-lg font-bold font-serif text-slate-900">
+                Meus Concursos em Acompanhamento
+              </h2>
+              <span className="px-2 py-0.5 rounded-full bg-teal-100 text-teal-900 text-xs font-bold font-mono">
+                {inscricoesCandidato.length}
+              </span>
             </div>
           </div>
 
-          {inscricoesCandidato.length === 0 ? (
-            <div className="p-8 text-center bg-slate-50 rounded-xl border border-dashed border-slate-200 space-y-3">
-              <Building2 className="w-8 h-8 text-slate-400 mx-auto" />
-              <h3 className="text-sm font-bold text-slate-800">
-                Nenhum concurso vinculado no momento
-              </h3>
-              <p className="text-xs text-slate-500 max-w-md mx-auto">
-                Você ainda não adicionou nenhum concurso à sua lista de acompanhamento. Escolha um dos certames disponíveis abaixo e clique em &quot;Acompanhar&quot;.
-              </p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {inscricoesCandidato.map((item) => (
-                <div
-                  key={`${item.concurso.id}_${item.cargo.id}`}
-                  className="p-5 rounded-2xl bg-gradient-to-br from-slate-50 to-teal-50/20 border border-teal-200/80 shadow-2xs space-y-4 flex flex-col justify-between"
-                >
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="px-2.5 py-0.5 rounded-md bg-[#07192B] text-teal-300 text-xs font-bold font-mono uppercase">
-                        {item.concurso.orgao} • {item.concurso.ano}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {inscricoesCandidato.map((item) => (
+              <div
+                key={`${item.concurso.id}_${item.cargo.id}`}
+                className="p-5 rounded-2xl bg-gradient-to-br from-slate-50 to-teal-50/20 border border-teal-200/80 shadow-2xs space-y-4 flex flex-col justify-between"
+              >
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="px-2.5 py-0.5 rounded-md bg-[#07192B] text-teal-300 text-xs font-bold font-mono uppercase">
+                      {item.concurso.orgao} • {item.concurso.ano}
+                    </span>
+                    <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-100 text-emerald-800">
+                      {item.candidato?.status || 'Inscrito / Acompanhando'}
+                    </span>
+                  </div>
+
+                  <div>
+                    <h3 className="text-sm sm:text-base font-bold font-serif text-slate-900">
+                      {item.concurso.nome}
+                    </h3>
+                    <div className="flex items-center gap-1.5 text-xs text-[#135A7A] font-semibold mt-1">
+                      <Briefcase className="w-3.5 h-3.5 shrink-0" />
+                      <span>{item.cargo.nome}</span>
+                    </div>
+                  </div>
+
+                  <div className="p-3 bg-white rounded-xl border border-slate-200/80 grid grid-cols-2 gap-2 text-xs">
+                    <div>
+                      <span className="text-[10px] uppercase text-slate-400 font-bold block">
+                        Classificação
                       </span>
-                      <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-100 text-emerald-800">
-                        {item.candidato?.status || 'Inscrito / Acompanhando'}
+                      <span className="font-bold text-[#135A7A] text-sm font-mono">
+                        {item.candidato ? `${item.candidato.posicao}º lugar` : 'Acompanhando'}
                       </span>
                     </div>
 
-                    <div
+                    <div>
+                      <span className="text-[10px] uppercase text-slate-400 font-bold block">
+                        Comarca Preferencial
+                      </span>
+                      <span className="font-semibold text-slate-800 text-xs truncate block">
+                        {item.candidato?.comarca_desejada_1 || 'Pendente de escolha'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Links Diretos */}
+                <div className="pt-3 border-t border-slate-200/60 flex items-center justify-between gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => desinscreverConcurso(item.concurso.id, item.cargo.id)}
+                    className="text-[11px] text-slate-500 hover:text-rose-600 font-semibold cursor-pointer"
+                  >
+                    Remover
+                  </button>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        onNavigate('concurso', {
+                          concursoId: item.concurso.id,
+                          cargoId: item.cargo.id,
+                          tab: 'classificacao',
+                        })
+                      }
+                      className="text-xs font-semibold bg-white hover:bg-slate-100 text-slate-700 px-3 py-1.5 rounded-lg border border-slate-200 transition-colors cursor-pointer flex items-center gap-1"
+                    >
+                      <ListOrdered className="w-3.5 h-3.5 text-slate-500" />
+                      <span>Ranking</span>
+                    </button>
+
+                    <button
+                      type="button"
                       onClick={() =>
                         onNavigate('concurso', {
                           concursoId: item.concurso.id,
@@ -618,137 +547,31 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
                           tab: 'dashboard',
                         })
                       }
-                      className="cursor-pointer group/title"
-                      title="Clique para acessar a página inicial do concurso"
+                      className="text-xs font-bold bg-[#135A7A] hover:bg-[#0C2640] text-white px-3.5 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
                     >
-                      <h3 className="text-sm sm:text-base font-bold font-serif text-slate-900 group-hover/title:text-[#135A7A] transition-colors">
-                        {item.concurso.nome}
-                      </h3>
-                      <div className="flex items-center gap-1.5 text-xs text-[#135A7A] font-semibold mt-1">
-                        <Briefcase className="w-3.5 h-3.5 shrink-0" />
-                        <span>{item.cargo.nome}</span>
-                      </div>
-                    </div>
-
-                    {/* Dados Específicos deste Cargo no Concurso */}
-                    <div className="p-3 bg-white rounded-xl border border-slate-200/80 grid grid-cols-2 gap-2 text-xs">
-                      <div>
-                        <span className="text-[10px] uppercase text-slate-400 font-bold block">
-                          Sua classificação
-                        </span>
-                        <span className="font-bold text-[#135A7A] text-sm">
-                          {item.candidato ? `${item.candidato.posicao}º lugar` : 'Acompanhando'}
-                        </span>
-                        {item.candidato?.cota && (
-                          <span className="text-[10px] text-slate-500 block">
-                            Cota: {item.candidato.cota}
-                          </span>
-                        )}
-                      </div>
-
-                      <div>
-                        <span className="text-[10px] uppercase text-slate-400 font-bold block">
-                          Comarcas do cargo
-                        </span>
-                        {item.candidato?.comarca_desejada_1 ? (
-                          <span className="font-semibold text-slate-800 text-xs truncate block" title={item.candidato.comarca_desejada_1}>
-                            1ª Opção: {item.candidato.comarca_desejada_1}
-                          </span>
-                        ) : (
-                          <span className="text-slate-400 text-xs italic block">
-                            Pendente de escolha
-                          </span>
-                        )}
-                        <span className="text-[10px] text-slate-500 block">
-                          {item.candidato?.intencao ? `Intenção: ${item.candidato.intencao}` : 'Intenção: Não informada'}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Ações Específicas para o Concurso / Cargo */}
-                  <div className="pt-3 border-t border-slate-200/60 flex items-center justify-between gap-2 flex-wrap">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        desinscreverConcurso(item.concurso.id, item.cargo.id)
-                      }
-                      className="text-[11px] text-slate-500 hover:text-rose-600 font-semibold cursor-pointer"
-                    >
-                      Remover
+                      <span>Acessar Concurso</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
                     </button>
-
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          onNavigate('concurso', {
-                            concursoId: item.concurso.id,
-                            cargoId: item.cargo.id,
-                            tab: 'classificacao',
-                          })
-                        }
-                        title="Ver classificação completa e notas"
-                        className="text-xs font-semibold bg-white hover:bg-slate-100 text-slate-700 px-3 py-1.5 rounded-lg border border-slate-200 transition-colors cursor-pointer flex items-center gap-1"
-                      >
-                        <ListOrdered className="w-3.5 h-3.5 text-slate-500" />
-                        <span>Ranking</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() =>
-                          onNavigate('concurso', {
-                            concursoId: item.concurso.id,
-                            cargoId: item.cargo.id,
-                            tab: 'candidato',
-                          })
-                        }
-                        title="Acessar aba do cargo para indicar comarcas de interesse e intenção de posse"
-                        className="text-xs font-semibold bg-teal-50 hover:bg-teal-100 text-[#135A7A] border border-teal-200 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer"
-                      >
-                        <MapPin className="w-3.5 h-3.5 text-teal-600" />
-                        <span>Definir comarcas</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() =>
-                          onNavigate('concurso', {
-                            concursoId: item.concurso.id,
-                            cargoId: item.cargo.id,
-                            tab: 'dashboard',
-                          })
-                        }
-                        title="Acessar a página inicial deste concurso"
-                        className="text-xs font-bold bg-[#135A7A] hover:bg-[#0C2640] text-white px-3.5 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
-                      >
-                        <span>Acessar concurso</span>
-                        <ArrowRight className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
                   </div>
                 </div>
-              ))}
-            </div>
-          )}
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
-      {/* SEÇÃO 3: CONCURSOS CADASTRADOS NO SITE (DIRETÓRIO) */}
+      {/* SEÇÃO 3: DIRETÓRIO DE CONCURSOS CADASTRADOS (COM FILTROS COMPLETOS) */}
       <div className="space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-          <div>
-            <h2 className="text-xl sm:text-2xl font-bold font-serif text-slate-900">
-              Concursos cadastrados no site
-            </h2>
-            <p className="text-xs sm:text-sm text-slate-500">
-              Consulte os certames disponíveis no CERTAM, selecione o concurso desejado para acessar seus cargos e definir suas preferências de lotação.
-            </p>
-          </div>
+        <div>
+          <h2 className="text-xl sm:text-2xl font-bold font-serif text-slate-900">
+            Concursos Cadastrados no Portal
+          </h2>
+          <p className="text-xs sm:text-sm text-slate-500">
+            Consulte os certames oficiais em andamento, homologados e previstos. Navegue diretamente pelos cargos e lotes específicos.
+          </p>
         </div>
 
-        {/* BARRA DE FILTROS E BUSCA */}
+        {/* BARRA DE FILTROS */}
         <div className="bg-white rounded-xl p-4 sm:p-5 border border-slate-200/80 card-shadow space-y-4">
           <div className="flex flex-col md:flex-row gap-3">
             <div className="relative flex-1">
@@ -759,13 +582,25 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
                 type="text"
                 value={filtroTexto}
                 onChange={(e) => setFiltroTexto(e.target.value)}
-                placeholder="Pesquisar por órgão, concurso ou cargo cadastrado..."
-                className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#2DD4AA]"
+                placeholder="Pesquisar por órgão, concurso ou cargo (ex: TJRS, MPRS, Analista, Técnico)..."
+                className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-medium focus:outline-hidden focus:ring-2 focus:ring-[#2DD4AA]"
               />
             </div>
 
+            {/* Filtro por Região */}
+            <select
+              value={filtroRegiao}
+              onChange={(e) => setFiltroRegiao(e.target.value)}
+              className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:bg-white focus:outline-hidden"
+            >
+              <option value="todas">Todas as Regiões</option>
+              <option value="Sul">Região Sul (RS, SC, PR)</option>
+              <option value="Sudeste">Região Sudeste</option>
+              <option value="Nacional">Nacional / Federal</option>
+            </select>
+
             {/* Filtros por Status */}
-            <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-xl border border-slate-200/60 overflow-x-auto shrink-0">
+            <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-xl border border-slate-200/60 overflow-x-auto shrink-0">
               <button
                 type="button"
                 onClick={() => setFiltroStatus('todos')}
@@ -779,14 +614,47 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
               </button>
               <button
                 type="button"
-                onClick={() => setFiltroStatus('ativos')}
+                onClick={() => setFiltroStatus('em_andamento')}
                 className={`px-3 py-1.5 rounded-lg text-xs transition-all cursor-pointer ${
-                  filtroStatus === 'ativos'
+                  filtroStatus === 'em_andamento'
                     ? 'bg-white text-slate-900 font-bold shadow-xs'
                     : 'text-slate-600 hover:text-slate-900 font-medium'
                 }`}
               >
-                Ativos
+                Em Andamento
+              </button>
+              <button
+                type="button"
+                onClick={() => setFiltroStatus('homologados')}
+                className={`px-3 py-1.5 rounded-lg text-xs transition-all cursor-pointer ${
+                  filtroStatus === 'homologados'
+                    ? 'bg-white text-slate-900 font-bold shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 font-medium'
+                }`}
+              >
+                Homologados
+              </button>
+              <button
+                type="button"
+                onClick={() => setFiltroStatus('previstos')}
+                className={`px-3 py-1.5 rounded-lg text-xs transition-all cursor-pointer ${
+                  filtroStatus === 'previstos'
+                    ? 'bg-white text-slate-900 font-bold shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 font-medium'
+                }`}
+              >
+                Previstos para Abrir
+              </button>
+              <button
+                type="button"
+                onClick={() => setFiltroStatus('encerrados')}
+                className={`px-3 py-1.5 rounded-lg text-xs transition-all cursor-pointer ${
+                  filtroStatus === 'encerrados'
+                    ? 'bg-white text-slate-900 font-bold shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 font-medium'
+                }`}
+              >
+                Encerrados
               </button>
             </div>
           </div>
@@ -799,260 +667,166 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
               <button
                 type="button"
                 onClick={() => setFiltroTexto('')}
-                className="text-[#135A7A] hover:underline font-semibold cursor-pointer"
+                className="text-teal-700 font-bold hover:underline cursor-pointer"
               >
-                Limpar filtros de busca
+                Limpar busca
               </button>
             )}
           </div>
         </div>
 
-        {/* GRID DE CARDS DOS CONCURSOS CADASTRADOS */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {concursosFiltrados.map((concurso) => (
-            <div
-              key={concurso.id}
-              className="bg-white rounded-2xl border border-slate-200/90 card-shadow card-shadow-hover overflow-hidden flex flex-col justify-between"
-            >
-              <div className="p-6 space-y-4">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="px-2.5 py-1 rounded-lg bg-teal-50 border border-teal-200 text-[#135A7A] text-xs font-bold font-mono uppercase">
-                    {concurso.orgao} • {concurso.ano}
-                  </span>
-                  <span className="px-2 py-0.5 rounded-md text-[11px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
-                    {concurso.status}
-                  </span>
-                </div>
+        {/* LISTAGEM DOS CONCURSOS */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          {concursosFiltrados.map((conc) => {
+            const cargosAtivos = conc.cargos?.filter((cg) => cg.ativo) || [];
 
-                <div>
-                  <h3 className="text-base sm:text-lg font-bold font-serif text-slate-900 leading-snug">
-                    {concurso.nome}
-                  </h3>
-                  <p className="text-xs text-slate-500 mt-1.5 line-clamp-2 leading-relaxed">
-                    {concurso.descricao}
-                  </p>
-                </div>
+            return (
+              <div
+                key={conc.id}
+                className="bg-white rounded-2xl border border-slate-200 card-shadow p-5 sm:p-6 flex flex-col justify-between space-y-4 hover:border-teal-500/50 transition-all"
+              >
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="px-2.5 py-0.5 rounded-md bg-[#07192B] text-teal-300 text-xs font-bold font-mono uppercase">
+                        {conc.orgao} • {conc.ano}
+                      </span>
+                      <span className="text-2xs font-semibold text-slate-500">{conc.esfera}</span>
+                    </div>
 
-                {/* Cargos cadastrados deste concurso */}
-                <div className="pt-2 border-t border-slate-100 space-y-2">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 font-mono block">
-                    Cargos disponíveis ({concurso.cargos?.length || 0})
-                  </span>
-                  <div className="space-y-1.5">
-                    {concurso.cargos?.map((cargo) => {
-                      const estaInscrito =
-                        usuario?.concursos_inscritos?.some(
-                          (i) => i.concurso_id === concurso.id && i.cargo_id === cargo.id
-                        ) ||
-                        inscricoesCandidato.some(
-                          (i) => i.concurso.id === concurso.id && i.cargo.id === cargo.id
-                        );
+                    <span
+                      className={`px-2.5 py-0.5 rounded-md text-[11px] font-bold ${
+                        conc.homologado || conc.status === 'Homologado'
+                          ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                          : conc.status === 'Convocando'
+                          ? 'bg-amber-50 text-amber-800 border border-amber-300'
+                          : 'bg-slate-100 text-slate-700'
+                      }`}
+                    >
+                      {conc.status}
+                    </span>
+                  </div>
 
-                      return (
+                  <div>
+                    <h3 className="text-base sm:text-lg font-bold font-serif text-slate-900 leading-snug">
+                      {conc.nome}
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-1 line-clamp-2 leading-relaxed">
+                      {conc.descricao}
+                    </p>
+                  </div>
+
+                  {/* Cargos deste Concurso com Links Diretos */}
+                  <div className="space-y-2 pt-2 border-t border-slate-100">
+                    <span className="text-2xs font-bold text-slate-400 uppercase tracking-wider block">
+                      Cargos Disponíveis ({cargosAtivos.length})
+                    </span>
+
+                    <div className="space-y-1.5">
+                      {cargosAtivos.map((cg) => (
                         <div
-                          key={cargo.id}
-                          className="w-full p-2.5 rounded-xl bg-slate-50 border border-slate-200/80 hover:border-teal-300 transition-all flex items-center justify-between group"
+                          key={cg.id}
+                          onClick={() =>
+                            onNavigate('concurso', {
+                              concursoId: conc.id,
+                              cargoId: cg.id,
+                              tab: 'dashboard',
+                            })
+                          }
+                          className="p-2.5 bg-slate-50 hover:bg-teal-50/50 rounded-xl border border-slate-200/80 flex items-center justify-between text-xs cursor-pointer group transition-all"
+                          title={`Acessar página do cargo ${cg.nome}`}
                         >
-                          <div
-                            onClick={() =>
-                              onNavigate('concurso', {
-                                concursoId: concurso.id,
-                                cargoId: cargo.id,
-                                tab: 'dashboard',
-                              })
-                            }
-                            className="min-w-0 pr-2 cursor-pointer flex-1"
-                          >
-                            <div className="flex items-center gap-1.5">
-                              <Briefcase className="w-3.5 h-3.5 text-[#135A7A] shrink-0" />
-                              <span className="text-xs font-bold text-slate-800 truncate group-hover:text-teal-900">
-                                {cargo.nome}
-                              </span>
-                            </div>
-                            <span className="text-[10px] text-slate-500 ml-5 block">
-                              Nível {cargo.nivel} • {cargo.vagas_imediatas} vagas {cargo.tem_cr ? '+ CR' : ''}
+                          <div className="flex items-center gap-2">
+                            <Briefcase className="w-3.5 h-3.5 text-slate-400 group-hover:text-teal-700" />
+                            <span className="font-semibold text-slate-800 group-hover:text-teal-900">
+                              {cg.nome}
                             </span>
+                            <span className="text-[10px] text-slate-400">({cg.nivel})</span>
                           </div>
 
-                          <div className="flex items-center gap-1 shrink-0">
-                            {usuario && (
-                              <button
-                                type="button"
-                                title={estaInscrito ? 'Inscrito neste cargo' : 'Acompanhar este cargo'}
-                                onClick={() => {
-                                  if (estaInscrito) {
-                                    desinscreverConcurso(concurso.id, cargo.id);
-                                    showToast('Inscrição removida do cargo.');
-                                  } else {
-                                    inscreverConcurso(concurso.id, cargo.id);
-                                    showToast('Cargo adicionado às suas inscrições!');
-                                  }
-                                }}
-                                className={`p-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-colors ${
-                                  estaInscrito
-                                    ? 'bg-teal-100 text-teal-800 hover:bg-rose-100 hover:text-rose-700'
-                                    : 'bg-white hover:bg-teal-50 text-slate-600 hover:text-teal-800 border border-slate-200'
-                                }`}
-                              >
-                                {estaInscrito ? (
-                                  <Check className="w-3.5 h-3.5" />
-                                ) : (
-                                  <Plus className="w-3.5 h-3.5" />
-                                )}
-                              </button>
+                          <div className="flex items-center gap-2">
+                            {cg.vagas_reais_abertas && (
+                              <span className="text-[10px] font-mono font-semibold text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded">
+                                {cg.vagas_reais_abertas} vagas abertas
+                              </span>
                             )}
-
-                            <button
-                              type="button"
-                              onClick={() =>
-                                onNavigate('concurso', {
-                                  concursoId: concurso.id,
-                                  cargoId: cargo.id,
-                                  tab: 'dashboard',
-                                })
-                              }
-                              className="p-1.5 text-slate-400 group-hover:text-teal-700 cursor-pointer"
-                            >
-                              <ArrowRight className="w-4 h-4" />
-                            </button>
+                            <ArrowRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-teal-700" />
                           </div>
                         </div>
-                      );
-                    })}
+                      ))}
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              {/* Rodapé do Card com Entrada para a Página do Concurso */}
-              <div className="bg-slate-50/80 p-3.5 border-t border-slate-100 flex items-center justify-between gap-2 flex-wrap">
-                <span className="text-xs text-slate-500 font-medium">
-                  {concurso.cargos?.length || 0} cargo(s) cadastrado(s)
-                </span>
+                {/* Rodapé do Card do Concurso com Ações de Acesso */}
+                <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        onNavigate('concurso', {
+                          concursoId: conc.id,
+                          cargoId: cargosAtivos[0]?.id || 'geral',
+                          tab: 'cronograma',
+                        })
+                      }
+                      className="text-xs font-semibold text-slate-600 hover:text-slate-900 flex items-center gap-1 cursor-pointer"
+                    >
+                      <Calendar className="w-3.5 h-3.5 text-teal-600" />
+                      <span>Cronograma</span>
+                    </button>
 
-                <button
-                  type="button"
-                  onClick={() =>
-                    onNavigate('concurso', {
-                      concursoId: concurso.id,
-                      cargoId: concurso.cargos?.[0]?.id || 'geral',
-                      tab: 'dashboard',
-                    })
-                  }
-                  className="text-xs font-bold bg-[#135A7A] hover:bg-[#0C2640] text-white px-3.5 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
-                >
-                  <span>Acessar concurso</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        onNavigate('lote', {
+                          concursoId: conc.id,
+                          cargoId: cargosAtivos[0]?.id || 'geral',
+                        })
+                      }
+                      className="text-xs font-semibold text-slate-600 hover:text-slate-900 flex items-center gap-1 cursor-pointer"
+                    >
+                      <Layers className="w-3.5 h-3.5 text-teal-600" />
+                      <span>Lotes</span>
+                    </button>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onNavigate('concurso', {
+                        concursoId: conc.id,
+                        cargoId: cargosAtivos[0]?.id || 'geral',
+                        tab: 'dashboard',
+                      })
+                    }
+                    className="flex items-center gap-1.5 px-4 py-2 bg-[#07192B] hover:bg-[#0C2640] text-[#2DD4AA] font-bold text-xs rounded-xl transition-all cursor-pointer shadow-xs"
+                  >
+                    <span>Página do Concurso</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
-      {/* MODAL: ATUALIZAR DADOS CADASTRAIS (DADOS GERAIS) */}
-      {modalDadosAberto && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 animate-scale-up space-y-5">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2">
-                <Edit3 className="w-5 h-5 text-[#135A7A]" />
-                <h3 className="text-lg font-bold font-serif text-slate-900">
-                  Atualizar dados cadastrais
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setModalDadosAberto(false)}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+      {/* Modais da Home */}
+      <PerfilCandidatoModal
+        aberto={modalPerfilAberto}
+        onClose={() => setModalPerfilAberto(false)}
+        onAbrirContatoAdmin={() => {
+          setMotivoContato('inclusao_concurso');
+          setModalContatoAberto(true);
+        }}
+      />
 
-            <form onSubmit={handleSalvarDados} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                  Nome completo
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={formNome}
-                  onChange={(e) => setFormNome(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#2DD4AA]"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                  E-mail do candidato
-                </label>
-                <input
-                  type="email"
-                  required
-                  value={formEmail}
-                  onChange={(e) => setFormEmail(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#2DD4AA]"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                    WhatsApp / Telefone
-                  </label>
-                  <input
-                    type="text"
-                    value={formWhatsapp}
-                    onChange={(e) => setFormWhatsapp(e.target.value)}
-                    placeholder="(51) 99999-9999"
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#2DD4AA]"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                    CPF (para conferência)
-                  </label>
-                  <input
-                    type="text"
-                    value={formCpf}
-                    onChange={(e) => setFormCpf(e.target.value)}
-                    placeholder="***.000.000-**"
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#2DD4AA]"
-                  />
-                </div>
-              </div>
-
-              {/* Informação contextual sobre escolhas de comarcas e intenção */}
-              <div className="p-3 bg-teal-50/70 border border-teal-200 rounded-xl text-xs text-slate-700 space-y-1">
-                <span className="font-bold text-[#135A7A] block">
-                  ℹ️ Comarcas e intenção de posse
-                </span>
-                <p className="text-[11px] leading-relaxed text-slate-600">
-                  As preferências de comarcas, ordenação de prioridade e manifestação de intenção de posse são preenchidas individualmente na página de cada cargo/concurso, garantindo que suas escolhas sejam específicas para o certame desejado.
-                </p>
-              </div>
-
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setModalDadosAberto(false)}
-                  className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-900 rounded-xl transition-colors cursor-pointer"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2.5 bg-[#135A7A] hover:bg-[#0C2640] text-white font-bold rounded-xl text-xs shadow-md transition-colors cursor-pointer"
-                >
-                  Salvar alterações
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      <ContatoAdminModal
+        aberto={modalContatoAberto}
+        onClose={() => setModalContatoAberto(false)}
+        motivoInicial={motivoContato}
+      />
     </div>
   );
 };
