@@ -1,7 +1,7 @@
 import { MensagemPrivada, BloqueioUsuario } from '../types';
 
-const DM_STORAGE_KEY = 'certam_dm_messages_v3';
-const BLOCK_STORAGE_KEY = 'certam_blocked_users_v3';
+const DM_STORAGE_KEY = 'certam_dm_messages_v4';
+const BLOCK_STORAGE_KEY = 'certam_blocked_users_v4';
 
 const DEFAULT_DMS: MensagemPrivada[] = [
   {
@@ -10,7 +10,7 @@ const DEFAULT_DMS: MensagemPrivada[] = [
     remetente_nome: 'Mariana Duarte Becker',
     destinatario_email: 'rafasms0@hotmail.com',
     destinatario_nome: 'Rafael Santos da Silva',
-    concurso_referencia_id: 'tjrs_2024',
+    concurso_referencia_id: 'tjrs_2025',
     cargo_referencia_id: 'analista_judiciario',
     texto: 'Olá Rafael! Tudo bem? Vi que você é o 1º colocado de Analista e colocou Porto Alegre. Você já tem lotação definida por ter FG/CC?',
     data_hora: 'Ontem às 18:20',
@@ -22,7 +22,7 @@ const DEFAULT_DMS: MensagemPrivada[] = [
     remetente_nome: 'Rafael Santos da Silva',
     destinatario_email: 'mariana.becker@gmail.com',
     destinatario_nome: 'Mariana Duarte Becker',
-    concurso_referencia_id: 'tjrs_2024',
+    concurso_referencia_id: 'tjrs_2025',
     cargo_referencia_id: 'analista_judiciario',
     texto: 'Oi Mariana! Sim, permaneço na assessoria do 2º Grau em Porto Alegre, então a vaga de 1º Grau no Foro Central ficará livre para você!',
     data_hora: 'Ontem às 18:35',

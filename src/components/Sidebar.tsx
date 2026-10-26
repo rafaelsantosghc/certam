@@ -113,7 +113,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {/* 2. Simulador de Lotes e Comarcas */}
           <button
             type="button"
-            onClick={() => handleLinkClick('lote', { concursoId: 'tjrs_2024', cargoId: 'analista_judiciario' })}
+            onClick={() => handleLinkClick('lote', { concursoId: 'tjrs_2025', cargoId: 'analista_judiciario' })}
             className={`w-full flex items-center gap-3.5 px-6 py-3 text-sm font-medium transition-all cursor-pointer text-left ${
               currentView === 'lote'
                 ? 'font-semibold text-[#2DD4AA] bg-[#0C2640] border-l-4 border-[#2DD4AA]'

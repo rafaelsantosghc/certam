@@ -1,12 +1,12 @@
 import { ChatMensagem, CanalChatId } from '../types';
 
-const CHAT_KEY = 'certam_chat_messages';
+const CHAT_KEY = 'certam_chat_messages_v4';
 
 const INITIAL_MESSAGES: Record<string, ChatMensagem[]> = {
-  'tjrs_2024_analista_judiciario_geral': [
+  'tjrs_2025_analista_judiciario_geral': [
     {
       id: 'msg-pin-1',
-      concurso_id: 'tjrs_2024',
+      concurso_id: 'tjrs_2025',
       cargo_id: 'analista_judiciario',
       canal_id: 'geral',
       autor: 'Coordenação CERTAM',
@@ -20,7 +20,7 @@ const INITIAL_MESSAGES: Record<string, ChatMensagem[]> = {
     },
     {
       id: 'msg-1',
-      concurso_id: 'tjrs_2024',
+      concurso_id: 'tjrs_2025',
       cargo_id: 'analista_judiciario',
       canal_id: 'geral',
       autor: 'Rafael Santos',
@@ -35,7 +35,7 @@ const INITIAL_MESSAGES: Record<string, ChatMensagem[]> = {
     },
     {
       id: 'msg-2',
-      concurso_id: 'tjrs_2024',
+      concurso_id: 'tjrs_2025',
       cargo_id: 'analista_judiciario',
       canal_id: 'geral',
       autor: 'Mariana Becker',
@@ -49,7 +49,7 @@ const INITIAL_MESSAGES: Record<string, ChatMensagem[]> = {
     },
     {
       id: 'msg-3',
-      concurso_id: 'tjrs_2024',
+      concurso_id: 'tjrs_2025',
       cargo_id: 'analista_judiciario',
       canal_id: 'geral',
       autor: 'Carlos Meneghetti',
@@ -62,10 +62,10 @@ const INITIAL_MESSAGES: Record<string, ChatMensagem[]> = {
       curtidas: 8,
     },
   ],
-  'tjrs_2024_analista_judiciario_lotacao': [
+  'tjrs_2025_analista_judiciario_lotacao': [
     {
       id: 'msg-lot-1',
-      concurso_id: 'tjrs_2024',
+      concurso_id: 'tjrs_2025',
       cargo_id: 'analista_judiciario',
       canal_id: 'lotacao',
       autor: 'Luciana Martins',
@@ -79,7 +79,7 @@ const INITIAL_MESSAGES: Record<string, ChatMensagem[]> = {
     },
     {
       id: 'msg-lot-2',
-      concurso_id: 'tjrs_2024',
+      concurso_id: 'tjrs_2025',
       cargo_id: 'analista_judiciario',
       canal_id: 'lotacao',
       autor: 'Rodrigo Alves',
@@ -91,10 +91,10 @@ const INITIAL_MESSAGES: Record<string, ChatMensagem[]> = {
       curtidas: 5,
     },
   ],
-  'tjrs_2024_analista_judiciario_posse': [
+  'tjrs_2025_analista_judiciario_posse': [
     {
       id: 'msg-pos-1',
-      concurso_id: 'tjrs_2024',
+      concurso_id: 'tjrs_2025',
       cargo_id: 'analista_judiciario',
       canal_id: 'posse',
       autor: 'Coordenação CERTAM',
@@ -108,7 +108,7 @@ const INITIAL_MESSAGES: Record<string, ChatMensagem[]> = {
     },
     {
       id: 'msg-pos-2',
-      concurso_id: 'tjrs_2024',
+      concurso_id: 'tjrs_2025',
       cargo_id: 'analista_judiciario',
       canal_id: 'posse',
       autor: 'Fernanda Lima',
@@ -120,10 +120,10 @@ const INITIAL_MESSAGES: Record<string, ChatMensagem[]> = {
       curtidas: 3,
     },
   ],
-  'tjrs_2024_analista_judiciario_recursos': [
+  'tjrs_2025_analista_judiciario_recursos': [
     {
       id: 'msg-rec-1',
-      concurso_id: 'tjrs_2024',
+      concurso_id: 'tjrs_2025',
       cargo_id: 'analista_judiciario',
       canal_id: 'recursos',
       autor: 'Guilherme Silveira',

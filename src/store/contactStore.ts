@@ -1,6 +1,6 @@
 import { MensagemContatoAdmin, MotivoContato } from '../types';
 
-const CONTACT_STORAGE_KEY = 'certam_contact_messages_v3';
+const CONTACT_STORAGE_KEY = 'certam_contact_messages_v4';
 
 export const MOTIVOS_LABELS: Record<MotivoContato, string> = {
   inclusao_concurso: 'Solicitar Inclusão de Novo Concurso / Cargo',
@@ -23,7 +23,7 @@ const DEFAULT_CONTATOS: MensagemContatoAdmin[] = [
     cargo_nome: 'Analista Judiciário - Área Judiciária',
     classificacao: '14º lugar',
     mensagem: 'Gostaria de solicitar a inclusão do concurso do TRT-4 para podermos acompanhar a lista de chamamentos e preferências no CERTAM.',
-    data_envio: '23/02/2025 10:20',
+    data_envio: '23/02/2026 10:20',
     status: 'aberto',
   },
   {
@@ -32,13 +32,13 @@ const DEFAULT_CONTATOS: MensagemContatoAdmin[] = [
     usuario_nome: 'Patrícia Schneider Fagundes',
     motivo: 'duvida',
     motivo_label: 'Dúvida sobre Escolha de Comarcas ou Posse',
-    concurso_nome: 'TJRS 2024',
+    concurso_nome: 'TJRS 2025',
     cargo_nome: 'Analista Judiciário',
     mensagem: 'Gostaria de saber se a audiência de posse exige presença física em Porto Alegre para candidatos PCD ou se há opção telepresencial.',
-    data_envio: '24/02/2025 15:40',
+    data_envio: '24/02/2026 15:40',
     status: 'respondido',
-    resposta_admin: 'Olá Patrícia! Conforme o Edital nº 01/2024, a audiência permite participação virtual mediante envio prévio do formulário de telepresença.',
-    data_resposta: '24/02/2025 16:10',
+    resposta_admin: 'Olá Patrícia! Conforme o Edital nº 01/2025, a audiência permite participação virtual mediante envio prévio do formulário de telepresença.',
+    data_resposta: '24/02/2026 16:10',
   },
 ];
 

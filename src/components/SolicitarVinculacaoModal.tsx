@@ -175,7 +175,7 @@ export const SolicitarVinculacaoModal: React.FC<SolicitarVinculacaoModalProps> =
               </label>
               <textarea
                 rows={2}
-                placeholder="Ex: Inscrição nº 109281, publicado no Diário Oficial de 18/10/2024, página 42."
+                placeholder="Ex: Inscrição nº 109281, publicado no Diário Oficial de 18/10/2025, página 42."
                 value={comprovanteInfo}
                 onChange={(e) => setComprovanteInfo(e.target.value)}
                 className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:border-teal-600 focus:outline-hidden leading-relaxed"

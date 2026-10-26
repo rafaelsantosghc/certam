@@ -3,7 +3,7 @@ import { Candidato } from '../types';
 export const CANDIDATOS_ANALISTA_TJRS: Candidato[] = [
   {
     id: 'cand-001',
-    concurso_id: 'tjrs_2024',
+    concurso_id: 'tjrs_2025',
     cargo_id: 'analista_judiciario',
     posicao: 1,
     nome: 'Rafael Santos da Silva',
@@ -24,7 +24,7 @@ export const CANDIDATOS_ANALISTA_TJRS: Candidato[] = [
   },
   {
     id: 'cand-002',
-    concurso_id: 'tjrs_2024',
+    concurso_id: 'tjrs_2025',
     cargo_id: 'analista_judiciario',
     posicao: 2,
     nome: 'Mariana Duarte Becker',
@@ -44,7 +44,7 @@ export const CANDIDATOS_ANALISTA_TJRS: Candidato[] = [
   },
   {
     id: 'cand-003',
-    concurso_id: 'tjrs_2024',
+    concurso_id: 'tjrs_2025',
     cargo_id: 'analista_judiciario',
     posicao: 3,
     nome: 'Carlos Eduardo Meneghetti',
@@ -64,7 +64,7 @@ export const CANDIDATOS_ANALISTA_TJRS: Candidato[] = [
   },
   {
     id: 'cand-004',
-    concurso_id: 'tjrs_2024',
+    concurso_id: 'tjrs_2025',
     cargo_id: 'analista_judiciario',
     posicao: 4,
     nome: 'Luciana Ferreira de Oliveira',
@@ -84,7 +84,7 @@ export const CANDIDATOS_ANALISTA_TJRS: Candidato[] = [
   },
   {
     id: 'cand-005',
-    concurso_id: 'tjrs_2024',
+    concurso_id: 'tjrs_2025',
     cargo_id: 'analista_judiciario',
     posicao: 5,
     nome: 'Guilherme Augusto Ramos',
@@ -104,7 +104,7 @@ export const CANDIDATOS_ANALISTA_TJRS: Candidato[] = [
   },
   {
     id: 'cand-006',
-    concurso_id: 'tjrs_2024',
+    concurso_id: 'tjrs_2025',
     cargo_id: 'analista_judiciario',
     posicao: 6,
     nome: 'Patrícia Schneider Fagundes',
@@ -124,7 +124,7 @@ export const CANDIDATOS_ANALISTA_TJRS: Candidato[] = [
   },
   {
     id: 'cand-007',
-    concurso_id: 'tjrs_2024',
+    concurso_id: 'tjrs_2025',
     cargo_id: 'analista_judiciario',
     posicao: 7,
     nome: 'Rodrigo Medeiros Barbosa',
@@ -143,7 +143,7 @@ export const CANDIDATOS_ANALISTA_TJRS: Candidato[] = [
   },
   {
     id: 'cand-008',
-    concurso_id: 'tjrs_2024',
+    concurso_id: 'tjrs_2025',
     cargo_id: 'analista_judiciario',
     posicao: 8,
     nome: 'Luciana Martins Silveira',
@@ -165,7 +165,7 @@ export const CANDIDATOS_ANALISTA_TJRS: Candidato[] = [
 export const CANDIDATOS_ANALISTA_ADM_TJRS: Candidato[] = [
   {
     id: 'cand-adm-001',
-    concurso_id: 'tjrs_2024',
+    concurso_id: 'tjrs_2025',
     cargo_id: 'analista_administrativo',
     posicao: 1,
     nome: 'Fernando Silveira Castro',
@@ -184,7 +184,7 @@ export const CANDIDATOS_ANALISTA_ADM_TJRS: Candidato[] = [
   },
   {
     id: 'cand-adm-002',
-    concurso_id: 'tjrs_2024',
+    concurso_id: 'tjrs_2025',
     cargo_id: 'analista_administrativo',
     posicao: 2,
     nome: 'Juliana Costa e Silva',
@@ -203,7 +203,7 @@ export const CANDIDATOS_ANALISTA_ADM_TJRS: Candidato[] = [
   },
   {
     id: 'cand-adm-003',
-    concurso_id: 'tjrs_2024',
+    concurso_id: 'tjrs_2025',
     cargo_id: 'analista_administrativo',
     posicao: 3,
     nome: 'Lucas Gabriel Pires',
@@ -225,7 +225,7 @@ export const CANDIDATOS_ANALISTA_ADM_TJRS: Candidato[] = [
 export const CANDIDATOS_TECNICO_TJRS: Candidato[] = [
   {
     id: 'tec-001',
-    concurso_id: 'tjrs_2024',
+    concurso_id: 'tjrs_2025',
     cargo_id: 'tecnico_judiciario',
     posicao: 1,
     nome: 'Eduardo Martins Cunha',
@@ -244,7 +244,7 @@ export const CANDIDATOS_TECNICO_TJRS: Candidato[] = [
   },
   {
     id: 'tec-002',
-    concurso_id: 'tjrs_2024',
+    concurso_id: 'tjrs_2025',
     cargo_id: 'tecnico_judiciario',
     posicao: 2,
     nome: 'Clarissa Peixoto Ramos',
@@ -263,7 +263,7 @@ export const CANDIDATOS_TECNICO_TJRS: Candidato[] = [
   },
   {
     id: 'tec-003',
-    concurso_id: 'tjrs_2024',
+    concurso_id: 'tjrs_2025',
     cargo_id: 'tecnico_judiciario',
     posicao: 3,
     nome: 'Marcos Vinícius de Paula',
@@ -282,7 +282,7 @@ export const CANDIDATOS_TECNICO_TJRS: Candidato[] = [
   },
   {
     id: 'tec-004',
-    concurso_id: 'tjrs_2024',
+    concurso_id: 'tjrs_2025',
     cargo_id: 'tecnico_judiciario',
     posicao: 4,
     nome: 'Bruna Zimmermann Rocha',
@@ -304,7 +304,7 @@ export const CANDIDATOS_TECNICO_TJRS: Candidato[] = [
 export const CANDIDATOS_ANALISTA_MPRS: Candidato[] = [
   {
     id: 'mprs-ana-001',
-    concurso_id: 'mprs_2024',
+    concurso_id: 'mprs_2025',
     cargo_id: 'analista_mprs',
     posicao: 1,
     nome: 'Vinícius Albuquerque Dornelles',
@@ -323,7 +323,7 @@ export const CANDIDATOS_ANALISTA_MPRS: Candidato[] = [
   },
   {
     id: 'mprs-ana-002',
-    concurso_id: 'mprs_2024',
+    concurso_id: 'mprs_2025',
     cargo_id: 'analista_mprs',
     posicao: 2,
     nome: 'Renata Lemos Valença',
@@ -342,7 +342,7 @@ export const CANDIDATOS_ANALISTA_MPRS: Candidato[] = [
   },
   {
     id: 'mprs-ana-003',
-    concurso_id: 'mprs_2024',
+    concurso_id: 'mprs_2025',
     cargo_id: 'analista_mprs',
     posicao: 3,
     nome: 'Felipe Santana Barreto',
@@ -364,7 +364,7 @@ export const CANDIDATOS_ANALISTA_MPRS: Candidato[] = [
 export const CANDIDATOS_TECNICO_MPRS: Candidato[] = [
   {
     id: 'mprs-tec-001',
-    concurso_id: 'mprs_2024',
+    concurso_id: 'mprs_2025',
     cargo_id: 'tecnico_mprs',
     posicao: 1,
     nome: 'Tatiane Cristina Fontoura',
@@ -383,7 +383,7 @@ export const CANDIDATOS_TECNICO_MPRS: Candidato[] = [
   },
   {
     id: 'mprs-tec-002',
-    concurso_id: 'mprs_2024',
+    concurso_id: 'mprs_2025',
     cargo_id: 'tecnico_mprs',
     posicao: 2,
     nome: 'Diego Rodrigues Vasconcellos',
@@ -446,9 +446,15 @@ export const identificarCandidatoMaster = (
     });
     if (matchCpf) {
       if (!concursoId && !cargoId) return matchCpf;
-      if (concursoId && matchCpf.concurso_id === concursoId) {
+      const isConcMatch =
+        !concursoId ||
+        matchCpf.concurso_id === concursoId ||
+        (concursoId.startsWith('tjrs') && matchCpf.concurso_id?.startsWith('tjrs')) ||
+        (concursoId.startsWith('mprs') && matchCpf.concurso_id?.startsWith('mprs'));
+      if (isConcMatch) {
         if (!cargoId || matchCpf.cargo_id === cargoId) return matchCpf;
       }
+      return matchCpf;
     }
   }
 
@@ -461,7 +467,12 @@ export const identificarCandidatoMaster = (
     });
     if (matchNome) {
       if (!concursoId && !cargoId) return matchNome;
-      if (concursoId && matchNome.concurso_id === concursoId) {
+      const isConcMatch =
+        !concursoId ||
+        matchNome.concurso_id === concursoId ||
+        (concursoId.startsWith('tjrs') && matchNome.concurso_id?.startsWith('tjrs')) ||
+        (concursoId.startsWith('mprs') && matchNome.concurso_id?.startsWith('mprs'));
+      if (isConcMatch) {
         if (!cargoId || matchNome.cargo_id === cargoId) return matchNome;
       }
       return matchNome;

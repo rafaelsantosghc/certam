@@ -166,7 +166,7 @@ export const ContatoAdminModal: React.FC<ContatoAdminModalProps> = ({
                     </label>
                     <input
                       type="text"
-                      placeholder="Ex: 2024"
+                      placeholder="Ex: 2025"
                       value={anoConcurso}
                       onChange={(e) => setAnoConcurso(e.target.value)}
                       className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl focus:border-teal-600 focus:outline-hidden font-medium font-mono"

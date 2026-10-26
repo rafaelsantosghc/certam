@@ -50,7 +50,7 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ onNavigate, 
     if (n.link_destino && onNavigate) {
       if (n.link_destino.includes('concurso')) {
         const url = new URL(n.link_destino, 'http://localhost');
-        const id = url.searchParams.get('id') || 'tjrs_2024';
+        const id = url.searchParams.get('id') || 'tjrs_2025';
         const tab = url.searchParams.get('tab') || 'dashboard';
         onNavigate('concurso', { concursoId: id, tab });
       }

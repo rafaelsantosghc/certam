@@ -28,7 +28,7 @@ interface SimuladorLotesProps {
 }
 
 export const SimuladorLotes: React.FC<SimuladorLotesProps> = ({
-  concursoId = 'tjrs_2024',
+  concursoId = 'tjrs_2025',
   cargoId = 'analista_judiciario',
 }) => {
   const { usuario, isAdmin, loginGoogle } = useAuth();
@@ -1002,7 +1002,7 @@ export const SimuladorLotes: React.FC<SimuladorLotesProps> = ({
                   TRIBUNAL DE JUSTIÇA DO ESTADO DO RIO GRANDE DO SUL
                 </span>
                 <span className="text-2xs text-slate-600 block">
-                  CERTAM • Folha de Acompanhamento de Escolha de Comarcas - Edital 01/2024
+                  CERTAM • Folha de Acompanhamento de Escolha de Comarcas - Edital 01/2025
                 </span>
               </div>
               <span className="font-mono text-xs font-bold text-slate-900 border border-slate-800 px-2 py-1">

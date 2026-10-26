@@ -41,7 +41,7 @@ export const PerfilCandidatoModal: React.FC<PerfilCandidatoModalProps> = ({
 
   // Novo item de outro concurso sendo adicionado
   const [novoConcNome, setNovoConcNome] = useState('');
-  const [novoConcAno, setNovoConcAno] = useState('2024');
+  const [novoConcAno, setNovoConcAno] = useState('2025');
   const [novoConcCargo, setNovoConcCargo] = useState('');
   const [novoConcPos, setNovoConcPos] = useState('');
 
@@ -104,7 +104,7 @@ export const PerfilCandidatoModal: React.FC<PerfilCandidatoModalProps> = ({
     if (!novoConcNome || !novoConcCargo || !novoConcPos) return;
     const item: OutroConcursoAprovado = {
       concurso_nome: novoConcNome,
-      ano: novoConcAno || '2024',
+      ano: novoConcAno || '2025',
       cargo: novoConcCargo,
       classificacao: parseInt(novoConcPos, 10) || 1,
     };

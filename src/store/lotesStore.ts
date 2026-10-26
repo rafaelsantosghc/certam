@@ -8,8 +8,8 @@ import {
 } from '../data/defaultCandidates';
 import { COMARCAS_RS } from '../data/comarcas';
 
-const LOTES_KEY = 'certam_lotes_data_v3';
-const CANDIDATOS_KEY = 'certam_candidatos_data_v3';
+const LOTES_KEY = 'certam_lotes_data_v4';
+const CANDIDATOS_KEY = 'certam_candidatos_data_v4';
 
 export interface SimulacaoResultado {
   alocacoes: {
@@ -44,7 +44,7 @@ export const lotesStore = {
     const defaultLotes: Lote[] = [
       {
         id: 'lote_1_tjrs_analista',
-        concurso_id: 'tjrs_2024',
+        concurso_id: 'tjrs_2025',
         cargo_id: 'analista_judiciario',
         nome: 'Lote 1 (1º Chamamento Oficial - Analista Judiciário)',
         ativo: true,
@@ -56,7 +56,7 @@ export const lotesStore = {
       },
       {
         id: 'lote_1_tjrs_tecnico',
-        concurso_id: 'tjrs_2024',
+        concurso_id: 'tjrs_2025',
         cargo_id: 'tecnico_judiciario',
         nome: 'Lote 1 (1º Chamamento Oficial - Técnico Judiciário)',
         ativo: true,
@@ -68,7 +68,7 @@ export const lotesStore = {
       },
       {
         id: 'lote_1_mprs_analista',
-        concurso_id: 'mprs_2024',
+        concurso_id: 'mprs_2025',
         cargo_id: 'analista_mprs',
         nome: 'Lote 1 (Chamamento Inicial - Analista MPRS)',
         ativo: true,
@@ -110,11 +110,11 @@ export const lotesStore = {
     }
 
     let base: Candidato[] = CANDIDATOS_ANALISTA_TJRS;
-    if (concursoId === 'tjrs_2024') {
+    if (concursoId.startsWith('tjrs')) {
       if (cargoId === 'analista_administrativo') base = CANDIDATOS_ANALISTA_ADM_TJRS;
       else if (cargoId === 'tecnico_judiciario') base = CANDIDATOS_TECNICO_TJRS;
       else base = CANDIDATOS_ANALISTA_TJRS;
-    } else if (concursoId === 'mprs_2024') {
+    } else if (concursoId.startsWith('mprs')) {
       if (cargoId === 'tecnico_mprs') base = CANDIDATOS_TECNICO_MPRS;
       else base = CANDIDATOS_ANALISTA_MPRS;
     }
@@ -264,7 +264,7 @@ export const lotesStore = {
   simularLotacao(candidatos: Candidato[], comarcas: Comarca[]): SimulacaoResultado {
     const loteMock: Lote = {
       id: 'simulacao',
-      concurso_id: 'tjrs_2024',
+      concurso_id: 'tjrs_2025',
       cargo_id: 'analista_judiciario',
       nome: 'Simulação Geral',
       ativo: true,

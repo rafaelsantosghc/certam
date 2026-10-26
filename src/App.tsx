@@ -65,7 +65,7 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, Error
 export const AppContent: React.FC = () => {
   // Navigation routing state
   const [currentView, setCurrentView] = useState<'portal' | 'concurso' | 'lote' | 'admin' | 'politica'>('portal');
-  const [concursoId, setConcursoId] = useState<string>('tjrs_2024');
+  const [concursoId, setConcursoId] = useState<string>('tjrs_2025');
   const [cargoId, setCargoId] = useState<string>('analista_judiciario');
   const [initialTab, setInitialTab] = useState<string>('dashboard');
   const [sidebarMobileOpen, setSidebarMobileOpen] = useState(false);

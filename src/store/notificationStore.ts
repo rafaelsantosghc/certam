@@ -1,36 +1,36 @@
 import { NotificacaoItem } from '../types';
 
-const NOTIFICATIONS_STORAGE_KEY = 'certam_notifications_events_v3';
+const NOTIFICATIONS_STORAGE_KEY = 'certam_notifications_events_v4';
 
 export const DEFAULT_NOTIFICATIONS: NotificacaoItem[] = [
   {
     id: 'notif-1',
-    concurso_id: 'tjrs_2024',
+    concurso_id: 'tjrs_2025',
     cargo_id: 'analista_judiciario',
     titulo: 'Previsão de Edital do 2º Lote Convocatório TJRS',
-    mensagem: 'Comissão de Aprovados confirma tratativas adiantadas com a Presidência para abril/2025.',
+    mensagem: 'Comissão de Aprovados confirma tratativas adiantadas com a Presidência para abril/2026.',
     tipo: 'convocacao',
     data_hora: 'Hoje às 11:30',
-    link_destino: '/concurso?id=tjrs_2024&tab=cronograma',
+    link_destino: '/concurso?id=tjrs_2025&tab=cronograma',
     urgente: true,
   },
   {
     id: 'notif-2',
-    concurso_id: 'tjrs_2024',
+    concurso_id: 'tjrs_2025',
     titulo: 'Mobilização na ALRS: PL de Cargos Comissionados',
     mensagem: 'Confira a nota técnica em defesa da prioridade para concursados efetivos no TJRS.',
     tipo: 'comunicado',
     data_hora: 'Ontem às 16:45',
-    link_destino: '/concurso?id=tjrs_2024&tab=comunicados',
+    link_destino: '/concurso?id=tjrs_2025&tab=comunicados',
   },
   {
     id: 'notif-3',
-    concurso_id: 'mprs_2024',
+    concurso_id: 'mprs_2025',
     titulo: 'Homologação Definitiva dos Resultados do MPRS',
     mensagem: 'Ato oficial publicado no DJE do MPRS. Cronograma do primeiro lote em definição.',
     tipo: 'documento',
-    data_hora: '18/02/2025',
-    link_destino: '/concurso?id=mprs_2024&tab=documentos',
+    data_hora: '18/02/2026',
+    link_destino: '/concurso?id=mprs_2025&tab=documentos',
   },
 ];
 

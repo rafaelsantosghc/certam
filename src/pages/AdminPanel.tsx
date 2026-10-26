@@ -118,7 +118,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [faqPergunta, setFaqPergunta] = useState('');
   const [faqResposta, setFaqResposta] = useState('');
   const [faqCategoria, setFaqCategoria] = useState<FaqCategoria>('Remuneração e Benefícios');
-  const [faqConcursoId, setFaqConcursoId] = useState<string>('tjrs_2024');
+  const [faqConcursoId, setFaqConcursoId] = useState<string>('tjrs_2025');
   const [faqDestaque, setFaqDestaque] = useState(false);
   const [faqTags, setFaqTags] = useState('');
 
@@ -150,8 +150,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [formId, setFormId] = useState('');
   const [formNome, setFormNome] = useState('');
   const [formOrgao, setFormOrgao] = useState('');
-  const [formAno, setFormAno] = useState('2024');
-  const [formEdital, setFormEdital] = useState('Edital 01/2024');
+  const [formAno, setFormAno] = useState('2025');
+  const [formEdital, setFormEdital] = useState('Edital 01/2025');
   const [formStatus, setFormStatus] = useState<Concurso['status']>('ativo');
   const [formCargoInicial, setFormCargoInicial] = useState('Analista Judiciário');
   const [formDesc, setFormDesc] = useState('');
@@ -166,7 +166,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   // Nova Notificação (Broadcast)
   const [notifTitulo, setNotifTitulo] = useState('');
   const [notifMensagem, setNotifMensagem] = useState('');
-  const [notifConcursoId, setNotifConcursoId] = useState('tjrs_2024');
+  const [notifConcursoId, setNotifConcursoId] = useState('tjrs_2025');
   const [notifTipo, setNotifTipo] = useState<TipoNotificacao>('convocacao');
 
   // Resposta Contato
@@ -174,7 +174,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [respostaTexto, setRespostaTexto] = useState('');
 
   // Importador Planilhas
-  const [importConcursoId, setImportConcursoId] = useState<string>(concursos[0]?.id || 'tjrs_2024');
+  const [importConcursoId, setImportConcursoId] = useState<string>(concursos[0]?.id || 'tjrs_2025');
   const [importCargoId, setImportCargoId] = useState<string>(concursos[0]?.cargos?.[0]?.id || 'analista_judiciario');
   const [previewPlanilha, setPreviewPlanilha] = useState<Partial<Candidato>[]>([]);
   const [nomeArquivo, setNomeArquivo] = useState('');
@@ -921,7 +921,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       </div>
                       <div>
                         <span className="text-2xs font-bold uppercase text-slate-400 block">Ano</span>
-                        <span className="font-mono text-slate-800">{msg.ano_concurso || '2024'}</span>
+                        <span className="font-mono text-slate-800">{msg.ano_concurso || '2025'}</span>
                       </div>
                       <div>
                         <span className="text-2xs font-bold uppercase text-slate-400 block">Cargo Aprovado</span>

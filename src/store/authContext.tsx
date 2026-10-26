@@ -89,15 +89,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       read_notification_ids: [],
       outros_concursos: [
         {
-          concurso_nome: 'TJRS 2024',
-          ano: '2024',
+          concurso_nome: 'TJRS 2025',
+          ano: '2025',
           cargo: 'Analista Judiciário - Área Judiciária',
           classificacao: 2,
         },
       ],
       concursos_inscritos: [
         {
-          concurso_id: 'tjrs_2024',
+          concurso_id: 'tjrs_2025',
           cargo_id: 'analista_judiciario',
           data_inscricao: '12/01/2025',
         },
@@ -108,7 +108,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Login administrativo protegido por senha
   const loginAdmin = (senha: string): boolean => {
-    const senhasValidas = ['admin', 'certam2025', 'admin123', 'tjrs2024'];
+    const senhasValidas = ['admin', 'certam2025', 'admin123', 'tjrs2025'];
     if (senhasValidas.includes(senha.trim())) {
       const adminUsuario: Usuario = {
         nome: 'Rafael Santos da Silva',
@@ -124,15 +124,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         read_notification_ids: [],
         outros_concursos: [
           {
-            concurso_nome: 'TJRS 2024',
-            ano: '2024',
+            concurso_nome: 'TJRS 2025',
+            ano: '2025',
             cargo: 'Analista Judiciário - Área Judiciária',
             classificacao: 1,
           },
         ],
         concursos_inscritos: [
           {
-            concurso_id: 'tjrs_2024',
+            concurso_id: 'tjrs_2025',
             cargo_id: 'analista_judiciario',
             data_inscricao: '10/01/2025',
           },
@@ -169,8 +169,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       outros_concursos: match
         ? [
             {
-              concurso_nome: match.concurso_id === 'mprs_2024' ? 'MPRS 2024' : 'TJRS 2024',
-              ano: '2024',
+              concurso_nome: match.concurso_id?.startsWith('mprs') ? 'MPRS 2025' : 'TJRS 2025',
+              ano: '2025',
               cargo: match.cargo_id || 'Concursado',
               classificacao: match.posicao,
             },
@@ -178,7 +178,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         : [],
       concursos_inscritos: [
         {
-          concurso_id: match?.concurso_id || 'tjrs_2024',
+          concurso_id: match?.concurso_id || 'tjrs_2025',
           cargo_id: match?.cargo_id || 'analista_judiciario',
           data_inscricao: new Date().toLocaleDateString('pt-BR'),
         },
