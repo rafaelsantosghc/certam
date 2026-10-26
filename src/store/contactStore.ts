@@ -4,6 +4,7 @@ const CONTACT_STORAGE_KEY = 'certam_contact_messages_v4';
 
 export const MOTIVOS_LABELS: Record<MotivoContato, string> = {
   inclusao_concurso: 'Solicitar Inclusão de Novo Concurso / Cargo',
+  vinculacao_nao_efetivada: 'Concurso/Cargo Cadastrado, mas Vinculação Não Efetivada',
   erro_classificacao: 'Correção de Nota ou Posição na Classificação',
   vinculacao_cadastro: 'Vincular meu CPF ao Cadastro do Concurso',
   duvida: 'Dúvida sobre Escolha de Comarcas ou Posse',

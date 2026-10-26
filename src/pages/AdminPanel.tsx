@@ -791,8 +791,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
                     <div className="text-xs text-slate-600 flex flex-wrap items-center gap-2">
                       <span className="font-semibold text-teal-800">
-                        {v.concurso_id} • {v.cargo_id}
+                        {v.concurso_nome || v.concurso_id} • {v.cargo_nome || v.cargo_id}
                       </span>
+                      {v.ano_concurso && (
+                        <span className="text-2xs font-mono text-slate-500">({v.ano_concurso})</span>
+                      )}
                       <span className="text-slate-300">·</span>
                       <span className="font-mono font-bold text-slate-800">
                         Posição declarada: {v.posicao_declarada}º lugar

@@ -227,6 +227,10 @@ export interface OutroConcursoAprovado {
   ano: string;
   cargo: string;
   classificacao: number;
+  concurso_id?: string;
+  cargo_id?: string;
+  origem?: 'automatico' | 'manual' | 'solicitado';
+  status_aprovacao?: string;
 }
 
 export interface UsuarioInscricao {
@@ -292,6 +296,10 @@ export interface SolicitacaoVinculacao {
   data_solicitacao: string;
   status: 'pendente' | 'aprovado' | 'rejeitado';
   motivo_rejeicao?: string;
+  concurso_nome?: string;
+  cargo_nome?: string;
+  ano_concurso?: string;
+  tipo?: 'vinculacao_nao_efetivada' | 'inclusao_novo_concurso';
 }
 
 // -------------------------------------------------------------
@@ -299,6 +307,7 @@ export interface SolicitacaoVinculacao {
 // -------------------------------------------------------------
 export type MotivoContato =
   | 'inclusao_concurso'
+  | 'vinculacao_nao_efetivada'
   | 'erro_classificacao'
   | 'vinculacao_cadastro'
   | 'duvida'

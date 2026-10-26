@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../store/authContext';
 import { certamStore } from '../store/certamStore';
 import { auditStore } from '../store/auditStore';
 import { Concurso, OutroConcursoAprovado, AlteracaoCampoItem } from '../types';
 import { sanitizeInput } from '../utils/security';
+import { buscarTodasAprovacoesCandidato, AprovacaoDetectada } from '../utils/candidateMatcher';
 import {
   X,
   Send,
@@ -15,6 +16,9 @@ import {
   ArrowRight,
   ShieldCheck,
   Building,
+  Sparkles,
+  Check,
+  Link2,
 } from 'lucide-react';
 
 interface PerfilCandidatoModalProps {
@@ -29,7 +33,6 @@ export const PerfilCandidatoModal: React.FC<PerfilCandidatoModalProps> = ({
   onAbrirContatoAdmin,
 }) => {
   const { usuario, atualizarDadosUsuario } = useAuth();
-  const [concursosCadastrados] = useState<Concurso[]>(() => certamStore.getConcursos());
 
   // Form State
   const [nome, setNome] = useState('');
@@ -38,12 +41,6 @@ export const PerfilCandidatoModal: React.FC<PerfilCandidatoModalProps> = ({
   const [whatsapp, setWhatsapp] = useState('');
   const [emailContato, setEmailContato] = useState('');
   const [outrosConcursos, setOutrosConcursos] = useState<OutroConcursoAprovado[]>([]);
-
-  // Novo item de outro concurso sendo adicionado
-  const [novoConcNome, setNovoConcNome] = useState('');
-  const [novoConcAno, setNovoConcAno] = useState('2025');
-  const [novoConcCargo, setNovoConcCargo] = useState('');
-  const [novoConcPos, setNovoConcPos] = useState('');
 
   // Diff / Revisão
   const [modalDiffAberto, setModalDiffAberto] = useState(false);
@@ -65,6 +62,17 @@ export const PerfilCandidatoModal: React.FC<PerfilCandidatoModalProps> = ({
       setPrimeiroCadastro(isSemDados);
     }
   }, [usuario, aberto]);
+
+  // Identificação automática de todas as aprovações do candidato
+  const aprovacoesIdentificadas: AprovacaoDetectada[] = useMemo(() => {
+    return buscarTodasAprovacoesCandidato({
+      cpf: cpf || usuario?.cpf,
+      nome: nome || usuario?.nome,
+      email: emailContato || usuario?.email,
+      candidato_id: usuario?.candidato_id,
+      outros_concursos: outrosConcursos,
+    });
+  }, [cpf, nome, emailContato, usuario, outrosConcursos]);
 
   if (!aberto || !usuario) return null;
 
@@ -97,25 +105,6 @@ export const PerfilCandidatoModal: React.FC<PerfilCandidatoModalProps> = ({
       formatado = `(${limpo.slice(0, 2)}) ${limpo.slice(2)}`;
     }
     setWhatsapp(formatado);
-  };
-
-  // Adicionar outro concurso à lista
-  const handleAdicionarOutroConcurso = () => {
-    if (!novoConcNome || !novoConcCargo || !novoConcPos) return;
-    const item: OutroConcursoAprovado = {
-      concurso_nome: novoConcNome,
-      ano: novoConcAno || '2025',
-      cargo: novoConcCargo,
-      classificacao: parseInt(novoConcPos, 10) || 1,
-    };
-    setOutrosConcursos((prev) => [...prev, item]);
-    setNovoConcNome('');
-    setNovoConcCargo('');
-    setNovoConcPos('');
-  };
-
-  const handleRemoverOutroConcurso = (idx: number) => {
-    setOutrosConcursos((prev) => prev.filter((_, i) => i !== idx));
   };
 
   // Calcular Diffs entre os dados do usuário e o formulário
@@ -167,23 +156,23 @@ export const PerfilCandidatoModal: React.FC<PerfilCandidatoModalProps> = ({
       });
     }
 
-    // Compara outros concursos
-    const antigosConc = JSON.stringify(usuario.outros_concursos || []);
-    const novosConc = JSON.stringify(outrosConcursos);
-    if (antigosConc !== novosConc) {
-      diffs.push({
-        campo: 'outros_concursos',
-        campo_label: 'Outros Concursos e Cargos Aprovados',
-        valor_antigo: `${(usuario.outros_concursos || []).length} concurso(s) cadastrado(s)`,
-        valor_novo: `${outrosConcursos.length} concurso(s) selecionado(s)`,
-      });
-    }
-
     return diffs;
   };
 
   const handleSubmeterOuSalvar = (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Sincroniza lista de aprovações identificadas para persistir no cadastro
+    const outrosSincronizados: OutroConcursoAprovado[] = aprovacoesIdentificadas.map((ap) => ({
+      concurso_nome: ap.concurso_nome,
+      ano: ap.ano,
+      cargo: ap.cargo_nome,
+      classificacao: ap.posicao,
+      concurso_id: ap.concurso_id,
+      cargo_id: ap.cargo_id,
+      origem: ap.origem === 'sistema_automatico' ? 'automatico' : 'manual',
+      status_aprovacao: ap.status,
+    }));
 
     // Se for o primeiro preenchimento inicial (setup inicial da conta), grava diretamente
     if (primeiroCadastro) {
@@ -194,7 +183,7 @@ export const PerfilCandidatoModal: React.FC<PerfilCandidatoModalProps> = ({
         whatsapp: sanitizeInput(whatsapp, 25),
         telefone: sanitizeInput(whatsapp, 25),
         email_contato: sanitizeInput(emailContato, 80),
-        outros_concursos: outrosConcursos,
+        outros_concursos: outrosSincronizados,
       });
       setSubmetidoSucesso(true);
       setTimeout(() => {
@@ -243,7 +232,7 @@ export const PerfilCandidatoModal: React.FC<PerfilCandidatoModalProps> = ({
             <div>
               <h3 className="font-serif font-bold text-base text-white">Cadastro e Perfil do Candidato</h3>
               <p className="text-2xs text-slate-300">
-                Informações para cruzamento no cadastro geral e notificações oficiais
+                Informações para cruzamento no cadastro geral e identificação de aprovações
               </p>
             </div>
           </div>
@@ -265,7 +254,7 @@ export const PerfilCandidatoModal: React.FC<PerfilCandidatoModalProps> = ({
             </h4>
             <p className="text-xs text-slate-600 max-w-md mx-auto leading-relaxed">
               {primeiroCadastro
-                ? 'Seu cadastro foi salvo e sincronizado com a Master List de classificação do CERTAM.'
+                ? 'Seu cadastro foi salvo e sincronizado com as listas oficiais de classificação do CERTAM.'
                 : 'As alterações solicitadas foram enviadas para a fila de moderação do administrador. Assim que conferidas, serão homologadas.'}
             </p>
           </div>
@@ -418,109 +407,101 @@ export const PerfilCandidatoModal: React.FC<PerfilCandidatoModalProps> = ({
               />
             </div>
 
-            {/* Outros Concursos e Cargos em que também está aprovado */}
-            <div className="pt-2 border-t border-slate-200">
-              <div className="flex items-center justify-between mb-2">
+            {/* Outros Concursos e Cargos em que também está aprovado (IDENTIFICAÇÃO AUTOMÁTICA) */}
+            <div className="pt-3 border-t border-slate-200 space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div>
-                  <h4 className="font-bold text-slate-800 text-xs">
-                    Outros Concursos e Cargos em que também está Aprovado
+                  <h4 className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-teal-600" />
+                    <span>Concursos e Cargos em que Você está Aprovado</span>
                   </h4>
                   <p className="text-2xs text-slate-500">
-                    Permite mapear candidatos com múltiplas aprovações e projetar desistências
+                    O sistema identifica automaticamente todos os certames e cargos onde você figura na lista de aprovados.
                   </p>
                 </div>
-
-                {onAbrirContatoAdmin && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onClose();
-                      onAbrirContatoAdmin('inclusao_concurso');
-                    }}
-                    className="text-2xs text-amber-700 hover:text-amber-900 font-bold bg-amber-50 hover:bg-amber-100 border border-amber-300 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
-                  >
-                    Seu concurso não está na lista? Acione o admin
-                  </button>
-                )}
               </div>
 
-              {/* Lista dos outros concursos já adicionados */}
-              {outrosConcursos.length > 0 && (
-                <div className="space-y-1.5 mb-3">
-                  {outrosConcursos.map((c, idx) => (
+              {/* Lista dos concursos identificados automaticamente */}
+              {aprovacoesIdentificadas.length > 0 ? (
+                <div className="space-y-2">
+                  {aprovacoesIdentificadas.map((aprov) => (
                     <div
-                      key={idx}
-                      className="flex items-center justify-between bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl"
+                      key={aprov.id}
+                      className="p-3 rounded-xl border border-teal-200/90 bg-teal-50/40 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 transition-all"
                     >
-                      <div className="flex items-center gap-2">
-                        <Building className="w-3.5 h-3.5 text-slate-400" />
-                        <span className="font-bold text-slate-800">{c.concurso_nome}</span>
-                        <span className="text-slate-400">({c.ano})</span>
-                        <span className="text-slate-300">·</span>
-                        <span className="text-slate-600">{c.cargo}</span>
-                        <span className="text-slate-300">·</span>
-                        <span className="font-mono text-teal-700 font-bold">{c.classificacao}º lugar</span>
+                      <div className="space-y-0.5">
+                        <div className="flex items-center gap-2">
+                          <Building className="w-3.5 h-3.5 text-teal-700 shrink-0" />
+                          <span className="font-bold text-slate-900 text-xs">
+                            {aprov.concurso_nome}
+                          </span>
+                          <span className="text-2xs font-mono text-slate-500">({aprov.ano})</span>
+                          <span className="text-[10px] font-bold text-teal-800 bg-teal-100/90 px-2 py-0.5 rounded-md flex items-center gap-1">
+                            <Check className="w-3 h-3 text-teal-700" />
+                            <span>Identificado no Sistema</span>
+                          </span>
+                        </div>
+                        <div className="text-xs text-slate-600 flex flex-wrap items-center gap-x-2 gap-y-0.5 pl-5">
+                          <span className="font-medium text-slate-800">{aprov.cargo_nome}</span>
+                          <span className="text-slate-300">·</span>
+                          <span className="font-mono font-bold text-teal-800">
+                            {aprov.posicao}º lugar
+                          </span>
+                          {aprov.cota && (
+                            <>
+                              <span className="text-slate-300">·</span>
+                              <span className="text-slate-500 text-2xs">{aprov.cota}</span>
+                            </>
+                          )}
+                          {aprov.status && (
+                            <>
+                              <span className="text-slate-300">·</span>
+                              <span className="text-2xs font-semibold text-slate-600 bg-white px-1.5 py-0.5 rounded border border-slate-200">
+                                {aprov.status}
+                              </span>
+                            </>
+                          )}
+                        </div>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoverOutroConcurso(idx)}
-                        className="text-slate-400 hover:text-rose-600 p-1 cursor-pointer"
-                        title="Remover"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
                     </div>
                   ))}
                 </div>
+              ) : (
+                <div className="p-4 rounded-xl border border-dashed border-slate-200 bg-slate-50 text-center space-y-1">
+                  <span className="text-xs font-semibold text-slate-600 block">
+                    Nenhuma aprovação vinculada automaticamente ainda
+                  </span>
+                  <p className="text-2xs text-slate-400 max-w-md mx-auto">
+                    Certifique-se de que seu nome e CPF estão preenchidos corretamente acima para cruzamento com as listas de homologação.
+                  </p>
+                </div>
               )}
 
-              {/* Adicionar novo concurso à lista */}
-              <div className="p-3 bg-teal-50/40 border border-teal-100 rounded-xl space-y-2">
-                <span className="text-2xs font-bold text-teal-800 block">Adicionar Outra Aprovação:</span>
-                <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
-                  <div className="sm:col-span-2">
-                    <select
-                      value={novoConcNome}
-                      onChange={(e) => setNovoConcNome(e.target.value)}
-                      className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs focus:border-teal-600 focus:outline-hidden"
-                    >
-                      <option value="">Selecione o concurso vigente...</option>
-                      {concursosCadastrados.map((conc) => (
-                        <option key={conc.id} value={conc.nome}>
-                          {conc.nome} ({conc.ano})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+              {/* Botões para acionar a administração */}
+              <div className="pt-1 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onAbrirContatoAdmin?.('inclusao_concurso');
+                  }}
+                  className="flex-1 py-2 px-3 bg-white hover:bg-slate-50 border border-slate-300 hover:border-teal-500 rounded-xl text-xs font-semibold text-slate-700 flex items-center justify-center gap-1.5 transition-all shadow-2xs cursor-pointer text-center"
+                >
+                  <Plus className="w-3.5 h-3.5 text-teal-600 shrink-0" />
+                  <span>Informar outro concurso ou cargo não cadastrado</span>
+                </button>
 
-                  <div>
-                    <input
-                      type="text"
-                      placeholder="Cargo aprovado"
-                      value={novoConcCargo}
-                      onChange={(e) => setNovoConcCargo(e.target.value)}
-                      className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs focus:border-teal-600 focus:outline-hidden"
-                    />
-                  </div>
-
-                  <div className="flex items-center gap-1.5">
-                    <input
-                      type="number"
-                      placeholder="Posição (ex: 5)"
-                      value={novoConcPos}
-                      onChange={(e) => setNovoConcPos(e.target.value)}
-                      className="w-20 px-2 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-mono focus:border-teal-600 focus:outline-hidden"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleAdicionarOutroConcurso}
-                      className="flex-1 bg-teal-700 hover:bg-teal-800 text-white font-bold py-1.5 px-2 rounded-lg text-xs flex items-center justify-center gap-1 cursor-pointer"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>Incluir</span>
-                    </button>
-                  </div>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onAbrirContatoAdmin?.('vinculacao_nao_efetivada');
+                  }}
+                  className="flex-1 py-2 px-3 bg-teal-50/70 hover:bg-teal-100 border border-teal-200 rounded-xl text-xs font-semibold text-teal-900 flex items-center justify-center gap-1.5 transition-all shadow-2xs cursor-pointer text-center"
+                >
+                  <Link2 className="w-3.5 h-3.5 text-teal-700 shrink-0" />
+                  <span>Minha vinculação não foi efetivada no certame</span>
+                </button>
               </div>
             </div>
 
