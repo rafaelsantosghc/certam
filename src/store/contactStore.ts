@@ -1,6 +1,6 @@
 import { MensagemContatoAdmin, MotivoContato } from '../types';
 
-const CONTACT_STORAGE_KEY = 'certam_contact_messages_v4';
+const CONTACT_STORAGE_KEY = 'certam_contact_messages_v5';
 
 export const MOTIVOS_LABELS: Record<MotivoContato, string> = {
   inclusao_concurso: 'Solicitar Inclusão de Novo Concurso / Cargo',
@@ -12,44 +12,16 @@ export const MOTIVOS_LABELS: Record<MotivoContato, string> = {
   outro: 'Outro Assunto',
 };
 
-const DEFAULT_CONTATOS: MensagemContatoAdmin[] = [
-  {
-    id: 'ct-1',
-    usuario_email: 'bruno.zanella@yahoo.com',
-    usuario_nome: 'Bruno Henrique Zanella',
-    motivo: 'inclusao_concurso',
-    motivo_label: 'Solicitar Inclusão de Novo Concurso / Cargo',
-    concurso_nome: 'Concurso TRT-4 (Tribunal Regional do Trabalho da 4ª Região)',
-    ano_concurso: '2022',
-    cargo_nome: 'Analista Judiciário - Área Judiciária',
-    classificacao: '14º lugar',
-    mensagem: 'Gostaria de solicitar a inclusão do concurso do TRT-4 para podermos acompanhar a lista de chamamentos e preferências no CERTAM.',
-    data_envio: '23/02/2026 10:20',
-    status: 'aberto',
-  },
-  {
-    id: 'ct-2',
-    usuario_email: 'patricia.schneider@gmail.com',
-    usuario_nome: 'Patrícia Schneider Fagundes',
-    motivo: 'duvida',
-    motivo_label: 'Dúvida sobre Escolha de Comarcas ou Posse',
-    concurso_nome: 'TJRS 2025',
-    cargo_nome: 'Analista Judiciário',
-    mensagem: 'Gostaria de saber se a audiência de posse exige presença física em Porto Alegre para candidatos PCD ou se há opção telepresencial.',
-    data_envio: '24/02/2026 15:40',
-    status: 'respondido',
-    resposta_admin: 'Olá Patrícia! Conforme o Edital nº 01/2025, a audiência permite participação virtual mediante envio prévio do formulário de telepresença.',
-    data_resposta: '24/02/2026 16:10',
-  },
-];
+const DEFAULT_CONTATOS: MensagemContatoAdmin[] = [];
 
 export const contactStore = {
   getMensagens(): MensagemContatoAdmin[] {
     try {
+      localStorage.removeItem('certam_contact_messages_v4');
       const stored = localStorage.getItem(CONTACT_STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) return parsed;
       }
     } catch {
       // ignore
@@ -97,6 +69,12 @@ export const contactStore = {
     const item = list.find((m) => m.id === id);
     if (!item) return false;
     item.status = 'arquivado';
+    this.salvarMensagens(list);
+    return true;
+  },
+
+  removerMensagem(id: string): boolean {
+    const list = this.getMensagens().filter((m) => m.id !== id);
     this.salvarMensagens(list);
     return true;
   },

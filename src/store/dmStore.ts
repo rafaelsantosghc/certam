@@ -1,38 +1,22 @@
 import { MensagemPrivada, BloqueioUsuario } from '../types';
 
-const DM_STORAGE_KEY = 'certam_dm_messages_v4';
-const BLOCK_STORAGE_KEY = 'certam_blocked_users_v4';
+const DM_STORAGE_KEY = 'certam_dm_messages_v5';
+const BLOCK_STORAGE_KEY = 'certam_blocked_users_v5';
 
-const DEFAULT_DMS: MensagemPrivada[] = [
-  {
-    id: 'dm-1',
-    remetente_email: 'mariana.becker@gmail.com',
-    remetente_nome: 'Mariana Duarte Becker',
-    destinatario_email: 'rafasms0@hotmail.com',
-    destinatario_nome: 'Rafael Santos da Silva',
-    concurso_referencia_id: 'tjrs_2025',
-    cargo_referencia_id: 'analista_judiciario',
-    texto: 'Olá Rafael! Tudo bem? Vi que você é o 1º colocado de Analista e colocou Porto Alegre. Você já tem lotação definida por ter FG/CC?',
-    data_hora: 'Ontem às 18:20',
-    lida: true,
-  },
-  {
-    id: 'dm-2',
-    remetente_email: 'rafasms0@hotmail.com',
-    remetente_nome: 'Rafael Santos da Silva',
-    destinatario_email: 'mariana.becker@gmail.com',
-    destinatario_nome: 'Mariana Duarte Becker',
-    concurso_referencia_id: 'tjrs_2025',
-    cargo_referencia_id: 'analista_judiciario',
-    texto: 'Oi Mariana! Sim, permaneço na assessoria do 2º Grau em Porto Alegre, então a vaga de 1º Grau no Foro Central ficará livre para você!',
-    data_hora: 'Ontem às 18:35',
-    lida: true,
-  },
-];
+const DEFAULT_DMS: MensagemPrivada[] = [];
+
+export interface ContatoConversa {
+  email: string;
+  nome: string;
+  ultimaMensagem: string;
+  dataHora: string;
+  naoLidas: number;
+}
 
 export const dmStore = {
   getMensagens(): MensagemPrivada[] {
     try {
+      localStorage.removeItem('certam_dm_messages_v4');
       const stored = localStorage.getItem(DM_STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
@@ -58,8 +42,8 @@ export const dmStore = {
     const list = this.getMensagens();
     const nova: MensagemPrivada = {
       ...msg,
-      id: `dm-${Date.now().toString(36)}`,
-      data_hora: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+      id: `dm-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`,
+      data_hora: 'Hoje às ' + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
       lida: false,
     };
     list.push(nova);
@@ -67,127 +51,129 @@ export const dmStore = {
     return nova;
   },
 
-  getMensagensEntre(emailA: string, emailB: string): MensagemPrivada[] {
+  marcarComoLidas(usuario1Email: string, usuario2Email: string) {
     const list = this.getMensagens();
-    const eA = emailA.toLowerCase();
-    const eB = emailB.toLowerCase();
-    return list.filter(
-      (m) =>
-        (m.remetente_email.toLowerCase() === eA && m.destinatario_email.toLowerCase() === eB) ||
-        (m.remetente_email.toLowerCase() === eB && m.destinatario_email.toLowerCase() === eA)
-    );
-  },
-
-  marcarComoLidas(meuEmail: string, outroEmail: string) {
-    const list = this.getMensagens();
-    const eMeu = meuEmail.toLowerCase();
-    const eOutro = outroEmail.toLowerCase();
-    let modificado = false;
+    let alterou = false;
+    const u1 = usuario1Email.toLowerCase();
+    const u2 = usuario2Email.toLowerCase();
 
     list.forEach((m) => {
+      // Se a mensagem foi enviada de u2 para u1 (ou entre eles) e não foi lida
       if (
-        m.destinatario_email.toLowerCase() === eMeu &&
-        m.remetente_email.toLowerCase() === eOutro &&
+        ((m.remetente_email.toLowerCase() === u2 && m.destinatario_email.toLowerCase() === u1) ||
+         (m.remetente_email.toLowerCase() === u1 && m.destinatario_email.toLowerCase() === u2)) &&
         !m.lida
       ) {
         m.lida = true;
-        modificado = true;
+        alterou = true;
       }
     });
-
-    if (modificado) {
+    if (alterou) {
       this.salvarMensagens(list);
     }
   },
 
-  getContatosConversas(meuEmail: string): { email: string; nome: string; ultimaMensagem: string; dataHora: string; naoLidas: number }[] {
+  getMensagensEntre(usuario1: string, usuario2: string): MensagemPrivada[] {
     const list = this.getMensagens();
-    const eMeu = meuEmail.toLowerCase();
-    const mapa = new Map<string, { email: string; nome: string; ultimaMensagem: string; dataHora: string; naoLidas: number }>();
+    const u1 = usuario1.toLowerCase();
+    const u2 = usuario2.toLowerCase();
+    return list.filter(
+      (m) =>
+        (m.remetente_email.toLowerCase() === u1 && m.destinatario_email.toLowerCase() === u2) ||
+        (m.remetente_email.toLowerCase() === u2 && m.destinatario_email.toLowerCase() === u1)
+    );
+  },
+
+  getConversa(usuario1: string, usuario2: string): MensagemPrivada[] {
+    return this.getMensagensEntre(usuario1, usuario2);
+  },
+
+  getContatosConversas(meuEmail: string): ContatoConversa[] {
+    const list = this.getMensagens();
+    const eu = meuEmail.toLowerCase();
+    const mapa = new Map<string, ContatoConversa>();
 
     list.forEach((m) => {
-      const souRemetente = m.remetente_email.toLowerCase() === eMeu;
-      const souDestinatario = m.destinatario_email.toLowerCase() === eMeu;
+      const isRemetente = m.remetente_email.toLowerCase() === eu;
+      const isDestinatario = m.destinatario_email.toLowerCase() === eu;
+      if (!isRemetente && !isDestinatario) return;
 
-      if (!souRemetente && !souDestinatario) return;
+      const outroEmail = isRemetente ? m.destinatario_email : m.remetente_email;
+      const outroNome = isRemetente ? m.destinatario_nome : m.remetente_nome;
+      const key = outroEmail.toLowerCase();
 
-      const outroEmail = souRemetente ? m.destinatario_email : m.remetente_email;
-      const outroNome = souRemetente ? m.destinatario_nome : m.remetente_nome;
-      const eOutroLow = outroEmail.toLowerCase();
+      const existing = mapa.get(key);
+      const naoLidas = existing ? existing.naoLidas : 0;
+      const novoNaoLidas = isDestinatario && !m.lida ? naoLidas + 1 : naoLidas;
 
-      const atual = mapa.get(eOutroLow) || {
+      mapa.set(key, {
         email: outroEmail,
-        nome: outroNome,
+        nome: outroNome || outroEmail,
         ultimaMensagem: m.texto,
         dataHora: m.data_hora,
-        naoLidas: 0,
-      };
-
-      atual.ultimaMensagem = m.texto;
-      atual.dataHora = m.data_hora;
-      if (souDestinatario && !m.lida) {
-        atual.naoLidas += 1;
-      }
-
-      mapa.set(eOutroLow, atual);
+        naoLidas: novoNaoLidas,
+      });
     });
 
     return Array.from(mapa.values());
   },
 
-  // -------------------------------------------------------------
-  // BLOQUEIOS
-  // -------------------------------------------------------------
+  getContatos(meuEmail: string) {
+    return this.getContatosConversas(meuEmail);
+  },
+
   getBlockedUsers(): BloqueioUsuario[] {
     try {
-      const s = localStorage.getItem(BLOCK_STORAGE_KEY);
-      if (s) {
-        const p = JSON.parse(s);
-        if (Array.isArray(p)) return p;
-      }
+      const stored = localStorage.getItem(BLOCK_STORAGE_KEY);
+      if (stored) return JSON.parse(stored);
     } catch {
       // ignore
     }
     return [];
   },
 
-  salvarBlockedUsers(list: BloqueioUsuario[]) {
-    try {
-      localStorage.setItem(BLOCK_STORAGE_KEY, JSON.stringify(list));
-      window.dispatchEvent(new CustomEvent('certam_blocked_updated', { detail: list }));
-    } catch {
-      // ignore
-    }
-  },
-
-  bloquearUsuario(meuEmail: string, emailBloquear: string) {
-    const list = this.getBlockedUsers();
-    const jaExiste = list.some(
-      (b) => b.usuario_email.toLowerCase() === meuEmail.toLowerCase() && b.usuario_bloqueado_email.toLowerCase() === emailBloquear.toLowerCase()
-    );
-    if (!jaExiste) {
-      list.push({
-        usuario_email: meuEmail,
-        usuario_bloqueado_email: emailBloquear,
-        data_bloqueio: new Date().toLocaleString('pt-BR'),
-      });
-      this.salvarBlockedUsers(list);
-    }
-  },
-
-  desbloquearUsuario(meuEmail: string, emailDesbloquear: string) {
-    const list = this.getBlockedUsers().filter(
-      (b) => !(b.usuario_email.toLowerCase() === meuEmail.toLowerCase() && b.usuario_bloqueado_email.toLowerCase() === emailDesbloquear.toLowerCase())
-    );
-    this.salvarBlockedUsers(list);
-  },
-
-  isUsuarioBloqueado(meuEmail: string, outroEmail: string): boolean {
-    const list = this.getBlockedUsers();
-    return list.some(
+  isUsuarioBloqueado(usuarioEmail: string, outroUsuarioEmail: string): boolean {
+    const blocks = this.getBlockedUsers();
+    const u1 = usuarioEmail.toLowerCase();
+    const u2 = outroUsuarioEmail.toLowerCase();
+    return blocks.some(
       (b) =>
-        (b.usuario_email.toLowerCase() === meuEmail.toLowerCase() && b.usuario_bloqueado_email.toLowerCase() === outroEmail.toLowerCase()) ||
-        (b.usuario_email.toLowerCase() === outroEmail.toLowerCase() && b.usuario_bloqueado_email.toLowerCase() === meuEmail.toLowerCase())
+        (b.usuario_email.toLowerCase() === u1 && b.usuario_bloqueado_email.toLowerCase() === u2) ||
+        (b.usuario_email.toLowerCase() === u2 && b.usuario_bloqueado_email.toLowerCase() === u1)
     );
+  },
+
+  isBlocked(usuarioEmail: string, bloqueadorEmail: string): boolean {
+    return this.isUsuarioBloqueado(usuarioEmail, bloqueadorEmail);
+  },
+
+  bloquearUsuario(meuEmail: string, bloqueadoEmail: string) {
+    const blocks = this.getBlockedUsers();
+    const u1 = meuEmail.toLowerCase();
+    const u2 = bloqueadoEmail.toLowerCase();
+
+    if (!blocks.some((b) => b.usuario_email.toLowerCase() === u1 && b.usuario_bloqueado_email.toLowerCase() === u2)) {
+      blocks.push({
+        usuario_email: meuEmail,
+        usuario_bloqueado_email: bloqueadoEmail,
+        data_bloqueio: new Date().toISOString(),
+      });
+      localStorage.setItem(BLOCK_STORAGE_KEY, JSON.stringify(blocks));
+      window.dispatchEvent(new CustomEvent('certam_blocked_updated'));
+    }
+  },
+
+  desbloquearUsuario(meuEmail: string, bloqueadoEmail: string) {
+    const u1 = meuEmail.toLowerCase();
+    const u2 = bloqueadoEmail.toLowerCase();
+    const blocks = this.getBlockedUsers().filter(
+      (b) =>
+        !(
+          b.usuario_email.toLowerCase() === u1 &&
+          b.usuario_bloqueado_email.toLowerCase() === u2
+        )
+    );
+    localStorage.setItem(BLOCK_STORAGE_KEY, JSON.stringify(blocks));
+    window.dispatchEvent(new CustomEvent('certam_blocked_updated'));
   },
 };

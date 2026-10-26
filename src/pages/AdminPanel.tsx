@@ -56,7 +56,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   initialTab = 'concursos',
   onNavigate,
 }) => {
-  const { isAdmin, loginAdmin } = useAuth();
+  const { usuario, isAdmin, loginAdmin, atualizarDadosUsuario } = useAuth();
   const [senhaAdmin, setSenhaAdmin] = useState('');
   const [erroSenha, setErroSenha] = useState(false);
 
@@ -273,19 +273,62 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const handleAprovarAuditoria = (req: PerfilAuditRequest) => {
     auditStore.aprovarSolicitacao(req.id);
 
-    // Aplicar alterações nas listas de candidatos do lote/master list
+    // 1. Extrair todas as mudanças aprovadas
+    const mudancas: any = {};
+    req.alteracoes.forEach((alt) => {
+      if (alt.campo === 'nome') mudancas.nome = alt.valor_novo;
+      if (alt.campo === 'cpf') mudancas.cpf = alt.valor_novo;
+      if (alt.campo === 'data_nascimento') mudancas.data_nascimento = alt.valor_novo;
+      if (alt.campo === 'whatsapp') {
+        mudancas.whatsapp = alt.valor_novo;
+        mudancas.telefone = alt.valor_novo;
+      }
+      if (alt.campo === 'email_contato') mudancas.email_contato = alt.valor_novo;
+    });
+
+    // 2. Aplicar diretamente no perfil ativo se for o usuário conectado (ex: admin ou candidato)
+    const isCurrentActiveUser =
+      (usuario?.email && usuario.email.toLowerCase() === req.usuario_email.toLowerCase()) ||
+      (usuario?.cpf && req.cpf && usuario.cpf.replace(/\D/g, '') === req.cpf.replace(/\D/g, ''));
+
+    if (isCurrentActiveUser) {
+      atualizarDadosUsuario(mudancas);
+    }
+
+    // 3. Atualizar também na chave de persistência do localStorage
+    try {
+      const storedKey = 'certam_auth_user_v7';
+      const storedStr = localStorage.getItem(storedKey);
+      if (storedStr) {
+        const storedUser = JSON.parse(storedStr);
+        if (
+          storedUser &&
+          (storedUser.email?.toLowerCase() === req.usuario_email.toLowerCase() ||
+            (storedUser.cpf && req.cpf && storedUser.cpf.replace(/\D/g, '') === req.cpf.replace(/\D/g, '')))
+        ) {
+          const atualizado = { ...storedUser, ...mudancas };
+          localStorage.setItem(storedKey, JSON.stringify(atualizado));
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    // 4. Aplicar alterações nas listas de candidatos do lote/master list
     concursos.forEach((c) => {
       c.cargos?.forEach((cg) => {
         const cands = lotesStore.getCandidatos(c.id, cg.id);
         const matchIndex = cands.findIndex(
           (cand) =>
-            cand.cpf === req.cpf ||
+            (req.cpf && cand.cpf && cand.cpf.replace(/\D/g, '') === req.cpf.replace(/\D/g, '')) ||
             (req.usuario_email && cand.email?.toLowerCase() === req.usuario_email.toLowerCase())
         );
         if (matchIndex >= 0) {
           const mod = { ...cands[matchIndex] };
           req.alteracoes.forEach((alt) => {
             if (alt.campo === 'nome') mod.nome = alt.valor_novo;
+            if (alt.campo === 'cpf') mod.cpf = alt.valor_novo;
+            if (alt.campo === 'data_nascimento') mod.data_nascimento = alt.valor_novo;
             if (alt.campo === 'whatsapp') mod.whatsapp = alt.valor_novo;
             if (alt.campo === 'email_contato') mod.email = alt.valor_novo;
           });
@@ -294,7 +337,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       });
     });
 
-    showToast('Alteração de perfil aprovada e aplicada nas listas oficiais!');
+    // 5. Disparar evento global para atualizar qualquer tela aberta
+    window.dispatchEvent(new CustomEvent('certam_audit_approved', { detail: { req, mudancas } }));
+
+    showToast('Alteração de perfil aprovada e aplicada no cadastro com sucesso!');
   };
 
   const handleRejeitarAuditoria = (id: string) => {

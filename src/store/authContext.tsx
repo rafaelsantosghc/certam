@@ -167,32 +167,54 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  // Login administrativo protegido por senha
+  // Listener para aplicar imediatamente alterações aprovadas pelo administrador
+  useEffect(() => {
+    const handleAuditApproved = (e: any) => {
+      const { req, mudancas } = e.detail || {};
+      if (req && mudancas) {
+        setUsuario((prev) => {
+          if (!prev) return null;
+          const isMatch =
+            (prev.email && prev.email.toLowerCase() === req.usuario_email.toLowerCase()) ||
+            (prev.cpf && req.cpf && prev.cpf.replace(/\D/g, '') === req.cpf.replace(/\D/g, ''));
+          if (isMatch) {
+            const atualizado = { ...prev, ...mudancas };
+            try {
+              localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(atualizado));
+            } catch {
+              // ignore
+            }
+            return atualizado;
+          }
+          return prev;
+        });
+      }
+    };
+    window.addEventListener('certam_audit_approved', handleAuditApproved);
+    return () => window.removeEventListener('certam_audit_approved', handleAuditApproved);
+  }, []);
+
+  // Login administrativo protegido por senha (PRESERVA dados reais inseridos pelo usuário)
   const loginAdmin = (senha: string): boolean => {
     const senhasValidas = ['admin', 'certam2025', 'admin123', 'tjrs2025'];
     if (senhasValidas.includes(senha.trim())) {
-      const adminUsuario: Usuario = {
-        nome: 'Rafael Santos da Silva',
-        email: 'rafasms0@hotmail.com',
-        email_contato: 'rafasms0@hotmail.com',
-        is_admin: true,
-        candidato_id: 'cand-001',
-        cpf: '012.345.670-89',
-        cpf_verificado: true,
-        data_nascimento: '1992-04-15',
-        telefone: '(51) 99872-3341',
-        whatsapp: '(51) 99872-3341',
-        read_notification_ids: [],
-        outros_concursos: [],
-        concursos_inscritos: [
-          {
-            concurso_id: 'tjrs_2025',
-            cargo_id: 'analista_judiciario',
-            data_inscricao: '10/01/2025',
-          },
-        ],
-      };
-      setUsuario(adminUsuario);
+      setUsuario((prev) => {
+        return {
+          nome: prev?.nome || 'Administrador CERTAM',
+          email: 'rafasms0@hotmail.com',
+          email_contato: prev?.email_contato || 'rafasms0@hotmail.com',
+          is_admin: true,
+          candidato_id: prev?.candidato_id || 'admin-001',
+          cpf: prev?.cpf || '',
+          cpf_verificado: true,
+          data_nascimento: prev?.data_nascimento || '',
+          telefone: prev?.telefone || '',
+          whatsapp: prev?.whatsapp || '',
+          read_notification_ids: prev?.read_notification_ids || [],
+          outros_concursos: prev?.outros_concursos || [],
+          concursos_inscritos: prev?.concursos_inscritos || [],
+        };
+      });
       return true;
     }
     return false;

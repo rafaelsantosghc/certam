@@ -182,64 +182,6 @@ export const GoogleAuthModal: React.FC<GoogleAuthModalProps> = ({
                   </button>
                 </div>
               </form>
-
-              {/* Contas Rápidas de Aprovados no Banco Oficial para Teste */}
-              <div className="pt-3 border-t border-slate-100">
-                <span className="text-2xs font-bold uppercase tracking-wider text-slate-400 block mb-2">
-                  Ou selecione um perfil de demonstração do certame:
-                </span>
-                <div className="space-y-1.5">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      handleSelecionarAprovado(
-                        'Rafael Santos da Silva',
-                        'rafasms0@hotmail.com',
-                        '012.345.670-89'
-                      )
-                    }
-                    className="w-full flex items-center justify-between p-2.5 rounded-xl border border-teal-200/80 bg-teal-50/40 hover:bg-teal-50 transition-colors text-left cursor-pointer"
-                  >
-                    <div>
-                      <div className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
-                        <span>Rafael Santos da Silva</span>
-                        <span className="px-1.5 py-0.5 text-2xs bg-teal-100 text-teal-800 rounded-md font-semibold">
-                          1º Colocado • Admin
-                        </span>
-                      </div>
-                      <span className="text-2xs text-slate-500 font-mono">
-                        rafasms0@hotmail.com
-                      </span>
-                    </div>
-                    <UserCheck className="w-4 h-4 text-teal-700" />
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() =>
-                      handleSelecionarAprovado(
-                        'Mariana Duarte Becker',
-                        'mariana.becker@gmail.com',
-                        '812.300.450-11'
-                      )
-                    }
-                    className="w-full flex items-center justify-between p-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 transition-colors text-left cursor-pointer"
-                  >
-                    <div>
-                      <div className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                        <span>Mariana Duarte Becker</span>
-                        <span className="px-1.5 py-0.5 text-2xs bg-slate-100 text-slate-700 rounded-md font-semibold">
-                          2ª Colocada
-                        </span>
-                      </div>
-                      <span className="text-2xs text-slate-500 font-mono">
-                        mariana.becker@gmail.com
-                      </span>
-                    </div>
-                    <UserCheck className="w-4 h-4 text-slate-400" />
-                  </button>
-                </div>
-              </div>
             </div>
           ) : (
             <div className="space-y-4">

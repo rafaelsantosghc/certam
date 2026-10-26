@@ -8,8 +8,8 @@ import {
 } from '../data/defaultCandidates';
 import { COMARCAS_RS } from '../data/comarcas';
 
-const LOTES_KEY = 'certam_lotes_data_v4';
-const CANDIDATOS_KEY = 'certam_candidatos_data_v4';
+const LOTES_KEY = 'certam_lotes_data_v5';
+const CANDIDATOS_KEY = 'certam_candidatos_data_v5';
 
 export interface SimulacaoResultado {
   alocacoes: {
@@ -33,6 +33,7 @@ export interface SimulacaoResultado {
 export const lotesStore = {
   getLotes(): Lote[] {
     try {
+      localStorage.removeItem('certam_lotes_data_v4');
       const s = localStorage.getItem(LOTES_KEY);
       if (s) {
         const p = JSON.parse(s);
@@ -52,7 +53,7 @@ export const lotesStore = {
         is_printing_enabled: true,
         travado: false,
         comarcas: COMARCAS_RS.slice(0, 15).map((c) => ({ nome: c.nome, vagas: c.vagas_total })),
-        candidatos_ids: CANDIDATOS_ANALISTA_TJRS.map((c) => c.id),
+        candidatos_ids: [],
       },
       {
         id: 'lote_1_tjrs_tecnico',
@@ -64,7 +65,7 @@ export const lotesStore = {
         is_printing_enabled: true,
         travado: false,
         comarcas: COMARCAS_RS.slice(0, 12).map((c) => ({ nome: c.nome, vagas: c.vagas_total })),
-        candidatos_ids: CANDIDATOS_TECNICO_TJRS.map((c) => c.id),
+        candidatos_ids: [],
       },
       {
         id: 'lote_1_mprs_analista',
@@ -81,7 +82,7 @@ export const lotesStore = {
           { nome: 'Pelotas', vagas: 2 },
           { nome: 'Santa Maria', vagas: 2 },
         ],
-        candidatos_ids: CANDIDATOS_ANALISTA_MPRS.map((c) => c.id),
+        candidatos_ids: [],
       },
     ];
     this.salvarLotes(defaultLotes);
@@ -100,25 +101,17 @@ export const lotesStore = {
   getCandidatos(concursoId: string, cargoId: string): Candidato[] {
     const key = `${CANDIDATOS_KEY}_${concursoId}_${cargoId}`;
     try {
+      localStorage.removeItem(`certam_candidatos_data_v4_${concursoId}_${cargoId}`);
       const s = localStorage.getItem(key);
       if (s) {
         const p = JSON.parse(s);
-        if (Array.isArray(p) && p.length > 0) return p;
+        if (Array.isArray(p)) return p;
       }
     } catch {
       // ignore
     }
 
-    let base: Candidato[] = CANDIDATOS_ANALISTA_TJRS;
-    if (concursoId.startsWith('tjrs')) {
-      if (cargoId === 'analista_administrativo') base = CANDIDATOS_ANALISTA_ADM_TJRS;
-      else if (cargoId === 'tecnico_judiciario') base = CANDIDATOS_TECNICO_TJRS;
-      else base = CANDIDATOS_ANALISTA_TJRS;
-    } else if (concursoId.startsWith('mprs')) {
-      if (cargoId === 'tecnico_mprs') base = CANDIDATOS_TECNICO_MPRS;
-      else base = CANDIDATOS_ANALISTA_MPRS;
-    }
-
+    const base: Candidato[] = [];
     this.salvarCandidatos(concursoId, cargoId, base);
     return base;
   },

@@ -744,11 +744,25 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {candidatosPaginados.map((cand) => (
-                    <tr key={cand.id} className="hover:bg-slate-50 transition-colors">
-                      <td className="py-3 px-3 text-center font-mono font-bold text-slate-900">
-                        {cand.posicao}º
+                  {candidatosPaginados.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="py-12 text-center text-xs text-slate-400">
+                        Nenhum candidato cadastrado nesta lista de classificação ainda.
+                        {isAdmin && (
+                          <div className="mt-2">
+                            <span className="text-teal-700 font-semibold">
+                              Você pode importar a planilha oficial via XLSX no Painel Admin ou cadastrar candidatos manualmente.
+                            </span>
+                          </div>
+                        )}
                       </td>
+                    </tr>
+                  ) : (
+                    candidatosPaginados.map((cand) => (
+                      <tr key={cand.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="py-3 px-3 text-center font-mono font-bold text-slate-900">
+                          {cand.posicao}º
+                        </td>
                       <td className="py-3 px-4 font-bold text-slate-900">
                         <div>{cand.nome}</div>
                         {isCandidatoAprovado && cand.cpf && (
@@ -830,7 +844,7 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
                         </div>
                       </td>
                     </tr>
-                  ))}
+                  )))}
                 </tbody>
               </table>
             </div>

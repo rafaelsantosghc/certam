@@ -1,52 +1,15 @@
 import { PerfilAuditRequest, SolicitacaoVinculacao } from '../types';
 
-const AUDIT_STORAGE_KEY = 'certam_audit_requests_v4';
-const VINCULACAO_STORAGE_KEY = 'certam_vinculacao_requests_v4';
+const AUDIT_STORAGE_KEY = 'certam_audit_requests_v5';
+const VINCULACAO_STORAGE_KEY = 'certam_vinculacao_requests_v5';
 
-const DEFAULT_AUDIT_REQUESTS: PerfilAuditRequest[] = [
-  {
-    id: 'req-001',
-    usuario_email: 'carlos.meneghetti@adv.oabr.org.br',
-    usuario_nome: 'Carlos Eduardo Meneghetti',
-    cpf: '294.110.880-33',
-    data_solicitacao: '24/02/2026 14:15',
-    status: 'pendente',
-    alteracoes: [
-      {
-        campo: 'whatsapp',
-        campo_label: 'WhatsApp de Contato',
-        valor_antigo: '(54) 99655-1209',
-        valor_novo: '(54) 99881-3320',
-      },
-      {
-        campo: 'email_contato',
-        campo_label: 'E-mail para Comunicações',
-        valor_antigo: 'carlos.meneghetti@adv.oabr.org.br',
-        valor_novo: 'carlos.eduardo.tj@gmail.com',
-      },
-    ],
-  },
-];
-
-const DEFAULT_VINCULACOES: SolicitacaoVinculacao[] = [
-  {
-    id: 'vinc-001',
-    usuario_email: 'lucas.costa.candidato@gmail.com',
-    usuario_nome: 'Lucas Costa de Andrade',
-    cpf: '881.420.930-18',
-    concurso_id: 'tjrs_2025',
-    cargo_id: 'analista_judiciario',
-    posicao_declarada: 9,
-    nota_declarada: 90.1,
-    comprovante_info: 'Inscrição Nº 104928 - Diário da Justiça Eletrônico do RS de 25/09/2025',
-    data_solicitacao: '25/02/2026 09:30',
-    status: 'pendente',
-  },
-];
+const DEFAULT_AUDIT_REQUESTS: PerfilAuditRequest[] = [];
+const DEFAULT_VINCULACOES: SolicitacaoVinculacao[] = [];
 
 export const auditStore = {
   getAuditRequests(): PerfilAuditRequest[] {
     try {
+      localStorage.removeItem('certam_audit_requests_v4');
       const stored = localStorage.getItem(AUDIT_STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
@@ -107,6 +70,7 @@ export const auditStore = {
   // -------------------------------------------------------------
   getVinculacoes(): SolicitacaoVinculacao[] {
     try {
+      localStorage.removeItem('certam_vinculacao_requests_v4');
       const stored = localStorage.getItem(VINCULACAO_STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
