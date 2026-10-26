@@ -162,17 +162,20 @@ export const PerfilCandidatoModal: React.FC<PerfilCandidatoModalProps> = ({
   const handleSubmeterOuSalvar = (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Sincroniza lista de aprovações identificadas para persistir no cadastro
-    const outrosSincronizados: OutroConcursoAprovado[] = aprovacoesIdentificadas.map((ap) => ({
-      concurso_nome: ap.concurso_nome,
-      ano: ap.ano,
-      cargo: ap.cargo_nome,
-      classificacao: ap.posicao,
-      concurso_id: ap.concurso_id,
-      cargo_id: ap.cargo_id,
-      origem: ap.origem === 'sistema_automatico' ? 'automatico' : 'manual',
-      status_aprovacao: ap.status,
-    }));
+    // Apenas aprovações externas declaradas precisam ser persistidas no array outros_concursos,
+    // pois os concursos cadastrados no portal são identificados de forma nativa e automática.
+    const outrosSincronizados: OutroConcursoAprovado[] = aprovacoesIdentificadas
+      .filter((ap) => ap.origem === 'declarado')
+      .map((ap) => ({
+        concurso_nome: ap.concurso_nome,
+        ano: ap.ano,
+        cargo: ap.cargo_nome,
+        classificacao: ap.posicao,
+        concurso_id: ap.concurso_id,
+        cargo_id: ap.cargo_id,
+        origem: 'manual',
+        status_aprovacao: ap.status,
+      }));
 
     // Se for o primeiro preenchimento inicial (setup inicial da conta), grava diretamente
     if (primeiroCadastro) {

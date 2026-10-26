@@ -19,7 +19,7 @@ interface AuthContextType {
   logout: () => void;
 }
 
-const AUTH_STORAGE_KEY = 'certam_auth_user_v6';
+const AUTH_STORAGE_KEY = 'certam_auth_user_v7';
 export const GOOGLE_CLIENT_ID_PADRAO = '893072513173-detf69cldt4cefhbg8ta3cpi5hb73rma.apps.googleusercontent.com';
 
 const AuthContext = createContext<AuthContextType>({
@@ -47,6 +47,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.removeItem('certam_auth_user_v3');
       localStorage.removeItem('certam_auth_user_v4');
       localStorage.removeItem('certam_auth_user_v5');
+      localStorage.removeItem('certam_auth_user_v6');
 
       const stored = localStorage.getItem(AUTH_STORAGE_KEY);
       if (stored) {
@@ -182,14 +183,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         telefone: '(51) 99872-3341',
         whatsapp: '(51) 99872-3341',
         read_notification_ids: [],
-        outros_concursos: [
-          {
-            concurso_nome: 'TJRS 2025',
-            ano: '2025',
-            cargo: 'Analista Judiciário - Área Judiciária',
-            classificacao: 1,
-          },
-        ],
+        outros_concursos: [],
         concursos_inscritos: [
           {
             concurso_id: 'tjrs_2025',
@@ -232,16 +226,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       telefone: match?.whatsapp || '',
       whatsapp: match?.whatsapp || '',
       read_notification_ids: [],
-      outros_concursos: match
-        ? [
-            {
-              concurso_nome: match.concurso_id?.startsWith('mprs') ? 'MPRS 2025' : 'TJRS 2025',
-              ano: '2025',
-              cargo: match.cargo_id || 'Concursado',
-              classificacao: match.posicao,
-            },
-          ]
-        : [],
+      outros_concursos: [],
       concursos_inscritos: [
         {
           concurso_id: match?.concurso_id || 'tjrs_2025',
