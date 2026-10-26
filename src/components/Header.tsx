@@ -70,12 +70,12 @@ export const Header: React.FC<HeaderProps> = ({
           <span>{copiado ? 'Copiado!' : 'Compartilhar'}</span>
         </button>
 
-        {/* Botão Admin Preview (Acesso Rápido) */}
-        {showAdminShortcut && (
+        {/* Botão Admin (Apenas para Administrador Autenticado) */}
+        {isAdmin && showAdminShortcut && (
           <button
             type="button"
             onClick={onNavigateAdmin}
-            className="flex items-center gap-1.5 bg-gradient-to-r from-amber-400 to-amber-300 hover:from-amber-300 hover:to-amber-200 text-slate-950 font-black px-3 py-1.5 rounded-xl text-xs shadow-xs transition-all cursor-pointer border border-amber-500/50"
+            className="flex items-center gap-1.5 bg-gradient-to-r from-amber-400 to-amber-300 hover:from-amber-300 hover:to-amber-200 text-slate-950 font-bold px-3 py-1.5 rounded-xl text-xs shadow-xs transition-all cursor-pointer border border-amber-500/50"
             title="Abrir Gestão de Concursos e Cargos"
           >
             <Settings className="w-3.5 h-3.5" />
@@ -86,14 +86,6 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Autenticação / Perfil do Candidato */}
         {!usuario ? (
           <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={loginAdminPreview}
-              className="hidden lg:flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold cursor-pointer transition-colors"
-              title="Entrar como administrador oficial"
-            >
-              <span>⚡ Admin Preview</span>
-            </button>
             <button
               type="button"
               onClick={loginGoogle}

@@ -126,26 +126,28 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <span>Simulador de lotes TJRS</span>
           </button>
 
-          {/* 3. Painel Administrativo */}
-          <button
-            type="button"
-            onClick={() => handleLinkClick('admin')}
-            className={`w-full flex items-center gap-3.5 px-6 py-3 text-sm font-medium transition-all cursor-pointer text-left ${
-              currentView === 'admin'
-                ? 'font-semibold text-amber-300 bg-[#0C2640] border-l-4 border-amber-400'
-                : 'text-[#94A3B8] hover:text-amber-300 hover:bg-[#0C2640]/50 border-l-4 border-transparent'
-            }`}
-          >
-            <span className="w-5 h-5 flex items-center justify-center">
-              <Settings className="w-5 h-5" />
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span>Painel administrativo</span>
-              <span className="px-1 py-0.5 rounded text-[9px] bg-amber-400/20 text-amber-300 font-mono font-bold">
-                GERÊNCIA
+          {/* 3. Painel Administrativo (Apenas para o Administrador) */}
+          {usuario?.is_admin && (
+            <button
+              type="button"
+              onClick={() => handleLinkClick('admin')}
+              className={`w-full flex items-center gap-3.5 px-6 py-3 text-sm font-medium transition-all cursor-pointer text-left ${
+                currentView === 'admin'
+                  ? 'font-semibold text-amber-300 bg-[#0C2640] border-l-4 border-amber-400'
+                  : 'text-[#94A3B8] hover:text-amber-300 hover:bg-[#0C2640]/50 border-l-4 border-transparent'
+              }`}
+            >
+              <span className="w-5 h-5 flex items-center justify-center">
+                <Settings className="w-5 h-5" />
               </span>
-            </span>
-          </button>
+              <span className="flex items-center gap-1.5">
+                <span>Painel administrativo</span>
+                <span className="px-1 py-0.5 rounded text-[9px] bg-amber-400/20 text-amber-300 font-mono font-bold">
+                  GERÊNCIA
+                </span>
+              </span>
+            </button>
+          )}
 
           {/* 4. Política de Privacidade */}
           <button
@@ -239,12 +241,37 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         {/* Rodapé da Sidebar */}
         <div className="p-4 border-t border-[#0F2942] space-y-2.5">
-          <div className="px-3 py-2 rounded-xl bg-[#0C2640] border border-teal-500/20 text-xs space-y-1">
-            <span className="text-teal-400 font-bold block text-[11px]">Administrador oficial</span>
-            <span className="text-slate-300 font-mono text-[11px] truncate block">
-              rafasms0@hotmail.com
-            </span>
-          </div>
+          {usuario ? (
+            <div className="px-3 py-2.5 rounded-xl bg-[#0C2640] border border-teal-500/20 text-xs space-y-1">
+              <div className="flex items-center justify-between">
+                <span className={`font-bold block text-[11px] ${usuario.is_admin ? 'text-amber-300' : 'text-teal-400'}`}>
+                  {usuario.is_admin ? 'Administrador' : 'Candidato'}
+                </span>
+                {usuario.is_admin && (
+                  <span className="px-1.5 py-0.5 rounded text-[9px] bg-amber-400/20 text-amber-300 font-mono font-bold">
+                    ADMIN
+                  </span>
+                )}
+              </div>
+              <span className="text-white font-medium text-xs truncate block">
+                {usuario.nome}
+              </span>
+              <span className="text-slate-400 font-mono text-[10px] truncate block">
+                {usuario.email}
+              </span>
+            </div>
+          ) : (
+            <div className="px-3 py-2.5 rounded-xl bg-[#0C2640]/60 border border-slate-700/50 text-xs space-y-2">
+              <span className="text-slate-400 text-[11px] block">Acesso ao portal</span>
+              <button
+                type="button"
+                onClick={() => handleLinkClick('portal')}
+                className="w-full py-1.5 px-2 bg-teal-500/10 hover:bg-teal-500/20 border border-teal-500/30 text-teal-300 rounded-lg text-xs font-semibold text-center cursor-pointer transition-colors block"
+              >
+                Identificar-se
+              </button>
+            </div>
+          )}
 
           {usuario && (
             <button

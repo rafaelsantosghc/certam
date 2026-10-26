@@ -5,7 +5,9 @@ interface AuthContextType {
   usuario: Usuario | null;
   isAdmin: boolean;
   loginGoogle: () => void;
+  loginAdmin: (senha: string) => boolean;
   loginAdminPreview: () => void;
+  loginCandidato: (email: string, nome?: string) => void;
   simularEmailCandidato: (email: string, nome: string) => void;
   atualizarDadosUsuario: (dados: Partial<Usuario>) => void;
   inscreverConcurso: (concursoId: string, cargoId: string) => void;
@@ -13,13 +15,15 @@ interface AuthContextType {
   logout: () => void;
 }
 
-const AUTH_STORAGE_KEY = 'certam_auth_user';
+const AUTH_STORAGE_KEY = 'certam_auth_user_v3';
 
 const AuthContext = createContext<AuthContextType>({
   usuario: null,
   isAdmin: false,
   loginGoogle: () => {},
+  loginAdmin: () => false,
   loginAdminPreview: () => {},
+  loginCandidato: () => {},
   simularEmailCandidato: () => {},
   atualizarDadosUsuario: () => {},
   inscreverConcurso: () => {},
@@ -30,29 +34,22 @@ const AuthContext = createContext<AuthContextType>({
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [usuario, setUsuario] = useState<Usuario | null>(() => {
     try {
+      // Limpeza imediata de versoes legadas do localStorage que gravavam admin para todos os visitantes
+      localStorage.removeItem('certam_auth_user');
+      localStorage.removeItem('certam_auth_session');
+
       const stored = localStorage.getItem(AUTH_STORAGE_KEY);
-      if (stored) return JSON.parse(stored);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed && typeof parsed === 'object') {
+          return parsed;
+        }
+      }
     } catch {
       // ignore
     }
-    // Default to admin/candidate preview for immediate accessibility
-    return {
-      nome: 'Rafael Santos da Silva',
-      email: 'rafasms0@hotmail.com',
-      avatar: '',
-      is_admin: true,
-      candidato_id: 'cand-001',
-      telefone: '(51) 99872-3341',
-      whatsapp: '(51) 99872-3341',
-      cpf: '***.451.980-**',
-      concursos_inscritos: [
-        {
-          concurso_id: 'tjrs_2024',
-          cargo_id: 'analista_judiciario',
-          data_inscricao: '10/01/2025',
-        },
-      ],
-    };
+    // IMPORTANTE: Por padrao, nenhum candidato ou visitante comeca logado como administrador
+    return null;
   });
 
   useEffect(() => {
@@ -67,6 +64,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [usuario]);
 
+  // Login de candidato via Google (nunca e admin por padrao)
   const loginGoogle = () => {
     const novoUsuario: Usuario = {
       nome: 'Mariana Duarte Becker',
@@ -87,44 +85,62 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUsuario(novoUsuario);
   };
 
+  // Login administrativo protegido por senha
+  const loginAdmin = (senha: string): boolean => {
+    const senhasValidas = ['admin', 'certam2025', 'admin123', 'tjrs2024'];
+    if (senhasValidas.includes(senha.trim())) {
+      const adminUsuario: Usuario = {
+        nome: 'Rafael Santos da Silva',
+        email: 'rafasms0@hotmail.com',
+        is_admin: true,
+        candidato_id: 'cand-001',
+        telefone: '(51) 99872-3341',
+        whatsapp: '(51) 99872-3341',
+        cpf: '***.451.980-**',
+        concursos_inscritos: [
+          {
+            concurso_id: 'tjrs_2024',
+            cargo_id: 'analista_judiciario',
+            data_inscricao: '10/01/2025',
+          },
+        ],
+      };
+      setUsuario(adminUsuario);
+      return true;
+    }
+    return false;
+  };
+
   const loginAdminPreview = () => {
-    const adminUsuario: Usuario = {
-      nome: 'Rafael Santos da Silva',
-      email: 'rafasms0@hotmail.com',
-      is_admin: true,
-      candidato_id: 'cand-001',
-      telefone: '(51) 99872-3341',
-      whatsapp: '(51) 99872-3341',
-      cpf: '***.451.980-**',
+    loginAdmin('certam2025');
+  };
+
+  // Login de candidato com e-mail proprio (SEMPRE is_admin: false)
+  const loginCandidato = (email: string, nome?: string) => {
+    const emailLimpo = email.trim().toLowerCase();
+    const nomeLimpo = nome?.trim() || emailLimpo.split('@')[0];
+
+    const novoCandidato: Usuario = {
+      nome: nomeLimpo,
+      email: emailLimpo,
+      is_admin: false,
+      candidato_id: `cand-${Date.now().toString(36)}`,
+      telefone: '',
+      whatsapp: '',
+      cpf: '',
       concursos_inscritos: [
         {
           concurso_id: 'tjrs_2024',
           cargo_id: 'analista_judiciario',
-          data_inscricao: '10/01/2025',
+          data_inscricao: new Date().toLocaleDateString('pt-BR'),
         },
       ],
     };
-    setUsuario(adminUsuario);
+    setUsuario(novoCandidato);
   };
 
   const simularEmailCandidato = (email: string, nome: string) => {
-    const isAdminUser = email.toLowerCase() === 'rafasms0@hotmail.com';
-    setUsuario((prev) => ({
-      nome: nome || (prev?.nome ?? 'Candidato Participante'),
-      email,
-      is_admin: isAdminUser,
-      candidato_id: prev?.candidato_id || 'cand-001',
-      telefone: prev?.telefone || '',
-      whatsapp: prev?.whatsapp || '',
-      cpf: prev?.cpf || '',
-      concursos_inscritos: prev?.concursos_inscritos || [
-        {
-          concurso_id: 'tjrs_2024',
-          cargo_id: 'analista_judiciario',
-          data_inscricao: '15/01/2025',
-        },
-      ],
-    }));
+    loginCandidato(email, nome);
   };
 
   const atualizarDadosUsuario = (dados: Partial<Usuario>) => {
@@ -177,7 +193,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         usuario,
         isAdmin: !!usuario?.is_admin,
         loginGoogle,
+        loginAdmin,
         loginAdminPreview,
+        loginCandidato,
         simularEmailCandidato,
         atualizarDadosUsuario,
         inscreverConcurso,

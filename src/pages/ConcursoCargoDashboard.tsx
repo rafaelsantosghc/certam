@@ -124,9 +124,32 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
   }, [candidatosFiltrados.length, itensPorPagina]);
 
   // Tab 3: Candidate choices builder
-  const candidatoLogado = useMemo(() => {
+  const candidatoLogado = useMemo<Candidato | null>(() => {
     if (!usuario) return null;
-    return candidatos.find((c) => c.email === usuario.email) || candidatos[0];
+    const match = candidatos.find(
+      (c) =>
+        (c.email && usuario.email && c.email.toLowerCase() === usuario.email.toLowerCase()) ||
+        (usuario.candidato_id && c.id === usuario.candidato_id)
+    );
+    if (match) return match;
+
+    // Retorna perfil do proprio usuario logado caso nao esteja no mock estatico
+    const novoCandidato: Candidato = {
+      id: usuario.candidato_id || 'cand-novo',
+      posicao: 999,
+      nome: usuario.nome || 'Candidato',
+      email: usuario.email || '',
+      whatsapp: usuario.whatsapp || usuario.telefone || '',
+      cpf: usuario.cpf || '',
+      cota: 'Ampla',
+      nota_final: 0,
+      intencao: 'Sim',
+      status: 'Aguardando',
+      lotacao_atual: '',
+      comarca_desejada_1: 'Porto Alegre',
+      escolhas_comarcas: ['Porto Alegre', 'Canoas', 'São Leopoldo'],
+    };
+    return novoCandidato;
   }, [usuario, candidatos]);
 
   const [minhasEscolhas, setMinhasEscolhas] = useState<string[]>(() => {

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { lotesStore } from '../store/lotesStore';
 import { useAuth } from '../store/authContext';
 import { COMARCAS_RS } from '../data/comarcas';
@@ -50,9 +50,38 @@ export const SimuladorLotes: React.FC<SimuladorLotesProps> = ({
   }, [candidatos]);
 
   // Candidato Logado
-  const candidatoLogado = useMemo(() => {
+  const candidatoLogado = useMemo<Candidato | null>(() => {
     if (!usuario) return null;
-    return candidatos.find((c) => c.email === usuario.email) || candidatos[0];
+    const match = candidatos.find(
+      (c) =>
+        (c.email && usuario.email && c.email.toLowerCase() === usuario.email.toLowerCase()) ||
+        (usuario.candidato_id && c.id === usuario.candidato_id)
+    );
+    if (match) return match;
+
+    const novoCandidato: Candidato = {
+      id: usuario.candidato_id || 'cand-novo',
+      posicao: 999,
+      nome: usuario.nome || '',
+      email: usuario.email || '',
+      whatsapp: usuario.whatsapp || usuario.telefone || '',
+      cpf: usuario.cpf || '',
+      cota: 'Ampla',
+      nota_final: 0,
+      intencao: 'Sim',
+      status: 'Aguardando',
+      lotacao_atual: '',
+      comarca_desejada_1: 'Porto Alegre',
+      escolhas_comarcas: ['Porto Alegre', 'Canoas', 'São Leopoldo'],
+      fg_cc: {
+        possui: false,
+        registro_funcional: '',
+        cargo_atual: '',
+        comarca_atual: '',
+        pretende_continuar: 'Sim',
+      },
+    };
+    return novoCandidato;
   }, [usuario, candidatos]);
 
   // Form de Manifestação do Candidato
@@ -73,6 +102,29 @@ export const SimuladorLotes: React.FC<SimuladorLotesProps> = ({
   const [escolhasComarcas, setEscolhasComarcas] = useState<string[]>(() => {
     return candidatoLogado?.escolhas_comarcas || ['Porto Alegre', 'Canoas', 'São Leopoldo'];
   });
+
+  useEffect(() => {
+    if (candidatoLogado) {
+      setNomeCandidato(candidatoLogado.nome || '');
+      setCpfCandidato(candidatoLogado.cpf || '');
+      setWhatsappCandidato(candidatoLogado.whatsapp || '');
+      setIntencao(candidatoLogado.intencao || 'Sim');
+      if (candidatoLogado.escolhas_comarcas && candidatoLogado.escolhas_comarcas.length > 0) {
+        setEscolhasComarcas(candidatoLogado.escolhas_comarcas);
+      }
+      if (candidatoLogado.fg_cc) {
+        setPossuiFgCc(candidatoLogado.fg_cc.possui || false);
+        setFgRegistro(candidatoLogado.fg_cc.registro_funcional || '');
+        setFgCargo(candidatoLogado.fg_cc.cargo_atual || '');
+        setFgComarca(candidatoLogado.fg_cc.comarca_atual || '');
+        setFgPretendeContinuar(candidatoLogado.fg_cc.pretende_continuar || 'Sim');
+      }
+    } else {
+      setNomeCandidato('');
+      setCpfCandidato('');
+      setWhatsappCandidato('');
+    }
+  }, [candidatoLogado]);
 
   // Filtro Comarcas
   const [buscaComarcaDisponivel, setBuscaComarcaDisponivel] = useState('');

@@ -33,7 +33,8 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
     usuario,
     isAdmin,
     loginGoogle,
-    loginAdminPreview,
+    loginAdmin,
+    loginCandidato,
     simularEmailCandidato,
     atualizarDadosUsuario,
     inscreverConcurso,
@@ -119,10 +120,15 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
     showToast('Dados cadastrais atualizados com sucesso!');
   };
 
-  // Login rápido por email
+  // Login de candidato por email
   const [loginEmailInput, setLoginEmailInput] = useState('');
   const [loginNomeInput, setLoginNomeInput] = useState('');
   const [showEmailLoginForm, setShowEmailLoginForm] = useState(false);
+
+  // Login de administrador protegido por senha
+  const [showAdminLoginForm, setShowAdminLoginForm] = useState(false);
+  const [adminSenhaInput, setAdminSenhaInput] = useState('');
+  const [adminSenhaErro, setAdminSenhaErro] = useState(false);
 
   const handleLoginEmailSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -134,16 +140,34 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
       return;
     }
 
+    if (emailLimpo.toLowerCase() === 'rafasms0@hotmail.com') {
+      showToast('O e-mail rafasms0@hotmail.com é de administrador. Por favor, acesse pela Área do Administrador informando sua senha.');
+      setShowAdminLoginForm(true);
+      setShowEmailLoginForm(false);
+      return;
+    }
+
     const nomeSanitizado = sanitizeInput(loginNomeInput, 100) || emailLimpo.split('@')[0];
 
-    simularEmailCandidato(
-      emailLimpo,
-      nomeSanitizado
-    );
+    loginCandidato(emailLimpo, nomeSanitizado);
     setShowEmailLoginForm(false);
     setLoginEmailInput('');
     setLoginNomeInput('');
-    showToast('Login realizado com sucesso!');
+    showToast('Login de candidato realizado com sucesso!');
+  };
+
+  const handleAdminLoginSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const ok = loginAdmin(adminSenhaInput);
+    if (!ok) {
+      setAdminSenhaErro(true);
+      showToast('Senha de administrador incorreta.');
+    } else {
+      setAdminSenhaErro(false);
+      setShowAdminLoginForm(false);
+      setAdminSenhaInput('');
+      showToast('Acesso administrativo concedido!');
+    }
   };
 
   // Identificar quais concursos e cargos o candidato atual está cadastrado/inscrito
@@ -257,16 +281,18 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
         </div>
 
         {/* Acesso Admin */}
-        <div className="flex items-center gap-2 shrink-0">
-          <button
-            type="button"
-            onClick={() => onNavigate('admin', { tab: 'concursos' })}
-            className="inline-flex items-center gap-2 bg-[#07192B] hover:bg-[#0C2640] text-white font-bold px-4 py-2.5 rounded-xl text-xs shadow-xs transition-colors cursor-pointer"
-          >
-            <Plus className="w-4 h-4 text-[#2DD4AA]" />
-            <span>Cadastrar concurso</span>
-          </button>
-        </div>
+        {isAdmin && (
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => onNavigate('admin', { tab: 'concursos' })}
+              className="inline-flex items-center gap-2 bg-[#07192B] hover:bg-[#0C2640] text-white font-bold px-4 py-2.5 rounded-xl text-xs shadow-xs transition-colors cursor-pointer"
+            >
+              <Plus className="w-4 h-4 text-[#2DD4AA]" />
+              <span>Cadastrar concurso</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* SEÇÃO 1: FAZER LOGIN & ATUALIZAR DADOS CADASTRAIS (DADOS GERAIS DO CANDIDATO) */}
@@ -281,11 +307,11 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
                   <span>Acesse sua conta de candidato</span>
                 </div>
                 <p className="text-xs text-slate-500 mt-1">
-                  Faça login para gerenciar suas inscrições, salvar seus dados de contato e acompanhar suas colocações.
+                  Identifique-se para atualizar seus dados de contato, manifestar suas preferências e acompanhar as comarcas do certame.
                 </p>
               </div>
 
-              {/* Ações de Login Rápido */}
+              {/* Ações de Login */}
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
@@ -315,27 +341,37 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
 
                 <button
                   type="button"
-                  onClick={() => setShowEmailLoginForm(!showEmailLoginForm)}
-                  className="inline-flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold px-3.5 py-2 rounded-xl text-xs transition-colors cursor-pointer"
+                  onClick={() => {
+                    setShowEmailLoginForm(!showEmailLoginForm);
+                    setShowAdminLoginForm(false);
+                  }}
+                  className="inline-flex items-center gap-1.5 bg-[#135A7A] hover:bg-[#0C2640] text-white font-semibold px-3.5 py-2 rounded-xl text-xs transition-colors cursor-pointer shadow-xs"
                 >
-                  <Mail className="w-3.5 h-3.5 text-slate-600" />
+                  <Mail className="w-3.5 h-3.5 text-teal-300" />
                   <span>Entrar com e-mail</span>
                 </button>
 
                 <button
                   type="button"
-                  onClick={loginAdminPreview}
-                  className="inline-flex items-center gap-1.5 bg-[#07192B] hover:bg-[#0C2640] text-teal-300 font-semibold px-3.5 py-2 rounded-xl text-xs transition-colors cursor-pointer"
+                  onClick={() => {
+                    setShowAdminLoginForm(!showAdminLoginForm);
+                    setShowEmailLoginForm(false);
+                  }}
+                  className="inline-flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-3 py-2 rounded-xl text-xs transition-colors cursor-pointer"
+                  title="Acesso restrito à gerência do portal"
                 >
-                  <ShieldCheck className="w-3.5 h-3.5" />
-                  <span>Acesso administrativo</span>
+                  <ShieldCheck className="w-3.5 h-3.5 text-slate-500" />
+                  <span>Área do administrador</span>
                 </button>
               </div>
             </div>
 
-            {/* Formulário retrátil de login por e-mail */}
+            {/* Formulário retrátil de login do candidato por e-mail */}
             {showEmailLoginForm && (
               <form onSubmit={handleLoginEmailSubmit} className="p-4 bg-slate-50 rounded-xl border border-slate-200/80 space-y-3">
+                <div className="text-xs font-semibold text-slate-700">
+                  Informe seus dados para acessar o portal como candidato:
+                </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
@@ -351,7 +387,7 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
                   </div>
                   <div>
                     <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
-                      E-mail do candidato *
+                      Seu e-mail de candidato *
                     </label>
                     <input
                       type="email"
@@ -375,30 +411,58 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
                     type="submit"
                     className="px-4 py-1.5 bg-[#135A7A] hover:bg-[#0C2640] text-white font-bold rounded-lg text-xs cursor-pointer shadow-xs"
                   >
-                    Confirmar login
+                    Entrar como candidato
                   </button>
                 </div>
               </form>
             )}
 
-            {/* Atalhos para testar com candidatos simulados */}
-            <div className="text-xs text-slate-500 flex items-center gap-2 flex-wrap pt-1">
-              <span className="font-medium">Acesso rápido para demonstração:</span>
-              <button
-                type="button"
-                onClick={() => simularEmailCandidato('rafasms0@hotmail.com', 'Rafael Santos da Silva')}
-                className="text-[#135A7A] hover:underline font-semibold bg-teal-50 px-2 py-0.5 rounded cursor-pointer"
-              >
-                Rafael Santos (1º Lugar)
-              </button>
-              <button
-                type="button"
-                onClick={() => simularEmailCandidato('mariana.becker@gmail.com', 'Mariana Duarte Becker')}
-                className="text-[#135A7A] hover:underline font-semibold bg-teal-50 px-2 py-0.5 rounded cursor-pointer"
-              >
-                Mariana Becker (2º Lugar)
-              </button>
-            </div>
+            {/* Formulário retrátil de login do administrador com senha */}
+            {showAdminLoginForm && (
+              <form onSubmit={handleAdminLoginSubmit} className="p-4 bg-amber-50/50 rounded-xl border border-amber-200 space-y-3">
+                <div className="text-xs font-bold text-amber-950 flex items-center gap-1.5">
+                  <ShieldCheck className="w-4 h-4 text-amber-600" />
+                  <span>Acesso restrito à administração oficial</span>
+                </div>
+                <div className="max-w-md">
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                    Senha de administrador
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    value={adminSenhaInput}
+                    onChange={(e) => {
+                      setAdminSenhaInput(e.target.value);
+                      setAdminSenhaErro(false);
+                    }}
+                    placeholder="Digite a senha de acesso..."
+                    className="w-full px-3 py-2 bg-white border border-amber-200 rounded-lg text-xs font-medium focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    autoFocus
+                  />
+                  {adminSenhaErro && (
+                    <p className="text-[11px] text-rose-600 font-semibold mt-1">
+                      Senha incorreta. Tente novamente.
+                    </p>
+                  )}
+                </div>
+                <div className="flex items-center justify-start gap-2 pt-1">
+                  <button
+                    type="submit"
+                    className="px-4 py-1.5 bg-[#07192B] hover:bg-[#0C2640] text-teal-300 font-bold rounded-lg text-xs cursor-pointer shadow-xs"
+                  >
+                    Confirmar senha
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowAdminLoginForm(false)}
+                    className="px-3 py-1.5 text-xs text-slate-600 hover:text-slate-900 cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         ) : (
           /* AUTENTICADO: CARD COM DADOS GERAIS DO CANDIDATO E BOTÃO ATUALIZAR */
@@ -439,15 +503,6 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
                 >
                   <Edit3 className="w-3.5 h-3.5 text-teal-300" />
                   <span>Atualizar meus dados</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={loginGoogle}
-                  title="Alternar usuário para demonstração"
-                  className="inline-flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-3 py-2 rounded-xl text-xs transition-colors cursor-pointer"
-                >
-                  <span>Alternar perfil</span>
                 </button>
 
                 <button

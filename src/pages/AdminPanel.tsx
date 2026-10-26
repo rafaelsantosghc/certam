@@ -19,6 +19,7 @@ import {
   HelpCircle,
   Bookmark,
   Sparkles,
+  Lock,
 } from 'lucide-react';
 
 interface AdminPanelProps {
@@ -30,6 +31,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   initialTab = 'concursos',
   onNavigate,
 }) => {
+  const { isAdmin, loginAdmin } = useAuth();
+  const [senhaAdmin, setSenhaAdmin] = useState('');
+  const [erroSenha, setErroSenha] = useState(false);
+
   const [abaAdmin, setAbaAdmin] = useState<'concursos' | 'importar' | 'candidatos' | 'faq'>(initialTab);
 
   const [concursos, setConcursos] = useState<Concurso[]>(() => certamStore.getConcursos());
@@ -396,6 +401,76 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         c.cargos.some((cg) => cg.nome.toLowerCase().includes(busca.toLowerCase()))
     );
   }, [concursos, busca]);
+
+  if (!isAdmin) {
+    return (
+      <div className="max-w-md mx-auto my-12 bg-white rounded-2xl border border-slate-200 card-shadow p-6 sm:p-8 space-y-6">
+        <div className="text-center space-y-2">
+          <div className="w-12 h-12 mx-auto rounded-2xl bg-amber-500/10 text-amber-600 flex items-center justify-center">
+            <Lock className="w-6 h-6" />
+          </div>
+          <h2 className="text-xl font-bold font-serif text-slate-900">
+            Painel do administrador
+          </h2>
+          <p className="text-xs text-slate-500 leading-relaxed">
+            Esta área é restrita à coordenação e gerência de concursos. Por favor, insira a senha de administrador para prosseguir.
+          </p>
+        </div>
+
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            const ok = loginAdmin(senhaAdmin);
+            if (!ok) {
+              setErroSenha(true);
+            } else {
+              setErroSenha(false);
+            }
+          }}
+          className="space-y-4"
+        >
+          <div>
+            <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">
+              Senha de administrador
+            </label>
+            <input
+              type="password"
+              value={senhaAdmin}
+              onChange={(e) => {
+                setSenhaAdmin(e.target.value);
+                setErroSenha(false);
+              }}
+              placeholder="Digite sua senha de acesso..."
+              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#2DD4AA]"
+              autoFocus
+            />
+            {erroSenha && (
+              <p className="text-xs text-rose-600 mt-1 font-medium">
+                Senha incorreta. Tente novamente.
+              </p>
+            )}
+          </div>
+
+          <button
+            type="submit"
+            className="w-full py-2.5 bg-[#07192B] hover:bg-[#0C2640] text-teal-300 font-bold rounded-xl text-xs cursor-pointer shadow-xs transition-colors"
+          >
+            Acessar painel administrativo
+          </button>
+        </form>
+
+        <div className="pt-2 border-t border-slate-100 text-center">
+          <button
+            type="button"
+            onClick={() => onNavigate('portal')}
+            className="text-xs text-slate-500 hover:text-slate-900 cursor-pointer font-medium"
+          >
+            ← Voltar para o portal do concurseiro
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 max-w-[1880px] w-full mx-auto">
