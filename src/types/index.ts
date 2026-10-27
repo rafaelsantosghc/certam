@@ -362,6 +362,9 @@ export type TipoNotificacao =
   | 'documento'
   | 'chat'
   | 'aprovacao_perfil'
+  | 'indeferimento_perfil'
+  | 'validacao_aprovada'
+  | 'validacao_indeferida'
   | 'comunicado'
   | 'geral';
 
@@ -369,10 +372,13 @@ export interface NotificacaoItem {
   id: string;
   concurso_id?: string;
   cargo_id?: string;
+  destinatario_email?: string;
+  destinatario_nome?: string;
   titulo: string;
   mensagem: string;
   tipo: TipoNotificacao;
   data_hora: string;
   link_destino?: string;
   urgente?: boolean;
+  motivo_justificativa?: string;
 }

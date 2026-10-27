@@ -40,6 +40,7 @@ import {
   Bell,
   ArrowRight,
   X,
+  XCircle,
   MessageSquare,
   AlertTriangle,
   Send,
@@ -172,6 +173,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   // Resposta Contato
   const [respostaContatoId, setRespostaContatoId] = useState<string | null>(null);
   const [respostaTexto, setRespostaTexto] = useState('');
+
+  // Modal de Justificativa de Indeferimento (Auditoria de Perfil)
+  const [modalIndeferirAuditAberto, setModalIndeferirAuditAberto] = useState(false);
+  const [auditAlvoParaIndeferir, setAuditAlvoParaIndeferir] = useState<PerfilAuditRequest | null>(null);
+  const [motivoJustificativaAudit, setMotivoJustificativaAudit] = useState('');
+  const [erroMotivoAudit, setErroMotivoAudit] = useState(false);
+
+  // Modal de Justificativa de Indeferimento (Validação de Candidato)
+  const [modalIndeferirVincAberto, setModalIndeferirVincAberto] = useState(false);
+  const [vincAlvoParaIndeferir, setVincAlvoParaIndeferir] = useState<SolicitacaoVinculacao | null>(null);
+  const [motivoJustificativaVinc, setMotivoJustificativaVinc] = useState('');
+  const [erroMotivoVinc, setErroMotivoVinc] = useState(false);
 
   // Importador Planilhas
   const [importConcursoId, setImportConcursoId] = useState<string>(concursos[0]?.id || 'tjrs_2025');
@@ -340,13 +353,58 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     // 5. Disparar evento global para atualizar qualquer tela aberta
     window.dispatchEvent(new CustomEvent('certam_audit_approved', { detail: { req, mudancas } }));
 
-    showToast('Alteração de perfil aprovada e aplicada no cadastro com sucesso!');
+    // 6. Notificar o candidato sobre o deferimento das alterações
+    const camposAlteradosStr = req.alteracoes.map((a) => a.campo_label).join(', ');
+    notificationStore.criarNotificacao({
+      destinatario_email: req.usuario_email,
+      destinatario_nome: req.usuario_nome,
+      titulo: 'Alteração Cadastral Deferida',
+      mensagem: `Sua solicitação de atualização cadastral (${camposAlteradosStr}) foi analisada e DEFERIDA pela administração. Os dados já estão consolidados no seu perfil e refletidos nas listas de classificação.`,
+      tipo: 'aprovacao_perfil',
+      urgente: false,
+    });
+
+    showToast(`Alterações de ${req.usuario_nome} aprovadas e candidato notificado!`);
   };
 
-  const handleRejeitarAuditoria = (id: string) => {
-    const motivo = prompt('Informe a justificativa do indeferimento da alteração:') || 'Inconsistência cadastral';
-    auditStore.rejeitarSolicitacao(id, motivo);
-    showToast('Alteração indeferida.');
+  const handleAbrirIndeferirAuditoria = (req: PerfilAuditRequest) => {
+    setAuditAlvoParaIndeferir(req);
+    setMotivoJustificativaAudit('');
+    setErroMotivoAudit(false);
+    setModalIndeferirAuditAberto(true);
+  };
+
+  const handleConfirmarIndeferimentoAuditoria = () => {
+    if (!auditAlvoParaIndeferir) return;
+    const motivoLimpo = motivoJustificativaAudit.trim();
+    if (!motivoLimpo) {
+      setErroMotivoAudit(true);
+      return;
+    }
+
+    auditStore.rejeitarSolicitacao(auditAlvoParaIndeferir.id, motivoLimpo);
+
+    const camposAlteradosStr = auditAlvoParaIndeferir.alteracoes.map((a) => a.campo_label).join(', ');
+    notificationStore.criarNotificacao({
+      destinatario_email: auditAlvoParaIndeferir.usuario_email,
+      destinatario_nome: auditAlvoParaIndeferir.usuario_nome,
+      titulo: 'Alteração Cadastral Indeferida',
+      mensagem: `Sua solicitação de alteração cadastral (${camposAlteradosStr}) foi INDEFERIDA pela moderação. Justificativa: "${motivoLimpo}". Acesse seu perfil para revisar e submeter novas informações.`,
+      tipo: 'indeferimento_perfil',
+      motivo_justificativa: motivoLimpo,
+      urgente: true,
+    });
+
+    window.dispatchEvent(
+      new CustomEvent('certam_audit_rejected', {
+        detail: { req: auditAlvoParaIndeferir, motivo: motivoLimpo },
+      })
+    );
+
+    setModalIndeferirAuditAberto(false);
+    setAuditAlvoParaIndeferir(null);
+    setMotivoJustificativaAudit('');
+    showToast('Alteração indeferida e candidato notificado com a justificativa!');
   };
 
   // -------------------------------------------------------------
@@ -385,13 +443,54 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       lotesStore.salvarCandidatos(v.concurso_id, v.cargo_id, cands);
     }
 
+    notificationStore.criarNotificacao({
+      concurso_id: v.concurso_id,
+      cargo_id: v.cargo_id,
+      destinatario_email: v.usuario_email,
+      destinatario_nome: v.usuario_nome,
+      titulo: 'Validação de Aprovado Deferida',
+      mensagem: `Sua vinculação ao certame ${v.concurso_nome || v.concurso_id} no cargo ${v.cargo_nome || v.cargo_id} (${v.posicao_declarada}º lugar) foi DEFERIDA e homologada no sistema.`,
+      tipo: 'validacao_aprovada',
+      link_destino: `/concurso?id=${v.concurso_id}&tab=dashboard`,
+      urgente: false,
+    });
+
     showToast(`Candidato ${v.usuario_nome} validado e homologado no cargo!`);
   };
 
-  const handleRejeitarVinculacao = (id: string) => {
-    const motivo = prompt('Motivo do indeferimento:') || 'Não localizado no Diário Oficial';
-    auditStore.rejeitarVinculacao(id, motivo);
-    showToast('Solicitação de vinculação indeferida.');
+  const handleAbrirIndeferirVinculacao = (v: SolicitacaoVinculacao) => {
+    setVincAlvoParaIndeferir(v);
+    setMotivoJustificativaVinc('');
+    setErroMotivoVinc(false);
+    setModalIndeferirVincAberto(true);
+  };
+
+  const handleConfirmarIndeferimentoVinculacao = () => {
+    if (!vincAlvoParaIndeferir) return;
+    const motivoLimpo = motivoJustificativaVinc.trim();
+    if (!motivoLimpo) {
+      setErroMotivoVinc(true);
+      return;
+    }
+
+    auditStore.rejeitarVinculacao(vincAlvoParaIndeferir.id, motivoLimpo);
+
+    notificationStore.criarNotificacao({
+      destinatario_email: vincAlvoParaIndeferir.usuario_email,
+      destinatario_nome: vincAlvoParaIndeferir.usuario_nome,
+      concurso_id: vincAlvoParaIndeferir.concurso_id,
+      cargo_id: vincAlvoParaIndeferir.cargo_id,
+      titulo: 'Validação de Aprovado Indeferida',
+      mensagem: `Sua solicitação de vinculação ao cargo ${vincAlvoParaIndeferir.cargo_nome || vincAlvoParaIndeferir.cargo_id} foi INDEFERIDA. Justificativa: "${motivoLimpo}".`,
+      tipo: 'validacao_indeferida',
+      motivo_justificativa: motivoLimpo,
+      urgente: true,
+    });
+
+    setModalIndeferirVincAberto(false);
+    setVincAlvoParaIndeferir(null);
+    setMotivoJustificativaVinc('');
+    showToast('Vinculação indeferida e candidato notificado!');
   };
 
   // -------------------------------------------------------------
@@ -747,7 +846,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       <div className="flex items-center gap-2 shrink-0">
                         <button
                           type="button"
-                          onClick={() => handleRejeitarAuditoria(req.id)}
+                          onClick={() => handleAbrirIndeferirAuditoria(req)}
                           className="px-3.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition-colors cursor-pointer"
                         >
                           Rejeitar
@@ -865,10 +964,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     <div className="flex items-center gap-2 shrink-0">
                       <button
                         type="button"
-                        onClick={() => handleRejeitarVinculacao(v.id)}
-                        className="px-3.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                        onClick={() => handleAbrirIndeferirVinculacao(v)}
+                        className="px-3.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1"
                       >
-                        Indeferir
+                        <XCircle className="w-3.5 h-3.5" />
+                        <span>Indeferir...</span>
                       </button>
                       <button
                         type="button"
@@ -878,6 +978,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         <Check className="w-3.5 h-3.5" />
                         <span>Homologar Aprovado</span>
                       </button>
+                    </div>
+                  )}
+
+                  {v.status === 'rejeitado' && v.motivo_rejeicao && (
+                    <div className="w-full mt-2 p-2.5 bg-rose-50 border border-rose-200 rounded-lg text-2xs text-rose-800">
+                      <span className="font-bold block text-rose-900">Motivo do Indeferimento:</span>
+                      <p className="mt-0.5">{v.motivo_rejeicao}</p>
                     </div>
                   )}
                 </div>
@@ -1469,6 +1576,278 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* MODAL DE JUSTIFICATIVA DE INDEFERIMENTO - AUDITORIA DE PERFIL   */}
+      {/* ============================================================== */}
+      {modalIndeferirAuditAberto && auditAlvoParaIndeferir && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in-50">
+          <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col">
+            {/* Header */}
+            <div className="p-4 sm:p-5 bg-gradient-to-r from-rose-950 to-[#07192B] text-white flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-rose-500/20 text-rose-300 flex items-center justify-center font-bold">
+                  <XCircle className="w-4 h-4 text-rose-400" />
+                </div>
+                <div>
+                  <h3 className="font-serif font-bold text-base text-white">
+                    Indeferir Alteração Cadastral
+                  </h3>
+                  <p className="text-2xs text-rose-200">
+                    O candidato será notificado internamente com a justificativa apresentada
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setModalIndeferirAuditAberto(false);
+                  setAuditAlvoParaIndeferir(null);
+                  setErroMotivoAudit(false);
+                }}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Conteúdo */}
+            <div className="p-5 space-y-4 text-xs">
+              {/* Dados do Candidato */}
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-slate-900 text-sm">{auditAlvoParaIndeferir.usuario_nome}</span>
+                  <span className="font-mono text-2xs text-slate-500">CPF: {auditAlvoParaIndeferir.cpf}</span>
+                </div>
+                <span className="text-2xs text-slate-500 block">
+                  E-mail: {auditAlvoParaIndeferir.usuario_email}
+                </span>
+
+                <div className="pt-2 border-t border-slate-200 mt-2">
+                  <span className="text-[10px] uppercase font-bold text-slate-500 block mb-1">
+                    Alterações Solicitadas:
+                  </span>
+                  <div className="space-y-1">
+                    {auditAlvoParaIndeferir.alteracoes.map((alt, i) => (
+                      <div key={i} className="text-2xs text-slate-700 flex items-center gap-1.5">
+                        <span className="font-semibold">{alt.campo_label}:</span>
+                        <span className="line-through text-slate-400">{alt.valor_antigo}</span>
+                        <ArrowRight className="w-2.5 h-2.5 text-slate-400" />
+                        <span className="font-bold text-slate-800">{alt.valor_novo}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Sugestões Rápidas de Justificativa */}
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1.5 text-2xs uppercase tracking-wider">
+                  Sugestões Rápidas de Motivo:
+                </label>
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    'Divergência entre o nome informado e o documento oficial.',
+                    'CPF incompatível com os registros oficiais do certame.',
+                    'Data de nascimento divergente da publicação oficial.',
+                    'Comprovação documental obrigatória para alteração cadastral.',
+                    'Inconsistência cadastral não justificada.',
+                  ].map((sugestao, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => {
+                        setMotivoJustificativaAudit(sugestao);
+                        setErroMotivoAudit(false);
+                      }}
+                      className="px-2 py-1 bg-slate-100 hover:bg-rose-50 hover:text-rose-700 hover:border-rose-200 border border-slate-200 rounded-lg text-[11px] text-slate-600 transition-colors text-left cursor-pointer"
+                    >
+                      {sugestao}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Textarea da Justificativa */}
+              <div>
+                <label className="block font-semibold text-slate-800 mb-1">
+                  Justificativa do Indeferimento <span className="text-rose-500">*</span>
+                </label>
+                <textarea
+                  rows={4}
+                  value={motivoJustificativaAudit}
+                  onChange={(e) => {
+                    setMotivoJustificativaAudit(e.target.value);
+                    if (e.target.value.trim()) setErroMotivoAudit(false);
+                  }}
+                  placeholder="Descreva de forma clara o motivo do indeferimento para que o candidato possa corrigir as informações e submeter nova solicitação..."
+                  className={`w-full p-3 rounded-xl border text-xs focus:outline-hidden transition-all ${
+                    erroMotivoAudit
+                      ? 'border-rose-400 bg-rose-50/50 focus:border-rose-600'
+                      : 'border-slate-300 bg-slate-50 focus:bg-white focus:border-rose-600'
+                  }`}
+                />
+                {erroMotivoAudit && (
+                  <p className="text-2xs text-rose-600 mt-1 font-semibold flex items-center gap-1">
+                    <AlertTriangle className="w-3 h-3 shrink-0" />
+                    <span>A justificativa do indeferimento é obrigatória para notificar o candidato.</span>
+                  </p>
+                )}
+                <p className="text-2xs text-slate-400 mt-1">
+                  Esta mensagem aparecerá na notificação interna (ícone do sininho) e no perfil do candidato.
+                </p>
+              </div>
+
+              {/* Ações */}
+              <div className="pt-2 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setModalIndeferirAuditAberto(false);
+                    setAuditAlvoParaIndeferir(null);
+                    setErroMotivoAudit(false);
+                  }}
+                  className="px-4 py-2 border border-slate-300 rounded-xl text-slate-600 hover:bg-slate-100 font-semibold cursor-pointer transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmarIndeferimentoAuditoria}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-bold cursor-pointer transition-colors shadow-xs"
+                >
+                  <XCircle className="w-3.5 h-3.5" />
+                  <span>Confirmar Indeferimento e Notificar</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* MODAL DE JUSTIFICATIVA DE INDEFERIMENTO - VALIDAÇÃO / VINCULAÇÃO */}
+      {/* ============================================================== */}
+      {modalIndeferirVincAberto && vincAlvoParaIndeferir && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in-50">
+          <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col">
+            <div className="p-4 sm:p-5 bg-gradient-to-r from-rose-950 to-[#07192B] text-white flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-rose-500/20 text-rose-300 flex items-center justify-center font-bold">
+                  <XCircle className="w-4 h-4 text-rose-400" />
+                </div>
+                <div>
+                  <h3 className="font-serif font-bold text-base text-white">
+                    Indeferir Validação de Aprovado
+                  </h3>
+                  <p className="text-2xs text-rose-200">
+                    O candidato será notificado sobre o motivo da recusa da vinculação
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setModalIndeferirVincAberto(false);
+                  setVincAlvoParaIndeferir(null);
+                  setErroMotivoVinc(false);
+                }}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4 text-xs">
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-slate-900 text-sm">{vincAlvoParaIndeferir.usuario_nome}</span>
+                  <span className="font-mono text-2xs text-slate-500">CPF: {vincAlvoParaIndeferir.cpf}</span>
+                </div>
+                <div className="text-2xs text-slate-600 font-medium">
+                  Certame: {vincAlvoParaIndeferir.concurso_nome || vincAlvoParaIndeferir.concurso_id} • Cargo: {vincAlvoParaIndeferir.cargo_nome || vincAlvoParaIndeferir.cargo_id}
+                </div>
+                <div className="text-2xs text-slate-500 font-mono">
+                  Posição declarada: {vincAlvoParaIndeferir.posicao_declarada}º lugar
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1.5 text-2xs uppercase tracking-wider">
+                  Sugestões Rápidas:
+                </label>
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    'Nome não localizado na publicação oficial do Diário Oficial.',
+                    'Classificação declarada diverge do resultado homologado.',
+                    'Comprovante ilegível ou incompatível com a convocação.',
+                  ].map((sug, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => {
+                        setMotivoJustificativaVinc(sug);
+                        setErroMotivoVinc(false);
+                      }}
+                      className="px-2 py-1 bg-slate-100 hover:bg-rose-50 hover:text-rose-700 border border-slate-200 rounded-lg text-[11px] text-slate-600 transition-colors text-left cursor-pointer"
+                    >
+                      {sug}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-800 mb-1">
+                  Justificativa do Indeferimento <span className="text-rose-500">*</span>
+                </label>
+                <textarea
+                  rows={3}
+                  value={motivoJustificativaVinc}
+                  onChange={(e) => {
+                    setMotivoJustificativaVinc(e.target.value);
+                    if (e.target.value.trim()) setErroMotivoVinc(false);
+                  }}
+                  placeholder="Informe ao candidato o motivo da recusa da vinculação..."
+                  className={`w-full p-3 rounded-xl border text-xs focus:outline-hidden transition-all ${
+                    erroMotivoVinc
+                      ? 'border-rose-400 bg-rose-50/50 focus:border-rose-600'
+                      : 'border-slate-300 bg-slate-50 focus:bg-white focus:border-rose-600'
+                  }`}
+                />
+                {erroMotivoVinc && (
+                  <p className="text-2xs text-rose-600 mt-1 font-semibold flex items-center gap-1">
+                    <AlertTriangle className="w-3 h-3 shrink-0" />
+                    <span>A justificativa é obrigatória.</span>
+                  </p>
+                )}
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setModalIndeferirVincAberto(false);
+                    setVincAlvoParaIndeferir(null);
+                    setErroMotivoVinc(false);
+                  }}
+                  className="px-4 py-2 border border-slate-300 rounded-xl text-slate-600 hover:bg-slate-100 font-semibold cursor-pointer transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmarIndeferimentoVinculacao}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-bold cursor-pointer transition-colors shadow-xs"
+                >
+                  <XCircle className="w-3.5 h-3.5" />
+                  <span>Confirmar Indeferimento</span>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

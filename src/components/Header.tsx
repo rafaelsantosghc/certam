@@ -46,9 +46,14 @@ export const Header: React.FC<HeaderProps> = ({
   const [motivoContatoInicial, setMotivoContatoInicial] = useState<any>('duvida');
 
   useEffect(() => {
-    const handler = () => setModalGoogleAberto(true);
-    window.addEventListener('certam_abrir_google_auth', handler);
-    return () => window.removeEventListener('certam_abrir_google_auth', handler);
+    const handleGoogle = () => setModalGoogleAberto(true);
+    const handlePerfil = () => setModalPerfilAberto(true);
+    window.addEventListener('certam_abrir_google_auth', handleGoogle);
+    window.addEventListener('certam_abrir_perfil_candidato', handlePerfil);
+    return () => {
+      window.removeEventListener('certam_abrir_google_auth', handleGoogle);
+      window.removeEventListener('certam_abrir_perfil_candidato', handlePerfil);
+    };
   }, []);
 
   const handleCopiarLink = () => {

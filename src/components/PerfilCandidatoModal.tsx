@@ -10,6 +10,9 @@ import {
   Send,
   CheckCircle2,
   AlertTriangle,
+  AlertCircle,
+  Clock,
+  XCircle,
   User,
   Plus,
   Trash2,
@@ -62,6 +65,34 @@ export const PerfilCandidatoModal: React.FC<PerfilCandidatoModalProps> = ({
       setPrimeiroCadastro(isSemDados);
     }
   }, [usuario, aberto]);
+
+  // Histórico da última solicitação de auditoria deste candidato
+  const [todasSolicitacoes, setTodasSolicitacoes] = useState(() => auditStore.getAuditRequests());
+
+  useEffect(() => {
+    const handleAuditUpdate = () => {
+      setTodasSolicitacoes(auditStore.getAuditRequests());
+    };
+    window.addEventListener('certam_audit_updated', handleAuditUpdate);
+    window.addEventListener('certam_audit_rejected', handleAuditUpdate);
+    window.addEventListener('certam_audit_approved', handleAuditUpdate);
+    return () => {
+      window.removeEventListener('certam_audit_updated', handleAuditUpdate);
+      window.removeEventListener('certam_audit_rejected', handleAuditUpdate);
+      window.removeEventListener('certam_audit_approved', handleAuditUpdate);
+    };
+  }, []);
+
+  const ultimaSolicitacao = useMemo(() => {
+    if (!usuario) return null;
+    const emailUser = usuario.email?.toLowerCase().trim();
+    const cpfLimpo = (usuario.cpf || cpf)?.replace(/\D/g, '') || '';
+    return todasSolicitacoes.find(
+      (r) =>
+        (emailUser && r.usuario_email?.toLowerCase().trim() === emailUser) ||
+        (cpfLimpo && r.cpf && r.cpf.replace(/\D/g, '') === cpfLimpo)
+    );
+  }, [usuario, cpf, todasSolicitacoes]);
 
   // Identificação automática de todas as aprovações do candidato
   const aprovacoesIdentificadas: AprovacaoDetectada[] = useMemo(() => {
@@ -325,6 +356,62 @@ export const PerfilCandidatoModal: React.FC<PerfilCandidatoModalProps> = ({
                   </span>
                 </div>
               </div>
+            )}
+
+            {/* Banner de Feedback de Solicitação Recente */}
+            {ultimaSolicitacao && (
+              <>
+                {ultimaSolicitacao.status === 'pendente' && (
+                  <div className="p-3.5 bg-amber-50/90 border border-amber-300 rounded-xl flex items-start gap-2.5 text-amber-900">
+                    <Clock className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-bold block">Solicitação em Análise pela Administração</span>
+                      <p className="text-2xs text-amber-800 mt-0.5">
+                        Você enviou uma solicitação de alteração em {ultimaSolicitacao.data_solicitacao}. Ela está na fila de moderação e será avaliada em breve.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {ultimaSolicitacao.status === 'rejeitado' && (
+                  <div className="p-3.5 bg-rose-50 border border-rose-300 rounded-xl flex items-start gap-2.5 text-rose-950 shadow-xs">
+                    <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                    <div className="space-y-1 w-full">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-bold text-rose-900 flex items-center gap-1.5">
+                          <XCircle className="w-3.5 h-3.5 text-rose-600" />
+                          Última Solicitação Indeferida
+                        </span>
+                        {ultimaSolicitacao.data_resposta && (
+                          <span className="text-[10px] font-mono text-rose-700 bg-rose-100 px-1.5 py-0.5 rounded">
+                            {ultimaSolicitacao.data_resposta}
+                          </span>
+                        )}
+                      </div>
+                      <div className="p-2.5 bg-white/80 border border-rose-200 rounded-lg">
+                        <span className="text-[11px] font-bold text-rose-900 block">
+                          Justificativa do Administrador:
+                        </span>
+                        <p className="text-2xs text-rose-800 mt-0.5 font-medium">
+                          {ultimaSolicitacao.motivo_rejeicao || 'Dados cadastrais divergentes da publicação oficial do certame.'}
+                        </p>
+                      </div>
+                      <p className="text-[11px] text-rose-700">
+                        Você pode corrigir os dados nos campos abaixo e submeter uma nova solicitação para reavaliação.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {ultimaSolicitacao.status === 'aprovado' && (
+                  <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center gap-2 text-emerald-900">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span className="text-2xs">
+                      Sua última solicitação de alteração foi <strong>deferida e integrada ao cadastro geral</strong> {ultimaSolicitacao.data_resposta ? `em ${ultimaSolicitacao.data_resposta}` : ''}.
+                    </span>
+                  </div>
+                )}
+              </>
             )}
 
             {/* Nome Completo e CPF */}
