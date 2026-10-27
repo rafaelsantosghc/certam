@@ -19,17 +19,21 @@ import {
   ArrowUp,
   ArrowDown,
   Trash2,
+  ArrowLeft,
 } from 'lucide-react';
 
 interface SimuladorLotesProps {
   concursoId?: string;
   cargoId?: string;
   onNavigate: (view: string, params?: { concursoId?: string; cargoId?: string; tab?: string }) => void;
+  onVoltar?: () => void;
 }
 
 export const SimuladorLotes: React.FC<SimuladorLotesProps> = ({
   concursoId = 'tjrs_2025',
   cargoId = 'analista_judiciario',
+  onNavigate,
+  onVoltar,
 }) => {
   const { usuario, isAdmin, loginGoogle } = useAuth();
 
@@ -225,8 +229,99 @@ export const SimuladorLotes: React.FC<SimuladorLotesProps> = ({
     showToast('Planilha Excel exportada com sucesso!');
   };
 
+  // Restrição de Acesso: apenas candidatos homologados ou administradores
+  const isAprovadoNesteConcurso = useMemo(() => {
+    if (isAdmin) return true;
+    if (!usuario) return false;
+
+    const match = candidatos.find(
+      (c) =>
+        (usuario.email && c.email?.toLowerCase() === usuario.email.toLowerCase()) ||
+        (usuario.candidato_id && c.id === usuario.candidato_id) ||
+        (usuario.cpf && c.cpf && c.cpf.replace(/\D/g, '') === usuario.cpf.replace(/\D/g, '')) ||
+        (usuario.nome && c.nome.trim().toLowerCase() === usuario.nome.trim().toLowerCase())
+    );
+    if (match) return true;
+
+    if (usuario.concursos_inscritos?.some((ci) => ci.concurso_id === concursoId)) return true;
+    if (usuario.outros_concursos?.some((oc) => oc.concurso_id === concursoId || oc.concurso_nome?.toLowerCase().includes('tjrs'))) return true;
+
+    return false;
+  }, [usuario, isAdmin, candidatos, concursoId]);
+
+  if (!isAprovadoNesteConcurso) {
+    return (
+      <div className="max-w-xl mx-auto my-12 p-8 bg-white rounded-3xl shadow-xl border border-slate-200 text-center space-y-5">
+        <div className="w-16 h-16 rounded-2xl bg-amber-500/10 text-amber-600 flex items-center justify-center mx-auto">
+          <Lock className="w-8 h-8" />
+        </div>
+
+        <div className="space-y-2">
+          <span className="px-3 py-1 rounded-lg bg-amber-100 text-amber-800 text-xs font-mono font-bold uppercase">
+            Acesso Restrito
+          </span>
+          <h2 className="text-xl sm:text-2xl font-bold font-serif text-slate-900">
+            Simulador Exclusivo para Candidatos Aprovados
+          </h2>
+          <p className="text-xs sm:text-sm text-slate-600 max-w-md mx-auto leading-relaxed">
+            A simulação de lotes e o formulário de manifestação de comarcas é de acesso restrito aos
+            candidatos que figuram na lista oficial de aprovados deste certame.
+          </p>
+        </div>
+
+        {!usuario ? (
+          <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+            <p className="text-xs text-slate-500">
+              Faça login com sua conta Google para verificar sua aprovação:
+            </p>
+            <button
+              type="button"
+              onClick={() => loginGoogle()}
+              className="px-6 py-2.5 bg-[#07192B] hover:bg-[#0C2640] text-[#2DD4AA] font-bold text-xs rounded-xl shadow-md cursor-pointer transition-all"
+            >
+              Entrar com Google
+            </button>
+          </div>
+        ) : (
+          <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 text-xs text-slate-600">
+            Conta conectada: <strong className="text-slate-900">{usuario.email}</strong>.
+            <br />
+            Se você foi aprovado e sua vinculação ainda não consta no sistema, acione a moderação no botão abaixo.
+          </div>
+        )}
+
+        <div className="pt-2">
+          <button
+            type="button"
+            onClick={onVoltar || (() => onNavigate('concurso_geral', { concursoId }))}
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs cursor-pointer transition-all"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>Voltar para o Concurso</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 max-w-[1880px] w-full mx-auto">
+      {/* Botão Global de Voltar */}
+      <div className="flex items-center justify-between">
+        <button
+          type="button"
+          onClick={onVoltar || (() => onNavigate('concurso_geral', { concursoId }))}
+          className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-white hover:bg-slate-100 text-slate-700 font-semibold text-xs border border-slate-200 shadow-xs cursor-pointer transition-all"
+        >
+          <ArrowLeft className="w-3.5 h-3.5" />
+          <span>Voltar para o Concurso</span>
+        </button>
+
+        <span className="text-2xs text-slate-400 font-mono">
+          CERTAM • Simulador de Lotes e Audiência Pública
+        </span>
+      </div>
+
       {/* Toast flutuante */}
       {toastMsg && (
         <div className="fixed bottom-5 right-5 z-50 flex items-center gap-2 px-4 py-3 rounded-xl shadow-xl text-xs font-semibold text-white bg-[#07192B] border border-[#2DD4AA]/40 animate-bounce">

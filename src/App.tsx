@@ -3,11 +3,14 @@ import { AuthProvider } from './store/authContext';
 import { Sidebar } from './components/Sidebar';
 import { Header } from './components/Header';
 import { PortalHome } from './pages/PortalHome';
+import { ConcursoGeralView } from './pages/ConcursoGeralView';
 import { ConcursoCargoDashboard } from './pages/ConcursoCargoDashboard';
 import { SimuladorLotes } from './pages/SimuladorLotes';
 import { AdminPanel } from './pages/AdminPanel';
 import { PrivacyPolicy } from './pages/PrivacyPolicy';
 import { certamStore } from './store/certamStore';
+import { useAuth } from './store/authContext';
+import { PerfilCandidatoModal } from './components/PerfilCandidatoModal';
 
 interface ErrorBoundaryState {
   hasError: boolean;
@@ -63,12 +66,35 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, Error
 }
 
 export const AppContent: React.FC = () => {
+  const { usuario } = useAuth();
+
   // Navigation routing state
-  const [currentView, setCurrentView] = useState<'portal' | 'concurso' | 'lote' | 'admin' | 'politica'>('portal');
+  const [currentView, setCurrentView] = useState<'portal' | 'concurso_geral' | 'concurso' | 'lote' | 'admin' | 'politica'>('portal');
   const [concursoId, setConcursoId] = useState<string>('tjrs_2025');
   const [cargoId, setCargoId] = useState<string>('analista_judiciario');
   const [initialTab, setInitialTab] = useState<string>('dashboard');
   const [sidebarMobileOpen, setSidebarMobileOpen] = useState(false);
+  const [historyStack, setHistoryStack] = useState<{ view: string; params?: any }[]>([]);
+
+  // Modal Obrigatório no Primeiro Login
+  const [modalPerfilObrigatorioAberto, setModalPerfilObrigatorioAberto] = useState(false);
+
+  useEffect(() => {
+    const handleAbrirObrigatorio = () => {
+      setModalPerfilObrigatorioAberto(true);
+    };
+    window.addEventListener('certam_abrir_perfil_candidato_obrigatorio', handleAbrirObrigatorio);
+    return () => window.removeEventListener('certam_abrir_perfil_candidato_obrigatorio', handleAbrirObrigatorio);
+  }, []);
+
+  // Se o usuário estiver autenticado e faltar CPF ou Data de Nascimento, abre o modal obrigatório
+  useEffect(() => {
+    if (usuario && (!usuario.cpf || !usuario.data_nascimento || usuario.cpf.trim() === '')) {
+      setModalPerfilObrigatorioAberto(true);
+    } else {
+      setModalPerfilObrigatorioAberto(false);
+    }
+  }, [usuario]);
 
   // Read URL query params and path on initial mount
   useEffect(() => {
@@ -88,9 +114,13 @@ export const AppContent: React.FC = () => {
         setCurrentView('politica');
       } else if (urlId || pathname.includes('concurso')) {
         if (urlId) setConcursoId(urlId);
-        if (urlCargo) setCargoId(urlCargo);
-        if (urlTab) setInitialTab(urlTab);
-        setCurrentView('concurso');
+        if (urlCargo) {
+          setCargoId(urlCargo);
+          if (urlTab) setInitialTab(urlTab);
+          setCurrentView('concurso');
+        } else {
+          setCurrentView('concurso_geral');
+        }
       }
     } catch {
       // ignore
@@ -101,6 +131,15 @@ export const AppContent: React.FC = () => {
     view: string,
     params?: { concursoId?: string; cargoId?: string; tab?: string }
   ) => {
+    // Salvar no histórico de navegação
+    setHistoryStack((prev) => [
+      ...prev,
+      {
+        view: currentView,
+        params: { concursoId, cargoId, tab: initialTab },
+      },
+    ]);
+
     const cId = params?.concursoId || concursoId;
     const cgId = params?.cargoId || cargoId;
     const t = params?.tab || initialTab;
@@ -109,7 +148,7 @@ export const AppContent: React.FC = () => {
     if (params?.cargoId) setCargoId(params.cargoId);
     if (params?.tab) setInitialTab(params.tab);
 
-    setCurrentView(view as 'portal' | 'concurso' | 'lote' | 'admin' | 'politica');
+    setCurrentView(view as 'portal' | 'concurso_geral' | 'concurso' | 'lote' | 'admin' | 'politica');
 
     // Sincronizar Permalinks na barra de navegação do browser
     try {
@@ -119,7 +158,9 @@ export const AppContent: React.FC = () => {
       url.searchParams.delete('tab');
       url.searchParams.delete('admin');
 
-      if (view === 'concurso') {
+      if (view === 'concurso_geral') {
+        url.searchParams.set('id', cId);
+      } else if (view === 'concurso') {
         url.searchParams.set('id', cId);
         if (cgId) url.searchParams.set('cargo', cgId);
         if (t) url.searchParams.set('tab', t);
@@ -140,17 +181,49 @@ export const AppContent: React.FC = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const handleVoltar = () => {
+    if (historyStack.length > 0) {
+      const previous = historyStack[historyStack.length - 1];
+      setHistoryStack((prev) => prev.slice(0, prev.length - 1));
+      if (previous.params?.concursoId) setConcursoId(previous.params.concursoId);
+      if (previous.params?.cargoId) setCargoId(previous.params.cargoId);
+      if (previous.params?.tab) setInitialTab(previous.params.tab);
+      setCurrentView(previous.view as any);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+
+    // Navegação padrão inteligente de fallback
+    if (currentView === 'concurso') {
+      setCurrentView('concurso_geral');
+    } else if (
+      currentView === 'concurso_geral' ||
+      currentView === 'lote' ||
+      currentView === 'admin' ||
+      currentView === 'politica'
+    ) {
+      setCurrentView('portal');
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   // Breadcrumbs computation
   const breadcrumbs = React.useMemo(() => {
     const list: { label: string; onClick?: () => void }[] = [
       { label: 'Portal CERTAM', onClick: () => handleNavigate('portal') },
     ];
 
-    if (currentView === 'concurso') {
+    if (currentView === 'concurso_geral') {
+      const conc = certamStore.getConcurso(concursoId);
+      if (conc) {
+        list.push({ label: conc.orgao, onClick: () => handleNavigate('concurso_geral', { concursoId }) });
+      }
+      list.push({ label: 'Visão Geral do Concurso' });
+    } else if (currentView === 'concurso') {
       const conc = certamStore.getConcurso(concursoId);
       const cg = certamStore.getCargo(concursoId, cargoId);
       if (conc) {
-        list.push({ label: conc.orgao, onClick: () => handleNavigate('portal') });
+        list.push({ label: conc.orgao, onClick: () => handleNavigate('concurso_geral', { concursoId }) });
       }
       if (cg) {
         list.push({ label: cg.nome });
@@ -193,12 +266,21 @@ export const AppContent: React.FC = () => {
         <main className="flex-1 p-4 sm:p-6 lg:p-8">
           {currentView === 'portal' && <PortalHome onNavigate={handleNavigate} />}
 
+          {currentView === 'concurso_geral' && (
+            <ConcursoGeralView
+              concursoId={concursoId}
+              onNavigate={handleNavigate}
+              onVoltar={handleVoltar}
+            />
+          )}
+
           {currentView === 'concurso' && (
             <ConcursoCargoDashboard
               concursoId={concursoId}
               cargoId={cargoId}
               initialTab={initialTab}
               onNavigate={handleNavigate}
+              onVoltar={handleVoltar}
             />
           )}
 
@@ -207,19 +289,30 @@ export const AppContent: React.FC = () => {
               concursoId={concursoId}
               cargoId={cargoId}
               onNavigate={handleNavigate}
+              onVoltar={handleVoltar}
             />
           )}
 
           {currentView === 'admin' && (
             <AdminPanel
               onNavigate={handleNavigate}
+              onVoltar={handleVoltar}
             />
           )}
 
           {currentView === 'politica' && (
-            <PrivacyPolicy onBack={() => handleNavigate('portal')} />
+            <PrivacyPolicy onBack={handleVoltar} />
           )}
         </main>
+
+        {/* Modal de Cadastro Inicial Obrigatório (Primeiro Acesso com Google) */}
+        {modalPerfilObrigatorioAberto && (
+          <PerfilCandidatoModal
+            aberto={modalPerfilObrigatorioAberto}
+            onClose={() => setModalPerfilObrigatorioAberto(false)}
+            obrigatorio={true}
+          />
+        )}
 
         {/* Rodapé Oficial CERTAM */}
         <footer className="bg-white border-t border-slate-200 py-6 px-4 sm:px-8 text-xs text-slate-500 mt-auto no-print">

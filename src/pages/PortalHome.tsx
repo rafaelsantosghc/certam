@@ -58,46 +58,12 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
   const [modalContatoAberto, setModalContatoAberto] = useState(false);
   const [motivoContato, setMotivoContato] = useState<any>('inclusao_concurso');
 
-  // Login de candidato por email
-  const [loginEmailInput, setLoginEmailInput] = useState('');
-  const [loginNomeInput, setLoginNomeInput] = useState('');
-  const [showEmailLoginForm, setShowEmailLoginForm] = useState(false);
-
-  // Login de administrador protegido por senha
-  const [showAdminLoginForm, setShowAdminLoginForm] = useState(false);
-  const [adminSenhaInput, setAdminSenhaInput] = useState('');
-  const [erroSenhaAdmin, setErroSenhaAdmin] = useState(false);
-
   // Toast feedback
   const [toastMsg, setToastMsg] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
     setToastMsg(msg);
     setTimeout(() => setToastMsg(null), 3500);
-  };
-
-  const handleLoginEmail = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!loginEmailInput.trim()) return;
-    loginCandidato(loginEmailInput, loginNomeInput);
-    setShowEmailLoginForm(false);
-    setLoginEmailInput('');
-    setLoginNomeInput('');
-    showToast('Login de candidato efetuado com sucesso!');
-  };
-
-  const handleLoginAdminSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const sucesso = loginAdmin(adminSenhaInput);
-    if (sucesso) {
-      setErroSenhaAdmin(false);
-      setShowAdminLoginForm(false);
-      setAdminSenhaInput('');
-      showToast('Acesso de administrador concedido!');
-      onNavigate('admin');
-    } else {
-      setErroSenhaAdmin(true);
-    }
   };
 
   // Inscrições vinculadas ao candidato atual
@@ -261,12 +227,12 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
                 </p>
               </div>
 
-              {/* Botões de Acesso */}
-              <div className="flex flex-wrap items-center gap-2">
+              {/* Botão de Acesso Exclusivo Google */}
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => loginGoogle()}
-                  className="inline-flex items-center gap-2 bg-white hover:bg-slate-50 text-slate-800 font-semibold px-4 py-2 rounded-xl text-xs border border-slate-300 shadow-2xs transition-all cursor-pointer"
+                  className="inline-flex items-center gap-2.5 bg-white hover:bg-slate-50 text-slate-800 font-bold px-5 py-2.5 rounded-xl text-xs border border-slate-300 shadow-sm transition-all cursor-pointer hover:border-teal-500"
                 >
                   <svg className="w-4 h-4" viewBox="0 0 24 24">
                     <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
@@ -274,98 +240,10 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
                     <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
                     <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
                   </svg>
-                  <span>Entrar com Google</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowEmailLoginForm(!showEmailLoginForm);
-                    setShowAdminLoginForm(false);
-                  }}
-                  className="inline-flex items-center gap-1.5 bg-[#135A7A] hover:bg-[#0C2640] text-white font-semibold px-3.5 py-2 rounded-xl text-xs transition-colors cursor-pointer shadow-xs"
-                >
-                  <Mail className="w-3.5 h-3.5 text-teal-300" />
-                  <span>Entrar com e-mail</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowAdminLoginForm(!showAdminLoginForm);
-                    setShowEmailLoginForm(false);
-                  }}
-                  className="inline-flex items-center gap-1 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 font-semibold px-3 py-2 rounded-xl text-xs transition-colors cursor-pointer"
-                >
-                  <span>Admin</span>
+                  <span>Entrar com o Google</span>
                 </button>
               </div>
             </div>
-
-            {/* Form de Login por Email */}
-            {showEmailLoginForm && (
-              <form onSubmit={handleLoginEmail} className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
-                <span className="font-bold text-xs text-slate-800 block">Identificação Rápida de Candidato</span>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <input
-                    type="text"
-                    placeholder="Seu nome completo"
-                    value={loginNomeInput}
-                    onChange={(e) => setLoginNomeInput(e.target.value)}
-                    className="px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs focus:border-teal-600 focus:outline-hidden"
-                  />
-                  <input
-                    type="email"
-                    placeholder="Seu e-mail de candidato"
-                    value={loginEmailInput}
-                    onChange={(e) => setLoginEmailInput(e.target.value)}
-                    className="px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs focus:border-teal-600 focus:outline-hidden"
-                    required
-                  />
-                </div>
-                <div className="flex justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowEmailLoginForm(false)}
-                    className="px-3 py-1.5 text-xs text-slate-600 hover:text-slate-900"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-4 py-1.5 bg-[#135A7A] hover:bg-[#0C2640] text-white text-xs font-bold rounded-lg cursor-pointer"
-                  >
-                    Acessar
-                  </button>
-                </div>
-              </form>
-            )}
-
-            {/* Form de Login Admin */}
-            {showAdminLoginForm && (
-              <form onSubmit={handleLoginAdminSubmit} className="p-4 bg-amber-50/70 rounded-xl border border-amber-200 space-y-3">
-                <span className="font-bold text-xs text-amber-900 block">Autenticação Administrativa CERTAM</span>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="password"
-                    placeholder="Senha de administrador (ex: certam2025)"
-                    value={adminSenhaInput}
-                    onChange={(e) => setAdminSenhaInput(e.target.value)}
-                    className="flex-1 px-3 py-2 bg-white border border-amber-300 rounded-lg text-xs focus:outline-hidden"
-                    required
-                  />
-                  <button
-                    type="submit"
-                    className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-lg cursor-pointer"
-                  >
-                    Entrar
-                  </button>
-                </div>
-                {erroSenhaAdmin && (
-                  <span className="text-2xs text-rose-700 font-bold block">Senha incorreta. Tente certam2025 ou admin.</span>
-                )}
-              </form>
-            )}
           </div>
         ) : (
           /* USUÁRIO AUTENTICADO */
@@ -541,10 +419,8 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
                     <button
                       type="button"
                       onClick={() =>
-                        onNavigate('concurso', {
+                        onNavigate('concurso_geral', {
                           concursoId: item.concurso.id,
-                          cargoId: item.cargo.id,
-                          tab: 'dashboard',
                         })
                       }
                       className="text-xs font-bold bg-[#135A7A] hover:bg-[#0C2640] text-white px-3.5 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
@@ -794,15 +670,13 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
                   <button
                     type="button"
                     onClick={() =>
-                      onNavigate('concurso', {
+                      onNavigate('concurso_geral', {
                         concursoId: conc.id,
-                        cargoId: cargosAtivos[0]?.id || 'geral',
-                        tab: 'dashboard',
                       })
                     }
                     className="flex items-center gap-1.5 px-4 py-2 bg-[#07192B] hover:bg-[#0C2640] text-[#2DD4AA] font-bold text-xs rounded-xl transition-all cursor-pointer shadow-xs"
                   >
-                    <span>Página do Concurso</span>
+                    <span>Acessar Concurso</span>
                     <ArrowRight className="w-3.5 h-3.5" />
                   </button>
                 </div>

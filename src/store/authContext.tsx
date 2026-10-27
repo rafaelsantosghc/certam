@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Usuario } from '../types';
 import { identificarCandidatoMaster, MASTER_CADASTRO_GERAL } from '../data/defaultCandidates';
+import { userRegistryStore } from './userRegistryStore';
 
 interface AuthContextType {
   usuario: Usuario | null;
@@ -21,6 +22,7 @@ interface AuthContextType {
 
 const AUTH_STORAGE_KEY = 'certam_auth_user_v7';
 export const GOOGLE_CLIENT_ID_PADRAO = '893072513173-detf69cldt4cefhbg8ta3cpi5hb73rma.apps.googleusercontent.com';
+export const ADMIN_EMAILS = ['rafasms0@hotmail.com'];
 
 const AuthContext = createContext<AuthContextType>({
   usuario: null,
@@ -194,37 +196,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => window.removeEventListener('certam_audit_approved', handleAuditApproved);
   }, []);
 
-  // Login administrativo protegido por senha (PRESERVA dados reais inseridos pelo usuário)
-  const loginAdmin = (senha: string): boolean => {
-    const senhasValidas = ['admin', 'certam2025', 'admin123', 'tjrs2025'];
-    if (senhasValidas.includes(senha.trim())) {
-      setUsuario((prev) => {
-        return {
-          nome: prev?.nome || 'Administrador CERTAM',
-          email: 'rafasms0@hotmail.com',
-          email_contato: prev?.email_contato || 'rafasms0@hotmail.com',
-          is_admin: true,
-          candidato_id: prev?.candidato_id || 'admin-001',
-          cpf: prev?.cpf || '',
-          cpf_verificado: true,
-          data_nascimento: prev?.data_nascimento || '',
-          telefone: prev?.telefone || '',
-          whatsapp: prev?.whatsapp || '',
-          read_notification_ids: prev?.read_notification_ids || [],
-          outros_concursos: prev?.outros_concursos || [],
-          concursos_inscritos: prev?.concursos_inscritos || [],
-        };
-      });
+  // Login administrativo exclusivo para e-mails homologados como administradores
+  const loginAdmin = (_senha?: string): boolean => {
+    if (usuario && ADMIN_EMAILS.some((adm) => adm.toLowerCase() === usuario.email?.toLowerCase())) {
+      setUsuario((prev) => (prev ? { ...prev, is_admin: true } : null));
       return true;
     }
     return false;
   };
 
   const loginAdminPreview = () => {
-    loginAdmin('certam2025');
+    // Acesso direto concedido se o usuário for o administrador oficial
+    if (usuario && ADMIN_EMAILS.some((adm) => adm.toLowerCase() === usuario.email?.toLowerCase())) {
+      setUsuario((prev) => (prev ? { ...prev, is_admin: true } : null));
+    }
   };
 
-  // Login de candidato com e-mail/dados próprios
+  // Login de candidato com e-mail/dados próprios via Google
   const loginCandidato = (email: string, nome?: string, cpf?: string) => {
     const emailLimpo = email.trim().toLowerCase();
     const matchEmail = MASTER_CADASTRO_GERAL.find((c) => c.email?.toLowerCase() === emailLimpo);
@@ -234,7 +222,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       matchEmail ||
       identificarCandidatoMaster(nomeLimpo);
 
-    const isAdminUser = emailLimpo === 'rafasms0@hotmail.com' || emailLimpo === 'admin@certam.com.br';
+    const isAdminUser = ADMIN_EMAILS.some((adm) => adm.toLowerCase() === emailLimpo);
 
     const novoCandidato: Usuario = {
       nome: match ? match.nome : nomeLimpo,
@@ -258,6 +246,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       ],
     };
     setUsuario(novoCandidato);
+
+    // Se o candidato ainda não possui CPF ou data de nascimento, obriga preenchimento cadastral
+    if (!novoCandidato.cpf || !novoCandidato.data_nascimento) {
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('certam_abrir_perfil_candidato_obrigatorio'));
+      }, 350);
+    }
   };
 
   const simularEmailCandidato = (email: string, nome: string) => {

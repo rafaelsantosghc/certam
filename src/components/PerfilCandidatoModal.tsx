@@ -28,12 +28,14 @@ interface PerfilCandidatoModalProps {
   aberto: boolean;
   onClose: () => void;
   onAbrirContatoAdmin?: (motivo: any) => void;
+  obrigatorio?: boolean;
 }
 
 export const PerfilCandidatoModal: React.FC<PerfilCandidatoModalProps> = ({
   aberto,
   onClose,
   onAbrirContatoAdmin,
+  obrigatorio = false,
 }) => {
   const { usuario, atualizarDadosUsuario } = useAuth();
 
@@ -208,26 +210,50 @@ export const PerfilCandidatoModal: React.FC<PerfilCandidatoModalProps> = ({
         status_aprovacao: ap.status,
       }));
 
-    // Se for o primeiro preenchimento inicial (setup inicial da conta), grava diretamente
-    if (primeiroCadastro) {
+    // Se for o primeiro preenchimento inicial (setup inicial da conta ou obrigatório)
+    if (primeiroCadastro || obrigatorio) {
+      if (!nome.trim() || !cpf.trim() || !dataNascimento.trim() || !whatsapp.trim()) {
+        alert('Por favor, preencha todos os campos obrigatórios (*) para concluir seu cadastro.');
+        return;
+      }
+
       atualizarDadosUsuario({
         nome: sanitizeInput(nome, 100),
         cpf: sanitizeInput(cpf, 20),
         data_nascimento: sanitizeInput(dataNascimento, 15),
         whatsapp: sanitizeInput(whatsapp, 25),
         telefone: sanitizeInput(whatsapp, 25),
-        email_contato: sanitizeInput(emailContato, 80),
+        email_contato: sanitizeInput(emailContato || usuario.email, 80),
         outros_concursos: outrosSincronizados,
       });
       setSubmetidoSucesso(true);
       setTimeout(() => {
         setSubmetidoSucesso(false);
         onClose();
-      }, 2000);
+      }, 1800);
       return;
     }
 
-    // Se já havia dados gravados, calcula diff e abre modal de confirmação para submeter ao admin
+    // Se o usuário for Administrador, aplica as alterações diretamente sem necessidade de auto-aprovação
+    if (usuario.is_admin) {
+      atualizarDadosUsuario({
+        nome: sanitizeInput(nome, 100),
+        cpf: sanitizeInput(cpf, 20),
+        data_nascimento: sanitizeInput(dataNascimento, 15),
+        whatsapp: sanitizeInput(whatsapp, 25),
+        telefone: sanitizeInput(whatsapp, 25),
+        email_contato: sanitizeInput(emailContato || usuario.email, 80),
+        outros_concursos: outrosSincronizados,
+      });
+      setSubmetidoSucesso(true);
+      setTimeout(() => {
+        setSubmetidoSucesso(false);
+        onClose();
+      }, 1500);
+      return;
+    }
+
+    // Se já havia dados gravados para um candidato, calcula diff e submete para auditoria
     const diffs = calcularDiffs();
     if (diffs.length === 0) {
       onClose();
@@ -251,11 +277,11 @@ export const PerfilCandidatoModal: React.FC<PerfilCandidatoModalProps> = ({
     setTimeout(() => {
       setSubmetidoSucesso(false);
       onClose();
-    }, 2800);
+    }, 2200);
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in-50">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in-50">
       <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[90vh]">
         {/* Header */}
         <div className="p-4 sm:p-5 bg-[#07192B] text-white flex items-center justify-between">
@@ -264,19 +290,25 @@ export const PerfilCandidatoModal: React.FC<PerfilCandidatoModalProps> = ({
               <User className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="font-serif font-bold text-base text-white">Cadastro e Perfil do Candidato</h3>
+              <h3 className="font-serif font-bold text-base text-white">
+                {obrigatorio ? 'Cadastro Inicial Obrigatório • CERTAM' : 'Cadastro e Perfil do Candidato'}
+              </h3>
               <p className="text-2xs text-slate-300">
-                Informações para cruzamento no cadastro geral e identificação de aprovações
+                {obrigatorio
+                  ? 'Preencha seus dados cadastrais para começar a usar o portal e identificar suas aprovações'
+                  : 'Informações para cruzamento no cadastro geral e identificação de aprovações'}
               </p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          {!obrigatorio && (
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          )}
         </div>
 
         {/* Feedback de Sucesso */}
@@ -602,13 +634,15 @@ export const PerfilCandidatoModal: React.FC<PerfilCandidatoModalProps> = ({
               </span>
 
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="px-4 py-2 border border-slate-300 text-slate-700 font-semibold rounded-xl hover:bg-slate-100 transition-colors cursor-pointer"
-                >
-                  Fechar
-                </button>
+                {!obrigatorio && (
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="px-4 py-2 border border-slate-300 text-slate-700 font-semibold rounded-xl hover:bg-slate-100 transition-colors cursor-pointer"
+                  >
+                    Fechar
+                  </button>
+                )}
 
                 <button
                   type="submit"
@@ -616,7 +650,9 @@ export const PerfilCandidatoModal: React.FC<PerfilCandidatoModalProps> = ({
                 >
                   <Send className="w-3.5 h-3.5" />
                   <span>
-                    {primeiroCadastro
+                    {obrigatorio
+                      ? 'Salvar e Concluir Cadastro Obrigatório'
+                      : primeiroCadastro
                       ? 'Salvar Dados Iniciais'
                       : 'Submeter Alterações ao Administrador'}
                   </span>

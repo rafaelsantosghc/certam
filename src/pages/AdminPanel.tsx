@@ -43,21 +43,25 @@ import {
   XCircle,
   MessageSquare,
   AlertTriangle,
+  AlertCircle,
   Send,
-  Eye,
   Inbox,
+  ArrowLeft,
 } from 'lucide-react';
+import { userRegistryStore } from '../store/userRegistryStore';
 
 interface AdminPanelProps {
   initialTab?: string;
   onNavigate: (view: string, params?: { concursoId?: string; cargoId?: string; tab?: string }) => void;
+  onVoltar?: () => void;
 }
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({
   initialTab = 'concursos',
   onNavigate,
+  onVoltar,
 }) => {
-  const { usuario, isAdmin, loginAdmin, atualizarDadosUsuario } = useAuth();
+  const { usuario, isAdmin, loginGoogle, atualizarDadosUsuario } = useAuth();
   const [senhaAdmin, setSenhaAdmin] = useState('');
   const [erroSenha, setErroSenha] = useState(false);
 
@@ -97,18 +101,37 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     const handleCont = () => setContatos(contactStore.getMensagens());
     const handleNotif = () => setNotificacoes(notificationStore.getNotificacoes());
 
+    const handleStorage = () => {
+      setAuditRequests(auditStore.getAuditRequests());
+      setVinculacoes(auditStore.getVinculacoes());
+      setContatos(contactStore.getMensagens());
+      setNotificacoes(notificationStore.getNotificacoes());
+      setConcursos(certamStore.getConcursos());
+    };
+
     window.addEventListener('certam_audit_updated', handleAudit);
     window.addEventListener('certam_vinculacoes_updated', handleVinc);
     window.addEventListener('certam_contact_updated', handleCont);
     window.addEventListener('certam_notifications_updated', handleNotif);
+    window.addEventListener('storage', handleStorage);
 
     return () => {
       window.removeEventListener('certam_audit_updated', handleAudit);
       window.removeEventListener('certam_vinculacoes_updated', handleVinc);
       window.removeEventListener('certam_contact_updated', handleCont);
       window.removeEventListener('certam_notifications_updated', handleNotif);
+      window.removeEventListener('storage', handleStorage);
     };
   }, []);
+
+  // Recarregar dados sempre que o admin trocar de aba no painel
+  useEffect(() => {
+    setAuditRequests(auditStore.getAuditRequests());
+    setVinculacoes(auditStore.getVinculacoes());
+    setContatos(contactStore.getMensagens());
+    setNotificacoes(notificationStore.getNotificacoes());
+    setConcursos(certamStore.getConcursos());
+  }, [abaAdmin]);
 
   // Modais e Estados de FAQ
   const [faqs, setFaqs] = useState<FaqItem[]>(() => faqStore.getFaqs());
@@ -191,6 +214,136 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [importCargoId, setImportCargoId] = useState<string>(concursos[0]?.cargos?.[0]?.id || 'analista_judiciario');
   const [previewPlanilha, setPreviewPlanilha] = useState<Partial<Candidato>[]>([]);
   const [nomeArquivo, setNomeArquivo] = useState('');
+  const [erroImportacao, setErroImportacao] = useState<string | null>(null);
+  const [importando, setImportando] = useState(false);
+
+  const handleConcursoChange = (novoId: string) => {
+    setImportConcursoId(novoId);
+    const conc = concursos.find((c) => c.id === novoId);
+    if (conc && conc.cargos && conc.cargos.length > 0) {
+      setImportCargoId(conc.cargos[0].id);
+    }
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setNomeArquivo(sanitizeFileName(file.name));
+    setErroImportacao(null);
+    setImportando(false);
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const buffer = evt.target?.result as ArrayBuffer;
+        if (!buffer) {
+          setErroImportacao('Não foi possível carregar o conteúdo do arquivo.');
+          return;
+        }
+
+        const wb = XLSX.read(buffer, { type: 'array' });
+        const wsname = wb.SheetNames[0];
+        const ws = wb.Sheets[wsname];
+        const data: any[] = XLSX.utils.sheet_to_json(ws, { defval: '' });
+
+        if (!data || data.length === 0) {
+          setErroImportacao('A planilha está vazia ou não contém linhas de dados.');
+          setPreviewPlanilha([]);
+          return;
+        }
+
+        const parsed: Partial<Candidato>[] = data.map((row, idx) => {
+          const getVal = (keys: string[]) => {
+            for (const k of Object.keys(row)) {
+              const kNorm = k.toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+              for (const target of keys) {
+                if (kNorm === target || kNorm.includes(target)) {
+                  return row[k];
+                }
+              }
+            }
+            return undefined;
+          };
+
+          const rawPos = getVal(['classificacao', 'classif', 'posicao', 'ordem', 'colocacao', 'pos', 'num']);
+          const posicao = parseInt(String(rawPos || idx + 1).replace(/\D/g, ''), 10) || idx + 1;
+          const nome = String(getVal(['nome', 'candidato', 'nome completo']) || `Candidato ${idx + 1}`).trim();
+          const rawCpf = getVal(['cpf', 'documento']);
+          const cpf = rawCpf ? String(rawCpf).trim() : undefined;
+          const rawNota = getVal(['nota', 'pontos', 'pontuacao', 'total', 'resultado', 'final']);
+          const nota = rawNota !== undefined && rawNota !== '' ? parseFloat(String(rawNota).replace(',', '.')) || 0 : 0;
+          const rawCota = String(getVal(['cota', 'modalidade', 'vaga', 'tipo vaga']) || 'Ampla').trim();
+          const rawEmail = getVal(['email', 'e-mail', 'correio']);
+          const email = rawEmail ? String(rawEmail).trim().toLowerCase() : undefined;
+          const rawTelefone = getVal(['telefone', 'celular', 'whatsapp', 'fone']);
+          const whatsapp = rawTelefone ? String(rawTelefone).trim() : undefined;
+
+          let cota: Candidato['cota'] = 'Ampla';
+          const cotaLower = rawCota.toLowerCase();
+          if (cotaLower.includes('negro') || cotaLower.includes('pardo') || cotaLower.includes('ppp') || cotaLower.includes('afro') || cotaLower.includes('racial')) {
+            cota = 'PPP';
+          } else if (cotaLower.includes('pcd') || cotaLower.includes('defic') || cotaLower.includes('especial')) {
+            cota = 'PCD';
+          } else if (cotaLower.includes('indig')) {
+            cota = 'Indígena';
+          }
+
+          return {
+            id: `cand-${importConcursoId}-${importCargoId}-${posicao}-${Date.now().toString(36)}-${idx}`,
+            concurso_id: importConcursoId,
+            cargo_id: importCargoId,
+            posicao,
+            nome,
+            cpf,
+            nota_final: nota,
+            cota,
+            status: 'Aguardando',
+            intencao: 'Sim',
+            email,
+            whatsapp,
+            escolhas_comarcas: [],
+          };
+        });
+
+        parsed.sort((a, b) => (a.posicao || 0) - (b.posicao || 0));
+        setPreviewPlanilha(parsed);
+      } catch (err) {
+        console.error('Erro ao ler planilha:', err);
+        setErroImportacao('Erro ao processar o arquivo. Verifique se é um arquivo Excel (.xlsx, .xls) ou CSV válido.');
+      }
+    };
+    reader.onerror = () => {
+      setErroImportacao('Falha ao ler o arquivo no navegador. Tente novamente.');
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+  const handleConfirmarImportacao = () => {
+    if (previewPlanilha.length === 0) return;
+    setImportando(true);
+
+    const candidatosCompletos: Candidato[] = previewPlanilha.map((p, idx) => ({
+      id: p.id || `cand-${importConcursoId}-${importCargoId}-${idx + 1}`,
+      concurso_id: importConcursoId,
+      cargo_id: importCargoId,
+      posicao: p.posicao || idx + 1,
+      nome: p.nome || `Candidato ${idx + 1}`,
+      cpf: p.cpf,
+      nota_final: p.nota_final ?? 0,
+      cota: p.cota || 'Ampla',
+      status: p.status || 'Aguardando',
+      intencao: p.intencao || 'Sim',
+      email: p.email,
+      whatsapp: p.whatsapp,
+      escolhas_comarcas: p.escolhas_comarcas || [],
+    }));
+
+    lotesStore.salvarCandidatos(importConcursoId, importCargoId, candidatosCompletos);
+    setImportando(false);
+    showToast(`${candidatosCompletos.length} candidatos importados com sucesso para o cargo!`);
+    setPreviewPlanilha([]);
+    setNomeArquivo('');
+  };
 
   // Toast
   const [toastMsg, setToastMsg] = useState<string | null>(null);
@@ -215,17 +368,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   // Se não estiver logado como admin
   if (!isAdmin) {
-    const handleLoginAdminLocal = (e: React.FormEvent) => {
-      e.preventDefault();
-      const sucesso = loginAdmin(senhaAdmin);
-      if (sucesso) {
-        setErroSenha(false);
-        showToast('Login de administrador realizado com sucesso!');
-      } else {
-        setErroSenha(true);
-      }
-    };
-
     return (
       <div className="max-w-md mx-auto my-12 p-6 sm:p-8 bg-white rounded-2xl shadow-xl border border-slate-200 text-center space-y-4">
         <div className="w-12 h-12 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center mx-auto">
@@ -233,45 +375,24 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         </div>
         <div>
           <h2 className="text-xl font-bold font-serif text-slate-900">Área Administrativa Restrita</h2>
-          <p className="text-xs text-slate-500 mt-1">
-            Informe sua senha de administrador para gerenciar certames, auditar perfis e moderar solicitações.
+          <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+            O acesso ao painel de administração é concedido exclusivamente ao administrador oficial homologado via Google (<strong className="text-slate-800">rafasms0@hotmail.com</strong>).
           </p>
         </div>
 
-        <form onSubmit={handleLoginAdminLocal} className="space-y-4 text-left">
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
-              Senha de Acesso:
-            </label>
-            <input
-              type="password"
-              placeholder="Digite certam2025 ou admin"
-              value={senhaAdmin}
-              onChange={(e) => {
-                setSenhaAdmin(e.target.value);
-                setErroSenha(false);
-              }}
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs focus:bg-white focus:outline-hidden"
-              autoFocus
-            />
-            {erroSenha && (
-              <span className="text-2xs text-rose-600 mt-1 block">Senha incorreta. Tente certam2025.</span>
-            )}
-          </div>
-
-          <button
-            type="submit"
-            className="w-full py-2.5 bg-[#07192B] hover:bg-[#0C2640] text-[#2DD4AA] font-bold rounded-xl text-xs cursor-pointer shadow-sm transition-colors"
-          >
-            Acessar Painel
-          </button>
-        </form>
-
-        <div className="pt-2 border-t border-slate-100">
+        <div className="pt-2 space-y-3">
           <button
             type="button"
-            onClick={() => onNavigate('portal')}
-            className="text-xs text-slate-500 hover:text-slate-800"
+            onClick={() => loginGoogle()}
+            className="w-full py-2.5 px-4 bg-[#07192B] hover:bg-[#0C2640] text-[#2DD4AA] font-bold rounded-xl text-xs cursor-pointer shadow-sm transition-colors flex items-center justify-center gap-2"
+          >
+            <span>Entrar com o Google (rafasms0@hotmail.com)</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={onVoltar || (() => onNavigate('portal'))}
+            className="text-xs text-slate-500 hover:text-slate-800 cursor-pointer block mx-auto"
           >
             ← Voltar para a Página Inicial
           </button>
@@ -308,7 +429,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       atualizarDadosUsuario(mudancas);
     }
 
-    // 3. Atualizar também na chave de persistência do localStorage
+    // 3. Atualizar no repositório persistente de perfis cadastrados do CERTAM
+    userRegistryStore.atualizarCamposUsuario(req.usuario_email, mudancas);
+
+    // 4. Atualizar também na chave de persistência do localStorage
     try {
       const storedKey = 'certam_auth_user_v7';
       const storedStr = localStorage.getItem(storedKey);
@@ -1271,7 +1395,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 <label className="block text-xs font-bold text-slate-700 mb-1">Concurso:</label>
                 <select
                   value={importConcursoId}
-                  onChange={(e) => setImportConcursoId(e.target.value)}
+                  onChange={(e) => handleConcursoChange(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs"
                 >
                   {concursos.map((c) => (
@@ -1300,14 +1424,140 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Arquivo:</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Arquivo da Planilha:</label>
                 <input
                   type="file"
                   accept=".xlsx, .xls, .csv"
-                  className="block w-full text-xs text-slate-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-[#07192B] file:text-white border border-slate-300 rounded-xl bg-slate-50 p-1"
+                  onChange={handleFileUpload}
+                  className="block w-full text-xs text-slate-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-[#07192B] file:text-white border border-slate-300 rounded-xl bg-slate-50 p-1 cursor-pointer"
                 />
+                {nomeArquivo && (
+                  <span className="text-[11px] text-teal-700 font-medium mt-1 block">
+                    Arquivo selecionado: <strong>{nomeArquivo}</strong>
+                  </span>
+                )}
               </div>
             </div>
+
+            {/* BARRA DE AÇÃO DIRETA QUANDO ARQUIVO ESTÁ SELECIONADO */}
+            {nomeArquivo && (
+              <div className="p-4 bg-teal-50/70 border border-teal-200 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-teal-600 text-white flex items-center justify-center shrink-0 shadow-sm">
+                    <FileSpreadsheet className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-900">{nomeArquivo}</h4>
+                    <p className="text-2xs text-teal-800">
+                      {previewPlanilha.length > 0
+                        ? `${previewPlanilha.length} candidatos identificados e validados para importação.`
+                        : 'Carregando e processando linhas da planilha...'}
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  disabled={importando || previewPlanilha.length === 0}
+                  onClick={handleConfirmarImportacao}
+                  className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md cursor-pointer transition-all flex items-center justify-center gap-2 whitespace-nowrap disabled:opacity-50"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>
+                    {importando
+                      ? 'Importando...'
+                      : previewPlanilha.length > 0
+                      ? `Confirmar e Enviar Importação (${previewPlanilha.length})`
+                      : 'Processando arquivo...'}
+                  </span>
+                </button>
+              </div>
+            )}
+
+            {/* Alerta de Erro na Importação */}
+            {erroImportacao && (
+              <div className="p-3 bg-rose-50 border border-rose-300 rounded-xl text-rose-800 text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>{erroImportacao}</span>
+              </div>
+            )}
+
+            {/* PREVIEW E BOTÃO DE IMPORTAR */}
+            {previewPlanilha.length > 0 && (
+              <div className="space-y-4 pt-4 border-t border-slate-200">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <h3 className="font-bold text-sm text-slate-900 flex items-center gap-2">
+                      <FileSpreadsheet className="w-4 h-4 text-teal-600" />
+                      <span>Prévia dos Dados Identificados ({previewPlanilha.length} candidatos)</span>
+                    </h3>
+                    <p className="text-2xs text-slate-500">
+                      Confira os primeiros registros mapeados antes de consolidar a importação na lista oficial do cargo.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    disabled={importando}
+                    onClick={handleConfirmarImportacao}
+                    className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md cursor-pointer transition-all flex items-center justify-center gap-2 whitespace-nowrap disabled:opacity-50"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>
+                      {importando
+                        ? 'Importando...'
+                        : `Confirmar Importação de ${previewPlanilha.length} Candidatos`}
+                    </span>
+                  </button>
+                </div>
+
+                {/* Tabela de Prévia dos Candidatos */}
+                <div className="border border-slate-200 rounded-xl overflow-x-auto max-h-72">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-[#07192B] text-white text-[11px] uppercase tracking-wider sticky top-0">
+                      <tr>
+                        <th className="py-2.5 px-3">Posição</th>
+                        <th className="py-2.5 px-3">Nome</th>
+                        <th className="py-2.5 px-3">CPF</th>
+                        <th className="py-2.5 px-3">Nota</th>
+                        <th className="py-2.5 px-3">Cota</th>
+                        <th className="py-2.5 px-3">E-mail</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 bg-white">
+                      {previewPlanilha.slice(0, 10).map((cand, idx) => (
+                        <tr key={idx} className="hover:bg-slate-50">
+                          <td className="py-2 px-3 font-mono font-bold text-slate-900">
+                            {cand.posicao}º
+                          </td>
+                          <td className="py-2 px-3 font-semibold text-slate-800">
+                            {cand.nome}
+                          </td>
+                          <td className="py-2 px-3 font-mono text-slate-500 text-[11px]">
+                            {cand.cpf || '—'}
+                          </td>
+                          <td className="py-2 px-3 font-mono font-bold text-teal-700">
+                            {cand.nota_final !== undefined ? cand.nota_final : '—'}
+                          </td>
+                          <td className="py-2 px-3 text-[11px] text-slate-600">
+                            {cand.cota}
+                          </td>
+                          <td className="py-2 px-3 text-[11px] text-slate-500 font-mono">
+                            {cand.email || '—'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {previewPlanilha.length > 10 && (
+                  <p className="text-2xs text-slate-400 italic text-center">
+                    Exibindo os primeiros 10 registros de um total de {previewPlanilha.length} candidatos da planilha.
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         </section>
       )}

@@ -9,6 +9,7 @@ import {
   ShieldCheck,
   LogOut,
   ChevronRight,
+  ChevronDown,
   HelpCircle,
 } from 'lucide-react';
 
@@ -29,6 +30,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const { usuario, logout } = useAuth();
   const [concursos, setConcursos] = React.useState<Concurso[]>(() => certamStore.getConcursos());
+  const [secaoConcursosAberta, setSecaoConcursosAberta] = React.useState(true);
+  const [concursosExpandidos, setConcursosExpandidos] = React.useState<Record<string, boolean>>({
+    tjrs_2025: true,
+    mprs_2025: true,
+  });
+
+  const toggleConcurso = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setConcursosExpandidos((prev) => ({
+      ...prev,
+      [id]: prev[id] === undefined ? false : !prev[id],
+    }));
+  };
 
   React.useEffect(() => {
     const handleUpdate = () => {
@@ -168,74 +182,107 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {/* MENU DINÂMICO: CONCURSOS CADASTRADOS */}
           <div className="pt-4 border-t border-[#0F2942] px-4 space-y-2">
             <div className="flex items-center justify-between text-[10px] uppercase tracking-wider font-mono font-bold text-teal-400 px-2">
-              <span>Concursos ativos</span>
+              <button
+                type="button"
+                onClick={() => setSecaoConcursosAberta(!secaoConcursosAberta)}
+                className="flex items-center gap-1.5 hover:text-white cursor-pointer transition-colors"
+                title={secaoConcursosAberta ? 'Recolher concursos ativos' : 'Expandir concursos ativos'}
+              >
+                <ChevronDown
+                  className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                    secaoConcursosAberta ? '' : '-rotate-90'
+                  }`}
+                />
+                <span>Concursos ativos</span>
+              </button>
               <span className="px-1.5 py-0.5 rounded bg-teal-500/20 text-[#2DD4AA] text-[10px] font-mono font-bold">
                 {concursos.length}
               </span>
             </div>
 
-            <div className="space-y-1">
-              {concursos.map((conc) => {
-                const isActive = currentView === 'concurso' && concursoAtualId === conc.id;
-                return (
-                  <div key={conc.id} className="space-y-0.5">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        handleLinkClick('concurso', {
-                          concursoId: conc.id,
-                          cargoId: conc.cargos?.[0]?.id || 'geral',
-                        })
-                      }
-                      className={`w-full text-left px-3 py-2 rounded-xl text-xs font-semibold flex items-center justify-between transition-colors cursor-pointer ${
-                        isActive
-                          ? 'bg-[#0C2640] text-teal-300 border border-teal-500/30'
-                          : 'text-slate-300 hover:text-white hover:bg-[#0C2640]/40'
-                      }`}
-                    >
-                      <span className="truncate pr-1">{conc.orgao} - {conc.ano}</span>
-                      <ChevronRight className="w-3.5 h-3.5 shrink-0 opacity-60" />
-                    </button>
-                    {/* Cargos deste concurso */}
-                    <div className="pl-3 space-y-0.5">
-                      {conc.cargos?.map((cg) => (
-                        <button
-                          key={cg.id}
-                          type="button"
-                          onClick={() =>
-                            handleLinkClick('concurso', {
-                              concursoId: conc.id,
-                              cargoId: cg.id,
-                            })
-                          }
-                          className="w-full text-left px-2.5 py-1 text-[11px] text-slate-400 hover:text-teal-200 truncate rounded-md hover:bg-white/5 transition-colors flex items-center gap-1.5"
-                        >
-                          <span className="w-1.5 h-1.5 rounded-full bg-teal-500/50"></span>
-                          <span className="truncate">{cg.nome}</span>
-                        </button>
-                      ))}
+            {secaoConcursosAberta && (
+              <div className="space-y-1">
+                {concursos.map((conc) => {
+                  const isActive =
+                    (currentView === 'concurso' || currentView === 'concurso_geral') &&
+                    concursoAtualId === conc.id;
+                  const isExpanded = concursosExpandidos[conc.id] !== false;
 
-                      {isActive && (
+                  return (
+                    <div key={conc.id} className="space-y-0.5">
+                      <div
+                        className={`w-full rounded-xl text-xs font-semibold flex items-center justify-between transition-colors ${
+                          isActive
+                            ? 'bg-[#0C2640] text-teal-300 border border-teal-500/30'
+                            : 'text-slate-300 hover:text-white hover:bg-[#0C2640]/40'
+                        }`}
+                      >
                         <button
                           type="button"
                           onClick={() =>
-                            handleLinkClick('concurso', {
+                            handleLinkClick('concurso_geral', {
                               concursoId: conc.id,
-                              cargoId: conc.cargos?.[0]?.id || 'geral',
-                              tab: 'faq',
                             })
                           }
-                          className="w-full text-left px-2.5 py-1 text-[11px] text-teal-300 hover:text-white truncate rounded-md hover:bg-white/5 transition-colors flex items-center gap-1.5 font-medium"
+                          className="flex-1 text-left px-3 py-2 truncate cursor-pointer hover:text-white"
+                          title={`Visão geral de ${conc.nome}`}
                         >
-                          <HelpCircle className="w-3.5 h-3.5 text-[#2DD4AA] shrink-0" />
-                          <span>Dúvidas e FAQ do concurso</span>
+                          <span className="truncate pr-1">{conc.orgao} - {conc.ano}</span>
                         </button>
+
+                        <button
+                          type="button"
+                          onClick={(e) => toggleConcurso(conc.id, e)}
+                          className="p-1.5 hover:bg-white/10 rounded-lg text-slate-400 hover:text-white cursor-pointer transition-colors mr-1 shrink-0"
+                          title={isExpanded ? `Recolher cargos de ${conc.orgao}` : `Expandir cargos de ${conc.orgao}`}
+                        >
+                          <ChevronDown
+                            className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                              isExpanded ? '' : '-rotate-90'
+                            }`}
+                          />
+                        </button>
+                      </div>
+
+                      {/* Cargos deste concurso */}
+                      {isExpanded && (
+                        <div className="pl-3 space-y-0.5">
+                          {conc.cargos?.map((cg) => (
+                            <button
+                              key={cg.id}
+                              type="button"
+                              onClick={() =>
+                                handleLinkClick('concurso', {
+                                  concursoId: conc.id,
+                                  cargoId: cg.id,
+                                })
+                              }
+                              className="w-full text-left px-2.5 py-1 text-[11px] text-slate-400 hover:text-teal-200 truncate rounded-md hover:bg-white/5 transition-colors flex items-center gap-1.5 cursor-pointer"
+                            >
+                              <span className="w-1.5 h-1.5 rounded-full bg-teal-500/50"></span>
+                              <span className="truncate">{cg.nome}</span>
+                            </button>
+                          ))}
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleLinkClick('concurso_geral', {
+                                concursoId: conc.id,
+                              })
+                            }
+                            className="w-full text-left px-2.5 py-1 text-[11px] text-teal-300 hover:text-white truncate rounded-md hover:bg-white/5 transition-colors flex items-center gap-1.5 font-medium cursor-pointer"
+                          >
+                            <HelpCircle className="w-3.5 h-3.5 text-[#2DD4AA] shrink-0" />
+                            <span>Visão geral &amp; Quadro de vagas</span>
+                          </button>
+                        </div>
                       )}
                     </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </nav>
 
