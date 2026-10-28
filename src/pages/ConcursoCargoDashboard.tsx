@@ -248,7 +248,11 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
         c.posicao.toString() === filtroBusca.trim() ||
         (c.comarca_desejada_1 && c.comarca_desejada_1.toLowerCase().includes(filtroBusca.toLowerCase()));
 
-      const matchCota = filtroCota === 'todas' || c.cota === filtroCota;
+      const matchCota =
+        filtroCota === 'todas' ||
+        (filtroCota === 'PPP'
+          ? c.cota === 'PPP' || (c.cota as string) === 'CN'
+          : c.cota === filtroCota);
       const matchStatus = filtroStatus === 'todos' || c.status === filtroStatus;
       const matchIntencao = filtroIntencao === 'todas' || c.intencao === filtroIntencao;
 
@@ -270,9 +274,11 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
   // Sub-aba na Lista de Classificação
   const [subAbaClassificacao, setSubAbaClassificacao] = useState<'geral' | 'ordem_nomeacao'>('geral');
   const [configCotas, setConfigCotas] = useState<ConfigCotas>({
-    ampla: 70,
+    ampla: 60,
     ppp: 20,
     pcd: 10,
+    indigena: 5,
+    trans: 5,
   });
   const [painelCotasAberto, setPainelCotasAberto] = useState(false);
 
@@ -936,7 +942,7 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
                     <span className="text-2xs text-slate-400">Total deve somar 100%</span>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
                     <div>
                       <label className="block text-2xs font-bold text-slate-600 mb-1">
                         Ampla Concorrência (%):
@@ -955,7 +961,7 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
 
                     <div>
                       <label className="block text-2xs font-bold text-amber-800 mb-1">
-                        Pessoas Pretas ou Pardas - PPP (%):
+                        Negros - PPP / CN (%):
                       </label>
                       <input
                         type="number"
@@ -971,7 +977,7 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
 
                     <div>
                       <label className="block text-2xs font-bold text-purple-800 mb-1">
-                        Pessoas com Deficiência - PCD (%):
+                        Deficiência - PCD (%):
                       </label>
                       <input
                         type="number"
@@ -982,6 +988,38 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
                           setConfigCotas((prev) => ({ ...prev, pcd: Number(e.target.value) || 0 }))
                         }
                         className="w-full px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono font-bold text-purple-900"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-2xs font-bold text-emerald-800 mb-1">
+                        Povos Indígenas (%):
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={configCotas.indigena ?? 5}
+                        onChange={(e) =>
+                          setConfigCotas((prev) => ({ ...prev, indigena: Number(e.target.value) || 0 }))
+                        }
+                        className="w-full px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono font-bold text-emerald-900"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-2xs font-bold text-pink-800 mb-1">
+                        Pessoas Trans (%):
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={configCotas.trans ?? 5}
+                        onChange={(e) =>
+                          setConfigCotas((prev) => ({ ...prev, trans: Number(e.target.value) || 0 }))
+                        }
+                        className="w-full px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono font-bold text-pink-900"
                       />
                     </div>
                   </div>
@@ -1049,8 +1087,10 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
               >
                 <option value="todas">Todas as Cotas</option>
                 <option value="Ampla">Ampla Concorrência</option>
-                <option value="PPP">Pessoas Pretas ou Pardas (PPP)</option>
+                <option value="PPP">Pessoas Negras (PPP / CN)</option>
                 <option value="PCD">Pessoas com Deficiência (PCD)</option>
+                <option value="Indígena">Povos Indígenas</option>
+                <option value="Trans">Pessoas Trans</option>
               </select>
 
               <select
@@ -1128,8 +1168,20 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
                           </td>
                           <td className="py-2.5 px-2.5 text-center font-mono">
                             {isCandidatoAprovado ? (
-                              <span className="px-2 py-0.5 rounded text-[11px] bg-slate-100 text-slate-700 font-semibold">
-                                {cand.cota}
+                              <span
+                                className={`px-2 py-0.5 rounded text-[11px] font-bold ${
+                                  cand.cota === 'PCD'
+                                    ? 'bg-purple-100 text-purple-900 border border-purple-200'
+                                    : cand.cota === 'PPP' || (cand.cota as string) === 'CN'
+                                    ? 'bg-amber-100 text-amber-900 border border-amber-200'
+                                    : cand.cota === 'Indígena'
+                                    ? 'bg-emerald-100 text-emerald-900 border border-emerald-200'
+                                    : cand.cota === 'Trans'
+                                    ? 'bg-pink-100 text-pink-900 border border-pink-200'
+                                    : 'bg-slate-100 text-slate-700'
+                                }`}
+                              >
+                                {cand.cota === 'PPP' || (cand.cota as string) === 'CN' ? 'PPP / CN' : cand.cota}
                               </span>
                             ) : (
                               <span className="text-slate-400 text-2xs italic">Restrito</span>
@@ -1295,8 +1347,20 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
                           </td>
 
                           <td className="py-2.5 px-2.5 text-center font-mono">
-                            <span className="px-2 py-0.5 rounded text-[11px] bg-slate-100 text-slate-700 font-semibold">
-                              {item.cotaCandidato}
+                            <span
+                              className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                item.cotaCandidato === 'PCD'
+                                  ? 'bg-purple-100 text-purple-900 border border-purple-200'
+                                  : item.cotaCandidato === 'PPP' || item.cotaCandidato === 'CN'
+                                  ? 'bg-amber-100 text-amber-900 border border-amber-200'
+                                  : item.cotaCandidato === 'Indígena'
+                                  ? 'bg-emerald-100 text-emerald-900 border border-emerald-200'
+                                  : item.cotaCandidato === 'Trans'
+                                  ? 'bg-pink-100 text-pink-900 border border-pink-200'
+                                  : 'bg-slate-100 text-slate-700'
+                              }`}
+                            >
+                              {item.cotaCandidato === 'PPP' || item.cotaCandidato === 'CN' ? 'PPP / CN' : item.cotaCandidato}
                             </span>
                           </td>
 
@@ -1307,10 +1371,14 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
                                   ? 'bg-purple-100 text-purple-900 border border-purple-200'
                                   : item.vagaAtribuida === 'PPP'
                                   ? 'bg-amber-100 text-amber-900 border border-amber-200'
+                                  : item.vagaAtribuida === 'Indígena'
+                                  ? 'bg-emerald-100 text-emerald-900 border border-emerald-200'
+                                  : item.vagaAtribuida === 'Trans'
+                                  ? 'bg-pink-100 text-pink-900 border border-pink-200'
                                   : 'bg-teal-50 text-teal-900 border border-teal-200'
                               }`}
                             >
-                              Vaga {item.vagaAtribuida}
+                              Vaga {item.vagaAtribuida === 'PPP' ? 'PPP / CN' : item.vagaAtribuida}
                             </span>
                           </td>
 

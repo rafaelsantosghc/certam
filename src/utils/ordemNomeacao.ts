@@ -6,7 +6,7 @@ export interface ItemOrdemNomeacao {
   nome: string;
   posicaoOriginal: number;
   cotaCandidato: string;
-  vagaAtribuida: 'Ampla' | 'PPP' | 'PCD' | 'Indígena';
+  vagaAtribuida: 'Ampla' | 'PPP' | 'PCD' | 'Indígena' | 'Trans';
   garantido: boolean; // true se já chamado em lote oficial do órgão
   loteNumero?: string | number;
   dataNomeacao?: string;
@@ -31,6 +31,52 @@ export function normalizarNome(nome: string): string {
 }
 
 /**
+ * Normaliza qualquer nomenclatura de cota para os padrões do sistema:
+ * - 'PPP': Pessoas Negras / Pretos e Pardos (aceita 'CN', 'PPP', 'Negro', 'Preto', 'Pardo', 'Afro', etc.)
+ * - 'PCD': Pessoas com Deficiência (aceita 'PCD', 'Deficiente', 'PPD', etc.)
+ * - 'Indígena': Povos Indígenas (aceita 'Indígena', 'Indigena', 'Índio', etc.)
+ * - 'Trans': Pessoas Trans (aceita 'Trans', 'Travesti', 'Transexual', etc.)
+ * - 'Ampla': Ampla Concorrência (AC, Geral, etc.)
+ */
+export function normalizarCota(raw: string | undefined | null): 'Ampla' | 'PPP' | 'PCD' | 'Indígena' | 'Trans' {
+  if (!raw) return 'Ampla';
+  const str = raw.toString().trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+  // 1. Trans (Pessoas Trans, Travesti, Transexuais, etc.)
+  if (str.includes('trans') || str.includes('travesti')) {
+    return 'Trans';
+  }
+
+  // 2. Indígenas (Povos Indígenas, Indígena, etc.)
+  if (str.includes('indig') || str.includes('indio') || str.includes('povos ind')) {
+    return 'Indígena';
+  }
+
+  // 3. PCD (Pessoas com Deficiência, PPD, Deficiente)
+  if (str.includes('pcd') || str.includes('defic') || str.includes('ppd') || str.includes('especial')) {
+    return 'PCD';
+  }
+
+  // 4. PPP / CN / Negros / Pretos / Pardos
+  // Aceita "CN", "PPP", "PN", "Negro", "Preto", "Pardo", "Afro", "Candidato Negro", "Cota CN"
+  if (
+    str === 'cn' ||
+    str === 'ppp' ||
+    str === 'pn' ||
+    /\b(cn|ppp|pn)\b/.test(str) ||
+    str.includes('negro') ||
+    str.includes('preto') ||
+    str.includes('pardo') ||
+    str.includes('afro') ||
+    str.includes('racial')
+  ) {
+    return 'PPP';
+  }
+
+  return 'Ampla';
+}
+
+/**
  * Calcula a Ordem de Nomeação de toda a lista de candidatos.
  * 1. Puxa a ordem oficial dos convocados nos lotes já realizados pelo órgão e fixa como ordem garantida.
  * 2. Simula a projeção especulativa para os candidatos restantes com base nas porcentagens de cotas configuradas.
@@ -38,7 +84,7 @@ export function normalizarNome(nome: string): string {
 export function calcularOrdemNomeacao(
   candidatos: Candidato[],
   lotes: Lote[],
-  configCotas: ConfigCotas = { ampla: 70, ppp: 20, pcd: 10 },
+  configCotas: ConfigCotas = { ampla: 60, ppp: 20, pcd: 10, indigena: 5, trans: 5 },
   vagasProximoLote: number = 0
 ): ItemOrdemNomeacao[] {
   const resultado: ItemOrdemNomeacao[] = [];
@@ -150,14 +196,7 @@ export function calcularOrdemNomeacao(
       statusOficial = 'Convocado titular';
     }
 
-    const vagaAtrib =
-      ofi.tipo_vaga.toLowerCase().includes('pcd')
-        ? 'PCD'
-        : ofi.tipo_vaga.toLowerCase().includes('ppp') || ofi.tipo_vaga.toLowerCase().includes('negro')
-        ? 'PPP'
-        : ofi.tipo_vaga.toLowerCase().includes('indig')
-        ? 'Indígena'
-        : 'Ampla';
+    const vagaAtrib = normalizarCota(ofi.tipo_vaga);
 
     const candBase: Candidato = ofi.candidato || {
       id: cId,
@@ -178,7 +217,7 @@ export function calcularOrdemNomeacao(
       candidatoId: cId,
       nome: ofi.nome,
       posicaoOriginal: candBase.posicao || ofi.ordem_oficial,
-      cotaCandidato: candBase.cota || ofi.tipo_vaga,
+      cotaCandidato: normalizarCota(candBase.cota || ofi.tipo_vaga),
       vagaAtribuida: vagaAtrib,
       garantido: true,
       loteNumero: ofi.lote_numero,
@@ -222,67 +261,102 @@ export function calcularOrdemNomeacao(
 
   // Criar filas por cota para os candidatos ativos
   const filaAmpla = [...candidatosAtivos];
-  const filaPcd = candidatosAtivos.filter((c) => c.cota === 'PCD');
-  const filaPpp = candidatosAtivos.filter((c) => c.cota === 'PPP');
-  const filaIndigena = candidatosAtivos.filter((c) => c.cota === 'Indígena');
+  const filaPcd = candidatosAtivos.filter((c) => normalizarCota(c.cota) === 'PCD');
+  const filaPpp = candidatosAtivos.filter((c) => normalizarCota(c.cota) === 'PPP');
+  const filaIndigena = candidatosAtivos.filter((c) => normalizarCota(c.cota) === 'Indígena');
+  const filaTrans = candidatosAtivos.filter((c) => normalizarCota(c.cota) === 'Trans');
 
   const pcdPerc = Math.max(0, Math.min(100, configCotas.pcd ?? 10));
   const pppPerc = Math.max(0, Math.min(100, configCotas.ppp ?? 20));
+  const indigenaPerc = Math.max(0, Math.min(100, configCotas.indigena ?? 5));
+  const transPerc = Math.max(0, Math.min(100, configCotas.trans ?? 5));
 
   // Determinar índices de cotas clássicas em concursos públicos
   // Exemplo para 10% PCD: 5ª vaga, 15ª vaga, 25ª vaga...
-  // Exemplo para 20% PPP: 3ª vaga, 8ª vaga, 13ª vaga, 18ª vaga, 23ª vaga...
   const isVagaPcd = (pos: number): boolean => {
     if (pcdPerc <= 0) return false;
-    // Intervalo baseado na porcentagem (ex: 10% -> a cada 10 vagas, iniciando na 5ª)
-    const passo = Math.round(100 / pcdPerc);
+    const passo = Math.max(2, Math.round(100 / pcdPerc));
     const offset = Math.max(1, Math.floor(passo / 2));
     return (pos - offset) % passo === 0;
   };
 
+  // Exemplo para 20% PPP (CN): 3ª vaga, 8ª vaga, 13ª vaga, 18ª vaga, 23ª vaga...
   const isVagaPpp = (pos: number): boolean => {
     if (pppPerc <= 0) return false;
-    // Intervalo baseado na porcentagem (ex: 20% -> a cada 5 vagas, iniciando na 3ª)
-    const passo = Math.round(100 / pppPerc);
+    const passo = Math.max(2, Math.round(100 / pppPerc));
     const offset = Math.max(1, Math.floor(passo / 2) + 1);
+    return (pos - offset) % passo === 0;
+  };
+
+  // Exemplo para Indígenas: a cada 20 vagas (se 5%)
+  const isVagaIndigena = (pos: number): boolean => {
+    if (indigenaPerc <= 0) return false;
+    const passo = Math.max(2, Math.round(100 / indigenaPerc));
+    const offset = Math.max(1, Math.floor(passo * 0.75));
+    return (pos - offset) % passo === 0;
+  };
+
+  // Exemplo para Trans: a cada 20 vagas (se 5%)
+  const isVagaTrans = (pos: number): boolean => {
+    if (transPerc <= 0) return false;
+    const passo = Math.max(2, Math.round(100 / transPerc));
+    const offset = Math.max(1, Math.floor(passo * 0.9));
     return (pos - offset) % passo === 0;
   };
 
   let vagasPrevistasRestantes = vagasProximoLote > 0 ? vagasProximoLote : 5;
 
+  const removerDeFilasCotas = (candId: string) => {
+    const idxAmpla = filaAmpla.findIndex((c) => c.id === candId);
+    if (idxAmpla >= 0) filaAmpla.splice(idxAmpla, 1);
+
+    const idxPcd = filaPcd.findIndex((c) => c.id === candId);
+    if (idxPcd >= 0) filaPcd.splice(idxPcd, 1);
+
+    const idxPpp = filaPpp.findIndex((c) => c.id === candId);
+    if (idxPpp >= 0) filaPpp.splice(idxPpp, 1);
+
+    const idxInd = filaIndigena.findIndex((c) => c.id === candId);
+    if (idxInd >= 0) filaIndigena.splice(idxInd, 1);
+
+    const idxTrans = filaTrans.findIndex((c) => c.id === candId);
+    if (idxTrans >= 0) filaTrans.splice(idxTrans, 1);
+  };
+
   while (filaAmpla.length > 0) {
     const posicaoGlobal = ordemAtual;
     let candidatoSelecionado: Candidato | null = null;
-    let vagaTipo: 'Ampla' | 'PPP' | 'PCD' | 'Indígena' = 'Ampla';
+    let vagaTipo: 'Ampla' | 'PPP' | 'PCD' | 'Indígena' | 'Trans' = 'Ampla';
 
     // 1. Checa se esta posição é reserva de PCD
     if (isVagaPcd(posicaoGlobal) && filaPcd.length > 0) {
       candidatoSelecionado = filaPcd.shift()!;
       vagaTipo = 'PCD';
-      // Remover também da fila ampla
-      const idx = filaAmpla.findIndex((c) => c.id === candidatoSelecionado!.id);
-      if (idx >= 0) filaAmpla.splice(idx, 1);
+      removerDeFilasCotas(candidatoSelecionado.id);
     }
-    // 2. Checa se esta posição é reserva de PPP
+    // 2. Checa se esta posição é reserva de PPP (CN)
     else if (isVagaPpp(posicaoGlobal) && filaPpp.length > 0) {
       candidatoSelecionado = filaPpp.shift()!;
       vagaTipo = 'PPP';
-      // Remover também da fila ampla
-      const idx = filaAmpla.findIndex((c) => c.id === candidatoSelecionado!.id);
-      if (idx >= 0) filaAmpla.splice(idx, 1);
+      removerDeFilasCotas(candidatoSelecionado.id);
     }
-    // 3. Caso contrário, chama o próximo da Ampla Concorrência
+    // 3. Checa se esta posição é reserva Indígena
+    else if (isVagaIndigena(posicaoGlobal) && filaIndigena.length > 0) {
+      candidatoSelecionado = filaIndigena.shift()!;
+      vagaTipo = 'Indígena';
+      removerDeFilasCotas(candidatoSelecionado.id);
+    }
+    // 4. Checa se esta posição é reserva Trans
+    else if (isVagaTrans(posicaoGlobal) && filaTrans.length > 0) {
+      candidatoSelecionado = filaTrans.shift()!;
+      vagaTipo = 'Trans';
+      removerDeFilasCotas(candidatoSelecionado.id);
+    }
+    // 5. Caso contrário, chama o próximo da Ampla Concorrência
     else {
       candidatoSelecionado = filaAmpla.shift()!;
       vagaTipo = 'Ampla';
-      // Se este candidato também estava nas filas de cota, remove para não duplicar
-      if (candidatoSelecionado.cota === 'PCD') {
-        const idx = filaPcd.findIndex((c) => c.id === candidatoSelecionado!.id);
-        if (idx >= 0) filaPcd.splice(idx, 1);
-      } else if (candidatoSelecionado.cota === 'PPP') {
-        const idx = filaPpp.findIndex((c) => c.id === candidatoSelecionado!.id);
-        if (idx >= 0) filaPpp.splice(idx, 1);
-      }
+      removerDeFilasCotas(candidatoSelecionado.id);
     }
 
     if (!candidatoSelecionado) break;

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Lote, CandidatoConvocadoLote, StatusLote, Candidato } from '../types';
 import { lotesStore } from '../store/lotesStore';
+import { normalizarCota } from '../utils/ordemNomeacao';
 import {
   X,
   Layers,
@@ -243,24 +244,21 @@ export const ModalEditarLote: React.FC<ModalEditarLoteProps> = ({
           // Se a 1ª coluna não for número, assume seqAuto e a 1ª coluna é o nome
           ordem = seqAuto++;
           nomeCand = colunas[0].trim();
-          if (colunas[1]) tipoVaga = colunas[1].trim();
+          if (colunas[1]) tipoVaga = normalizarCota(colunas[1]);
           if (colunas[2]) papel = colunas[2].toLowerCase().includes('suplente') ? 'Suplente' : 'Titular';
         } else {
           seqAuto = Math.max(seqAuto, ordem + 1);
           nomeCand = colunas[1]?.trim() || '';
 
-          const col2 = (colunas[2] || '').toLowerCase();
-          const col3 = (colunas[3] || '').toLowerCase();
+          const col2 = colunas[2] || '';
+          const col3 = colunas[3] || '';
 
-          // Detectar Tipo de vaga
-          if (col2.includes('pcd') || col3.includes('pcd')) tipoVaga = 'PCD';
-          else if (col2.includes('ppp') || col2.includes('negro') || col3.includes('ppp') || col3.includes('negro')) tipoVaga = 'PPP';
-          else if (col2.includes('indig') || col3.includes('indig')) tipoVaga = 'Indígena';
-          else if (col2.includes('cota') || col3.includes('cota')) tipoVaga = 'Cota';
-          else tipoVaga = 'Ampla';
+          // Detectar se a coluna 2 é papel ou cota
+          const isCol2Papel = col2.toLowerCase().includes('titular') || col2.toLowerCase().includes('suplente');
+          tipoVaga = normalizarCota(isCol2Papel ? col3 : col2);
 
           // Detectar Titular / Suplente
-          if (col2.includes('suplente') || col3.includes('suplente')) {
+          if (col2.toLowerCase().includes('suplente') || col3.toLowerCase().includes('suplente')) {
             papel = 'Suplente';
           } else {
             papel = 'Titular';
@@ -784,12 +782,12 @@ export const ModalEditarLote: React.FC<ModalEditarLoteProps> = ({
                   </div>
 
                   <p className="text-2xs text-teal-900 leading-relaxed">
-                    Copie as colunas do Excel com: <strong>Ordem de Nomeação</strong>, <strong>Nome Completo</strong>, <strong>Tipo de Vaga (Ampla ou Cota)</strong> e <strong>Titular ou Suplente</strong>:
+                    Copie as colunas do Excel com: <strong>Ordem de Nomeação</strong>, <strong>Nome Completo</strong>, <strong>Tipo de Vaga (Ampla, CN/PPP, PCD, Indígena, Trans)</strong> e <strong>Titular ou Suplente</strong>:
                   </p>
 
                   <textarea
                     rows={6}
-                    placeholder={`1\tCarlos Eduardo Silveira\tAmpla\tTitular\n2\tMariana Rocha Santos\tPPP\tTitular\n3\tRoberto Lima\tPCD\tTitular\n4\tFernanda Souza\tAmpla\tSuplente`}
+                    placeholder={`1\tCarlos Eduardo Silveira\tAmpla\tTitular\n2\tMariana Rocha Santos\tCN\tTitular\n3\tRoberto Lima\tPCD\tTitular\n4\tKamila Guarani\tIndígena\tTitular\n5\tLorena Miller\tTrans\tTitular\n6\tFernanda Souza\tPPP\tSuplente`}
                     value={textoColadoConvocados}
                     onChange={(e) => setTextoColadoConvocados(e.target.value)}
                     className="w-full p-3 bg-white border border-teal-300 rounded-xl font-mono text-xs focus:outline-hidden focus:border-teal-700 text-slate-900"
@@ -797,7 +795,7 @@ export const ModalEditarLote: React.FC<ModalEditarLoteProps> = ({
 
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span className="text-2xs text-slate-500 italic">
-                      Dica: O sistema ignora a primeira linha se for cabeçalho e detecta automaticamente tabs do Excel.
+                      Dica: O sistema reconhece automaticamente variações como &quot;CN&quot; e &quot;PPP&quot; (Negros), PCD, Indígena, Trans e Ampla Concorrência.
                     </span>
 
                     <div className="flex items-center gap-2">
@@ -855,13 +853,17 @@ export const ModalEditarLote: React.FC<ModalEditarLoteProps> = ({
                             <span
                               className={`px-2 py-0.5 rounded text-[10px] font-bold ${
                                 cv.tipo_vaga === 'PCD'
-                                  ? 'bg-purple-50 text-purple-800'
-                                  : cv.tipo_vaga === 'PPP' || cv.tipo_vaga === 'Cota'
-                                  ? 'bg-amber-50 text-amber-800'
+                                  ? 'bg-purple-100 text-purple-900 border border-purple-200'
+                                  : cv.tipo_vaga === 'PPP'
+                                  ? 'bg-amber-100 text-amber-900 border border-amber-200'
+                                  : cv.tipo_vaga === 'Indígena'
+                                  ? 'bg-emerald-100 text-emerald-900 border border-emerald-200'
+                                  : cv.tipo_vaga === 'Trans'
+                                  ? 'bg-pink-100 text-pink-900 border border-pink-200'
                                   : 'bg-slate-100 text-slate-700'
                               }`}
                             >
-                              {cv.tipo_vaga}
+                              {cv.tipo_vaga === 'PPP' ? 'PPP / CN' : cv.tipo_vaga}
                             </span>
                           </td>
                           <td className="py-2 px-3 text-center">

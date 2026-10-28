@@ -133,7 +133,7 @@ export interface Concurso {
   convocacoes?: ConvocacaoHistorico[];
 }
 
-export type CotaTipo = 'Ampla' | 'PPP' | 'PCD' | 'Indígena';
+export type CotaTipo = 'Ampla' | 'PPP' | 'PCD' | 'Indígena' | 'Trans';
 
 export type StatusCandidato =
   | 'Próximo (previsão)'
@@ -201,7 +201,7 @@ export interface Comarca {
 export interface CandidatoConvocadoLote {
   ordem_nomeacao: number;
   nome: string;
-  tipo_vaga: 'Ampla' | 'Cota' | 'PPP' | 'PCD' | string;
+  tipo_vaga: 'Ampla' | 'PPP' | 'PCD' | 'Indígena' | 'Trans' | string;
   papel: 'Titular' | 'Suplente';
   candidato_id?: string;
   comarca_escolhida?: string;
@@ -231,10 +231,11 @@ export interface Lote {
 }
 
 export interface ConfigCotas {
-  ampla: number; // Porcentagem Ampla Concorrência (ex: 70)
-  ppp: number;   // Porcentagem Pretos e Pardos (ex: 20)
-  pcd: number;   // Porcentagem Pessoas com Deficiência (ex: 10)
-  indigena?: number;
+  ampla: number;    // Porcentagem Ampla Concorrência (ex: 60)
+  ppp: number;      // Porcentagem Pretos, Pardos e Negros (CN / PPP) (ex: 20)
+  pcd: number;      // Porcentagem Pessoas com Deficiência (ex: 10)
+  indigena: number; // Porcentagem Povos Indígenas (ex: 5)
+  trans: number;    // Porcentagem Pessoas Trans (ex: 5)
 }
 
 export type FaqCategoria =

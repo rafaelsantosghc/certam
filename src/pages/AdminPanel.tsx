@@ -20,6 +20,7 @@ import {
   Lote,
 } from '../types';
 import { sanitizeInput, sanitizeFileName } from '../utils/security';
+import { normalizarCota } from '../utils/ordemNomeacao';
 import * as XLSX from 'xlsx';
 import {
   Plus,
@@ -291,15 +292,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           const rawTelefone = getVal(['telefone', 'celular', 'whatsapp', 'fone']);
           const whatsapp = rawTelefone ? String(rawTelefone).trim() : undefined;
 
-          let cota: Candidato['cota'] = 'Ampla';
-          const cotaLower = rawCota.toLowerCase();
-          if (cotaLower.includes('negro') || cotaLower.includes('pardo') || cotaLower.includes('ppp') || cotaLower.includes('afro') || cotaLower.includes('racial')) {
-            cota = 'PPP';
-          } else if (cotaLower.includes('pcd') || cotaLower.includes('defic') || cotaLower.includes('especial')) {
-            cota = 'PCD';
-          } else if (cotaLower.includes('indig')) {
-            cota = 'Indígena';
-          }
+          const cota: Candidato['cota'] = normalizarCota(rawCota);
 
           return {
             id: `cand-${importConcursoId}-${importCargoId}-${posicao}-${Date.now().toString(36)}-${idx}`,
@@ -1911,8 +1904,22 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                           <td className="py-2 px-3 font-mono font-bold text-teal-700">
                             {cand.nota_final !== undefined ? cand.nota_final : '—'}
                           </td>
-                          <td className="py-2 px-3 text-[11px] text-slate-600">
-                            {cand.cota}
+                          <td className="py-2 px-3 text-[11px]">
+                            <span
+                              className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                cand.cota === 'PCD'
+                                  ? 'bg-purple-100 text-purple-900 border border-purple-200'
+                                  : cand.cota === 'PPP'
+                                  ? 'bg-amber-100 text-amber-900 border border-amber-200'
+                                  : cand.cota === 'Indígena'
+                                  ? 'bg-emerald-100 text-emerald-900 border border-emerald-200'
+                                  : cand.cota === 'Trans'
+                                  ? 'bg-pink-100 text-pink-900 border border-pink-200'
+                                  : 'bg-slate-100 text-slate-700'
+                              }`}
+                            >
+                              {cand.cota === 'PPP' ? 'PPP / CN' : cand.cota}
+                            </span>
                           </td>
                           <td className="py-2 px-3 text-[11px] text-slate-500 font-mono">
                             {cand.email || '—'}
