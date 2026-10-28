@@ -552,8 +552,50 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
         </div>
 
         {/* LISTAGEM DOS CONCURSOS */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-          {concursosFiltrados.map((conc) => {
+        {concursos.length === 0 ? (
+          <div className="bg-white rounded-3xl border border-dashed border-slate-300 p-8 sm:p-14 text-center space-y-4 card-shadow">
+            <div className="w-14 h-14 rounded-2xl bg-teal-50 text-teal-700 flex items-center justify-center mx-auto shadow-xs">
+              <Building2 className="w-7 h-7" />
+            </div>
+            <div className="max-w-md mx-auto space-y-1.5">
+              <h3 className="text-lg font-bold font-serif text-slate-900">
+                Nenhum concurso cadastrado no momento
+              </h3>
+              <p className="text-xs text-slate-500 leading-relaxed">
+                Todas as informações de teste foram removidas. O sistema está limpo e pronto para o cadastro de certames reais, cargos, cronogramas e importação de listas oficiais.
+              </p>
+            </div>
+
+            {usuario?.is_admin ? (
+              <button
+                type="button"
+                onClick={() => onNavigate('admin', { tab: 'concursos' })}
+                className="px-5 py-2.5 bg-[#07192B] hover:bg-[#0C2640] text-[#2DD4AA] font-bold text-xs rounded-xl transition-all cursor-pointer shadow-md inline-flex items-center gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Cadastrar Primeiro Concurso no Painel Admin</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  setMotivoContato('inclusao_concurso');
+                  setModalContatoAberto(true);
+                }}
+                className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-all cursor-pointer inline-flex items-center gap-2"
+              >
+                <Mail className="w-4 h-4" />
+                <span>Solicitar Cadastro de Concurso ao Admin</span>
+              </button>
+            )}
+          </div>
+        ) : concursosFiltrados.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center text-xs text-slate-500">
+            Nenhum concurso encontrado para os filtros selecionados.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            {concursosFiltrados.map((conc) => {
             const cargosAtivos = conc.cargos?.filter((cg) => cg.ativo) || [];
 
             return (
@@ -683,7 +725,8 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
               </div>
             );
           })}
-        </div>
+          </div>
+        )}
       </div>
 
       {/* Modais da Home */}

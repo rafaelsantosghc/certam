@@ -8,8 +8,8 @@ import {
 } from '../data/defaultCandidates';
 import { COMARCAS_RS } from '../data/comarcas';
 
-const LOTES_KEY = 'certam_lotes_data_v5';
-const CANDIDATOS_KEY = 'certam_candidatos_data_v5';
+const LOTES_KEY = 'certam_lotes_data_v6';
+const CANDIDATOS_KEY = 'certam_candidatos_data_v6';
 
 export interface SimulacaoResultado {
   alocacoes: {
@@ -33,58 +33,20 @@ export interface SimulacaoResultado {
 export const lotesStore = {
   getLotes(): Lote[] {
     try {
+      localStorage.removeItem('certam_lotes_data_v1');
+      localStorage.removeItem('certam_lotes_data_v2');
+      localStorage.removeItem('certam_lotes_data_v3');
       localStorage.removeItem('certam_lotes_data_v4');
+      localStorage.removeItem('certam_lotes_data_v5');
       const s = localStorage.getItem(LOTES_KEY);
       if (s) {
         const p = JSON.parse(s);
-        if (Array.isArray(p) && p.length > 0) return p;
+        if (Array.isArray(p)) return p;
       }
     } catch {
       // ignore
     }
-    const defaultLotes: Lote[] = [
-      {
-        id: 'lote_1_tjrs_analista',
-        concurso_id: 'tjrs_2025',
-        cargo_id: 'analista_judiciario',
-        nome: 'Lote 1 (1º Chamamento Oficial - Analista Judiciário)',
-        ativo: true,
-        is_ranking_visible: true,
-        is_printing_enabled: true,
-        travado: false,
-        comarcas: COMARCAS_RS.slice(0, 15).map((c) => ({ nome: c.nome, vagas: c.vagas_total })),
-        candidatos_ids: [],
-      },
-      {
-        id: 'lote_1_tjrs_tecnico',
-        concurso_id: 'tjrs_2025',
-        cargo_id: 'tecnico_judiciario',
-        nome: 'Lote 1 (1º Chamamento Oficial - Técnico Judiciário)',
-        ativo: true,
-        is_ranking_visible: true,
-        is_printing_enabled: true,
-        travado: false,
-        comarcas: COMARCAS_RS.slice(0, 12).map((c) => ({ nome: c.nome, vagas: c.vagas_total })),
-        candidatos_ids: [],
-      },
-      {
-        id: 'lote_1_mprs_analista',
-        concurso_id: 'mprs_2025',
-        cargo_id: 'analista_mprs',
-        nome: 'Lote 1 (Chamamento Inicial - Analista MPRS)',
-        ativo: true,
-        is_ranking_visible: true,
-        is_printing_enabled: true,
-        travado: false,
-        comarcas: [
-          { nome: 'Porto Alegre', vagas: 8 },
-          { nome: 'Passo Fundo', vagas: 3 },
-          { nome: 'Pelotas', vagas: 2 },
-          { nome: 'Santa Maria', vagas: 2 },
-        ],
-        candidatos_ids: [],
-      },
-    ];
+    const defaultLotes: Lote[] = [];
     this.salvarLotes(defaultLotes);
     return defaultLotes;
   },

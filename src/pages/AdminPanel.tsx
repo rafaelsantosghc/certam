@@ -190,7 +190,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   // Nova Notificação (Broadcast)
   const [notifTitulo, setNotifTitulo] = useState('');
   const [notifMensagem, setNotifMensagem] = useState('');
-  const [notifConcursoId, setNotifConcursoId] = useState('tjrs_2025');
+  const [notifConcursoId, setNotifConcursoId] = useState(concursos[0]?.id || 'todos');
   const [notifTipo, setNotifTipo] = useState<TipoNotificacao>('convocacao');
 
   // Resposta Contato
@@ -210,8 +210,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [erroMotivoVinc, setErroMotivoVinc] = useState(false);
 
   // Importador Planilhas
-  const [importConcursoId, setImportConcursoId] = useState<string>(concursos[0]?.id || 'tjrs_2025');
-  const [importCargoId, setImportCargoId] = useState<string>(concursos[0]?.cargos?.[0]?.id || 'analista_judiciario');
+  const [importConcursoId, setImportConcursoId] = useState<string>(concursos[0]?.id || '');
+  const [importCargoId, setImportCargoId] = useState<string>(concursos[0]?.cargos?.[0]?.id || '');
   const [previewPlanilha, setPreviewPlanilha] = useState<Partial<Candidato>[]>([]);
   const [nomeArquivo, setNomeArquivo] = useState('');
   const [erroImportacao, setErroImportacao] = useState<string | null>(null);
@@ -434,7 +434,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
     // 4. Atualizar também na chave de persistência do localStorage
     try {
-      const storedKey = 'certam_auth_user_v7';
+      const storedKey = 'certam_auth_user_v8';
       const storedStr = localStorage.getItem(storedKey);
       if (storedStr) {
         const storedUser = JSON.parse(storedStr);
@@ -837,8 +837,35 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           </div>
 
           {/* Lista de Concursos */}
-          <div className="grid grid-cols-1 gap-5">
-            {concursos.map((c) => (
+          {concursos.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-dashed border-slate-300 p-12 text-center space-y-4 card-shadow">
+              <div className="w-12 h-12 rounded-2xl bg-teal-50 text-teal-700 flex items-center justify-center mx-auto shadow-xs">
+                <Building className="w-6 h-6" />
+              </div>
+              <div className="max-w-md mx-auto space-y-1">
+                <h3 className="font-bold text-base text-slate-800">Nenhum concurso cadastrado</h3>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  Todos os dados de teste foram removidos. O portal está limpo para inserção de editais, cargos e dados reais.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setFormId('');
+                  setFormNome('');
+                  setFormOrgao('');
+                  setFormDesc('');
+                  setModalNovoConcursoAberto(true);
+                }}
+                className="px-5 py-2.5 bg-[#07192B] hover:bg-[#0C2640] text-[#2DD4AA] font-bold text-xs rounded-xl transition-all cursor-pointer shadow-md inline-flex items-center gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Cadastrar Primeiro Concurso</span>
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-5">
+              {concursos.map((c) => (
               <div
                 key={c.id}
                 className="bg-white rounded-2xl border border-slate-200 card-shadow p-5 sm:p-6 space-y-4"
@@ -911,7 +938,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 </div>
               </div>
             ))}
-          </div>
+            </div>
+          )}
         </section>
       )}
 
@@ -1390,54 +1418,71 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             <p className="text-xs text-slate-500">
               Envie arquivos Excel (.xlsx) ou CSV com as colunas de classificação, nome, nota e cotas.
             </p>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Concurso:</label>
-                <select
-                  value={importConcursoId}
-                  onChange={(e) => handleConcursoChange(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs"
+            {concursos.length === 0 ? (
+              <div className="p-5 bg-amber-50 border border-amber-200 rounded-2xl text-amber-900 text-xs space-y-2">
+                <p className="font-semibold text-sm">Nenhum concurso cadastrado no momento.</p>
+                <p className="text-slate-600">
+                  Para importar a planilha de classificação, cadastre primeiro um concurso e os respectivos cargos na aba <strong>Concursos &amp; Cargos</strong>.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setAbaAdmin('concursos')}
+                  className="px-4 py-2 bg-[#07192B] hover:bg-[#0C2640] text-[#2DD4AA] font-bold text-xs rounded-xl transition-all cursor-pointer inline-flex items-center gap-1.5"
                 >
-                  {concursos.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.nome}
-                    </option>
-                  ))}
-                </select>
+                  <Building className="w-3.5 h-3.5" />
+                  <span>Ir para Concursos &amp; Cargos</span>
+                </button>
               </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Cargo:</label>
-                <select
-                  value={importCargoId}
-                  onChange={(e) => setImportCargoId(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs"
-                >
-                  {concursos
-                    .find((c) => c.id === importConcursoId)
-                    ?.cargos?.map((cg) => (
-                      <option key={cg.id} value={cg.id}>
-                        {cg.nome}
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Concurso:</label>
+                  <select
+                    value={importConcursoId}
+                    onChange={(e) => handleConcursoChange(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs"
+                  >
+                    {concursos.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.nome}
                       </option>
                     ))}
-                </select>
-              </div>
+                  </select>
+                </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Arquivo da Planilha:</label>
-                <input
-                  type="file"
-                  accept=".xlsx, .xls, .csv"
-                  onChange={handleFileUpload}
-                  className="block w-full text-xs text-slate-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-[#07192B] file:text-white border border-slate-300 rounded-xl bg-slate-50 p-1 cursor-pointer"
-                />
-                {nomeArquivo && (
-                  <span className="text-[11px] text-teal-700 font-medium mt-1 block">
-                    Arquivo selecionado: <strong>{nomeArquivo}</strong>
-                  </span>
-                )}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Cargo:</label>
+                  <select
+                    value={importCargoId}
+                    onChange={(e) => setImportCargoId(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs"
+                  >
+                    {concursos
+                      .find((c) => c.id === importConcursoId)
+                      ?.cargos?.map((cg) => (
+                        <option key={cg.id} value={cg.id}>
+                          {cg.nome}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Arquivo da Planilha:</label>
+                  <input
+                    type="file"
+                    accept=".xlsx, .xls, .csv"
+                    onChange={handleFileUpload}
+                    className="block w-full text-xs text-slate-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-[#07192B] file:text-white border border-slate-300 rounded-xl bg-slate-50 p-1 cursor-pointer"
+                  />
+                  {nomeArquivo && (
+                    <span className="text-[11px] text-teal-700 font-medium mt-1 block">
+                      Arquivo selecionado: <strong>{nomeArquivo}</strong>
+                    </span>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
 
             {/* BARRA DE AÇÃO DIRETA QUANDO ARQUIVO ESTÁ SELECIONADO */}
             {nomeArquivo && (

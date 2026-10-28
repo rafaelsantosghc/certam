@@ -70,8 +70,8 @@ export const AppContent: React.FC = () => {
 
   // Navigation routing state
   const [currentView, setCurrentView] = useState<'portal' | 'concurso_geral' | 'concurso' | 'lote' | 'admin' | 'politica'>('portal');
-  const [concursoId, setConcursoId] = useState<string>('tjrs_2025');
-  const [cargoId, setCargoId] = useState<string>('analista_judiciario');
+  const [concursoId, setConcursoId] = useState<string>(() => certamStore.getConcursos()[0]?.id || '');
+  const [cargoId, setCargoId] = useState<string>(() => certamStore.getConcursos()[0]?.cargos?.[0]?.id || '');
   const [initialTab, setInitialTab] = useState<string>('dashboard');
   const [sidebarMobileOpen, setSidebarMobileOpen] = useState(false);
   const [historyStack, setHistoryStack] = useState<{ view: string; params?: any }[]>([]);

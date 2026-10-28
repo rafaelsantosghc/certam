@@ -125,20 +125,27 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </button>
 
           {/* 2. Simulador de Lotes e Comarcas */}
-          <button
-            type="button"
-            onClick={() => handleLinkClick('lote', { concursoId: 'tjrs_2025', cargoId: 'analista_judiciario' })}
-            className={`w-full flex items-center gap-3.5 px-6 py-3 text-sm font-medium transition-all cursor-pointer text-left ${
-              currentView === 'lote'
-                ? 'font-semibold text-[#2DD4AA] bg-[#0C2640] border-l-4 border-[#2DD4AA]'
-                : 'text-[#94A3B8] hover:text-white hover:bg-[#0C2640]/50 border-l-4 border-transparent'
-            }`}
-          >
-            <span className="w-5 h-5 flex items-center justify-center">
-              <MapPin className="w-5 h-5" />
-            </span>
-            <span>Simulador de lotes TJRS</span>
-          </button>
+          {concursos.length > 0 && (
+            <button
+              type="button"
+              onClick={() =>
+                handleLinkClick('lote', {
+                  concursoId: concursos[0].id,
+                  cargoId: concursos[0].cargos?.[0]?.id || '',
+                })
+              }
+              className={`w-full flex items-center gap-3.5 px-6 py-3 text-sm font-medium transition-all cursor-pointer text-left ${
+                currentView === 'lote'
+                  ? 'font-semibold text-[#2DD4AA] bg-[#0C2640] border-l-4 border-[#2DD4AA]'
+                  : 'text-[#94A3B8] hover:text-white hover:bg-[#0C2640]/50 border-l-4 border-transparent'
+              }`}
+            >
+              <span className="w-5 h-5 flex items-center justify-center">
+                <MapPin className="w-5 h-5" />
+              </span>
+              <span>Simulador de lotes</span>
+            </button>
+          )}
 
           {/* 3. Painel Administrativo (Apenas para o Administrador) */}
           {usuario?.is_admin && (
@@ -202,7 +209,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
             {secaoConcursosAberta && (
               <div className="space-y-1">
-                {concursos.map((conc) => {
+                {concursos.length === 0 ? (
+                  <p className="text-[11px] text-slate-400/80 px-2.5 py-1.5 italic">
+                    Nenhum concurso ativo
+                  </p>
+                ) : (
+                  concursos.map((conc) => {
                   const isActive =
                     (currentView === 'concurso' || currentView === 'concurso_geral') &&
                     concursoAtualId === conc.id;
@@ -280,7 +292,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       )}
                     </div>
                   );
-                })}
+                })
+              )}
               </div>
             )}
           </div>

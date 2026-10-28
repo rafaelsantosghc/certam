@@ -20,7 +20,7 @@ interface AuthContextType {
   logout: () => void;
 }
 
-const AUTH_STORAGE_KEY = 'certam_auth_user_v7';
+const AUTH_STORAGE_KEY = 'certam_auth_user_v8';
 export const GOOGLE_CLIENT_ID_PADRAO = '893072513173-detf69cldt4cefhbg8ta3cpi5hb73rma.apps.googleusercontent.com';
 export const ADMIN_EMAILS = ['rafasms0@hotmail.com'];
 
@@ -50,6 +50,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.removeItem('certam_auth_user_v4');
       localStorage.removeItem('certam_auth_user_v5');
       localStorage.removeItem('certam_auth_user_v6');
+      localStorage.removeItem('certam_auth_user_v7');
 
       const stored = localStorage.getItem(AUTH_STORAGE_KEY);
       if (stored) {
@@ -237,13 +238,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       whatsapp: match?.whatsapp || '',
       read_notification_ids: [],
       outros_concursos: [],
-      concursos_inscritos: [
-        {
-          concurso_id: match?.concurso_id || 'tjrs_2025',
-          cargo_id: match?.cargo_id || 'analista_judiciario',
-          data_inscricao: new Date().toLocaleDateString('pt-BR'),
-        },
-      ],
+      concursos_inscritos: match?.concurso_id && match?.cargo_id
+        ? [
+            {
+              concurso_id: match.concurso_id,
+              cargo_id: match.cargo_id,
+              data_inscricao: new Date().toLocaleDateString('pt-BR'),
+            },
+          ]
+        : [],
     };
     setUsuario(novoCandidato);
 
