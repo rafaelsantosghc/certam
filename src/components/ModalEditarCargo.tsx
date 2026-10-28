@@ -270,7 +270,7 @@ export const ModalEditarCargo: React.FC<ModalEditarCargoProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <label className="block font-bold text-slate-800 mb-1">
-                  1. Quantitativo Total do Cargo:
+                  Quantitativo Total do Cargo:
                 </label>
                 <input
                   type="number"
@@ -287,7 +287,7 @@ export const ModalEditarCargo: React.FC<ModalEditarCargoProps> = ({
 
               <div>
                 <label className="block font-bold text-slate-800 mb-1">
-                  2. Vagas Disponíveis:
+                  Vagas Disponíveis:
                 </label>
                 <input
                   type="number"
@@ -304,7 +304,7 @@ export const ModalEditarCargo: React.FC<ModalEditarCargoProps> = ({
 
               <div>
                 <label className="block font-bold text-slate-800 mb-1">
-                  3. Vagas Imediatas (Edital):
+                  Vagas Imediatas (Edital):
                 </label>
                 <input
                   type="number"
@@ -324,7 +324,7 @@ export const ModalEditarCargo: React.FC<ModalEditarCargoProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
               <div>
                 <label className="block font-bold text-slate-800 mb-1">
-                  4. Nomeados por Este Concurso:
+                  Nomeados por Este Concurso:
                 </label>
                 <input
                   type="number"
@@ -341,7 +341,7 @@ export const ModalEditarCargo: React.FC<ModalEditarCargoProps> = ({
 
               <div>
                 <label className="block font-bold text-slate-800 mb-1">
-                  5. Convocados Ainda Não Nomeados:
+                  Convocados Ainda Não Nomeados:
                 </label>
                 <input
                   type="number"
@@ -357,11 +357,11 @@ export const ModalEditarCargo: React.FC<ModalEditarCargoProps> = ({
               </div>
             </div>
 
-            {/* Linha 3: 6. Vagas previstas para o próximo lote + Data prevista */}
+            {/* Linha 3: Vagas previstas para o próximo lote + Data prevista */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 border-t border-teal-200/60 mt-1">
               <div>
                 <label className="block font-bold text-slate-800 mb-1">
-                  6. Vagas Previstas p/ Próximo Lote:
+                  Vagas Previstas p/ Próximo Lote:
                 </label>
                 <input
                   type="number"
