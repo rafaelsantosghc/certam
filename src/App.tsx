@@ -337,14 +337,6 @@ export const AppContent: React.FC = () => {
               <span className="text-slate-300">·</span>
               <button
                 type="button"
-                onClick={() => handleNavigate('lote')}
-                className="text-slate-600 hover:text-slate-900 cursor-pointer"
-              >
-                Simulador de Lotes TJRS
-              </button>
-              <span className="text-slate-300">·</span>
-              <button
-                type="button"
                 onClick={() => handleNavigate('politica')}
                 className="text-slate-600 hover:text-slate-900 cursor-pointer"
               >

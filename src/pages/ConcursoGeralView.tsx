@@ -152,15 +152,16 @@ export const ConcursoGeralView: React.FC<ConcursoGeralViewProps> = ({
             <button
               type="button"
               onClick={() =>
-                onNavigate('lote', {
+                onNavigate('concurso', {
                   concursoId: concurso.id,
-                  cargoId: cargosAtivos[0]?.id || 'geral',
+                  cargoId: cargosAtivos[0]?.id || '',
+                  tab: 'lotes',
                 })
               }
               className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-teal-600 to-cyan-600 hover:from-teal-500 hover:to-cyan-500 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer"
             >
               <Layers className="w-4 h-4" />
-              <span>Simulador de Lotes TJRS</span>
+              <span>Lotes de Convocação</span>
             </button>
 
             <button

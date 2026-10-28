@@ -136,9 +136,14 @@ export interface Concurso {
 export type CotaTipo = 'Ampla' | 'PPP' | 'PCD' | 'Indígena';
 
 export type StatusCandidato =
+  | 'Próximo (previsão)'
+  | 'Convocado titular'
+  | 'Convocado suplente'
+  | 'Nomeado'
+  | 'Final de lista'
+  | 'Desistente'
   | 'Aguardando'
   | 'Convocado Titular'
-  | 'Nomeado'
   | 'Posse'
   | 'Exercício'
   | 'Fim de Fila'
@@ -170,6 +175,12 @@ export interface Candidato {
   whatsapp?: string;
   ordem_nomeacao?: number;
   escolhas_comarcas: string[];
+  // Dados oficiais e vinculação de Lotes
+  numero_lote_convocado?: string | number;
+  data_nomeacao?: string;
+  comarca_definitiva?: string;
+  tipo_vaga_convocacao?: string; // Ampla ou Cota (PPP, PCD, etc.)
+  papel_convocacao?: 'Titular' | 'Suplente';
   fg_cc?: {
     possui: boolean;
     registro_funcional?: string;
@@ -187,18 +198,43 @@ export interface Comarca {
   entrancia?: 'Inicial' | 'Intermediária' | 'Final';
 }
 
+export interface CandidatoConvocadoLote {
+  ordem_nomeacao: number;
+  nome: string;
+  tipo_vaga: 'Ampla' | 'Cota' | 'PPP' | 'PCD' | string;
+  papel: 'Titular' | 'Suplente';
+  candidato_id?: string;
+  comarca_escolhida?: string;
+  data_nomeacao?: string;
+  status?: string;
+}
+
+export type StatusLote = 'aberto' | 'em_escolha' | 'escolhas_definidas' | 'encerrado';
+
 export interface Lote {
   id: string;
   concurso_id: string;
   cargo_id: string;
   nome: string;
+  numero_lote?: number | string;
   ativo: boolean;
   is_ranking_visible: boolean;
   is_printing_enabled: boolean;
   travado: boolean;
+  status_lote?: StatusLote;
+  data_nomeacao?: string;
   senha?: string;
   comarcas: { nome: string; vagas: number }[];
   candidatos_ids: string[];
+  convocados?: CandidatoConvocadoLote[];
+  definicoes_escolhas?: Record<string, string>; // candidato_id ou nome -> comarca_definitiva
+}
+
+export interface ConfigCotas {
+  ampla: number; // Porcentagem Ampla Concorrência (ex: 70)
+  ppp: number;   // Porcentagem Pretos e Pardos (ex: 20)
+  pcd: number;   // Porcentagem Pessoas com Deficiência (ex: 10)
+  indigena?: number;
 }
 
 export type FaqCategoria =

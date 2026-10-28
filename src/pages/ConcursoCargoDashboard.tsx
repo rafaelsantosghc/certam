@@ -6,7 +6,9 @@ import { podeEditarConcurso, podeEditarCargo, podeEditarLote } from '../utils/pe
 import { ModalEditarConcurso } from '../components/ModalEditarConcurso';
 import { ModalEditarCargo } from '../components/ModalEditarCargo';
 import { ModalEditarLote } from '../components/ModalEditarLote';
-import { Concurso, Cargo, Candidato, Lote } from '../types';
+import { ModalEscolhaComarcasLote } from '../components/ModalEscolhaComarcasLote';
+import { calcularOrdemNomeacao, ItemOrdemNomeacao } from '../utils/ordemNomeacao';
+import { Concurso, Cargo, Candidato, Lote, ConfigCotas } from '../types';
 import { COMARCAS_RS } from '../data/comarcas';
 import { normalizarTexto } from '../data/defaultCandidates';
 import { RegionalMapSvg } from '../components/RegionalMapSvg';
@@ -47,6 +49,10 @@ import {
   ArrowLeft,
   ArrowRight,
   Layers,
+  Sliders,
+  Sparkles,
+  Percent,
+  MapPin,
 } from 'lucide-react';
 
 interface ConcursoCargoDashboardProps {
@@ -260,6 +266,113 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
     const start = (paginaAtual - 1) * (itensPorPagina as number);
     return candidatosFiltrados.slice(start, start + (itensPorPagina as number));
   }, [candidatosFiltrados, paginaAtual, itensPorPagina]);
+
+  // Sub-aba na Lista de Classificação
+  const [subAbaClassificacao, setSubAbaClassificacao] = useState<'geral' | 'ordem_nomeacao'>('geral');
+  const [configCotas, setConfigCotas] = useState<ConfigCotas>({
+    ampla: 70,
+    ppp: 20,
+    pcd: 10,
+  });
+  const [painelCotasAberto, setPainelCotasAberto] = useState(false);
+
+  // Modal para Candidato escolher comarcas dentro do Lote específico
+  const [loteSelecionadoParaEscolha, setLoteSelecionadoParaEscolha] = useState<Lote | null>(null);
+  const [modalEscolhaComarcasAberto, setModalEscolhaComarcasAberto] = useState(false);
+
+  // Cálculo da Ordem de Nomeação (puxa lotes oficiais garantidos + projeta cotas para os demais)
+  const listaOrdemNomeacao = useMemo(() => {
+    const lotesDesteCargo = lotes.filter(
+      (l) => l.concurso_id === concurso.id && (l.cargo_id === cargo.id || !l.cargo_id || l.concurso_id === 'tjrs_2025')
+    );
+    return calcularOrdemNomeacao(
+      candidatos,
+      lotesDesteCargo,
+      configCotas,
+      cargo.vagas_previstas_proximo_lote || 0
+    );
+  }, [candidatos, lotes, concurso.id, cargo.id, configCotas, cargo.vagas_previstas_proximo_lote]);
+
+  const ordemNomeacaoFiltrada = useMemo(() => {
+    return listaOrdemNomeacao.filter((item) => {
+      const matchBusca =
+        !filtroBusca.trim() ||
+        item.nome.toLowerCase().includes(filtroBusca.toLowerCase()) ||
+        item.ordem.toString() === filtroBusca.trim() ||
+        item.posicaoOriginal.toString() === filtroBusca.trim();
+
+      const matchCota =
+        filtroCota === 'todas' ||
+        item.cotaCandidato === filtroCota ||
+        item.vagaAtribuida === filtroCota;
+
+      const matchStatus = filtroStatus === 'todos' || item.status === filtroStatus;
+
+      return matchBusca && matchCota && matchStatus;
+    });
+  }, [listaOrdemNomeacao, filtroBusca, filtroCota, filtroStatus]);
+
+  const totalPaginasOrdem = useMemo(() => {
+    if (itensPorPagina === 'todos') return 1;
+    return Math.ceil(ordemNomeacaoFiltrada.length / (itensPorPagina as number)) || 1;
+  }, [ordemNomeacaoFiltrada, itensPorPagina]);
+
+  const ordemNomeacaoPaginada = useMemo(() => {
+    if (itensPorPagina === 'todos') return ordemNomeacaoFiltrada;
+    const start = (paginaAtual - 1) * (itensPorPagina as number);
+    return ordemNomeacaoFiltrada.slice(start, start + (itensPorPagina as number));
+  }, [ordemNomeacaoFiltrada, paginaAtual, itensPorPagina]);
+
+  // Helper de renderização do status padronizado
+  const renderBadgeStatus = (status?: string) => {
+    switch (status) {
+      case 'Nomeado':
+        return (
+          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-teal-100 text-teal-900 border border-teal-300 font-mono inline-block">
+            Nomeado
+          </span>
+        );
+      case 'Convocado titular':
+      case 'Convocado Titular':
+        return (
+          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 inline-block">
+            Convocado titular
+          </span>
+        );
+      case 'Convocado suplente':
+        return (
+          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-cyan-50 text-cyan-800 border border-cyan-200 inline-block">
+            Convocado suplente
+          </span>
+        );
+      case 'Próximo (previsão)':
+        return (
+          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-800 border border-indigo-200 inline-block">
+            Próximo (previsão)
+          </span>
+        );
+      case 'Final de lista':
+      case 'Fim de Fila':
+        return (
+          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200 inline-block">
+            Final de lista
+          </span>
+        );
+      case 'Desistente':
+      case 'Desistência':
+        return (
+          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-rose-800 border border-rose-200 inline-block">
+            Desistente
+          </span>
+        );
+      default:
+        return (
+          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700 inline-block">
+            {status || 'Aguardando'}
+          </span>
+        );
+    }
+  };
 
   // Escolha de comarcas na aba candidato
   const [minhasEscolhas, setMinhasEscolhas] = useState<string[]>([]);
@@ -745,24 +858,154 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
       {/* =================================================================== */}
       {/* ABA 3: LISTA DE CLASSIFICAÇÃO COM PROTEÇÃO DE DADOS                 */}
       {/* =================================================================== */}
+      {/* =================================================================== */}
+      {/* ABA 3: LISTA DE CLASSIFICAÇÃO COM SUB-ABAS E ORDEM DE NOMEAÇÃO       */}
+      {/* =================================================================== */}
       {abaAtiva === 'classificacao' && (
-        <section className="space-y-6">
+        <section className="space-y-5">
+          {/* SELETOR DE SUB-ABAS DA CLASSIFICAÇÃO */}
+          <div className="bg-white rounded-2xl border border-slate-200 p-2 card-shadow flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-1.5 overflow-x-auto">
+              <button
+                type="button"
+                onClick={() => {
+                  setSubAbaClassificacao('geral');
+                  setPaginaAtual(1);
+                }}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                  subAbaClassificacao === 'geral'
+                    ? 'bg-[#07192B] text-[#2DD4AA] shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                }`}
+              >
+                <ListOrdered className="w-4 h-4" />
+                <span>Classificação Geral por Nota</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setSubAbaClassificacao('ordem_nomeacao');
+                  setPaginaAtual(1);
+                }}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                  subAbaClassificacao === 'ordem_nomeacao'
+                    ? 'bg-[#07192B] text-[#2DD4AA] shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                }`}
+              >
+                <Sliders className="w-4 h-4" />
+                <span>Ordem de Nomeação (Previsão com Cotas)</span>
+              </button>
+            </div>
+
+            {subAbaClassificacao === 'ordem_nomeacao' && (
+              <button
+                type="button"
+                onClick={() => setPainelCotasAberto((v) => !v)}
+                className="px-3 py-1.5 rounded-xl border border-teal-200 bg-teal-50 hover:bg-teal-100 text-teal-800 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+              >
+                <Percent className="w-3.5 h-3.5 text-teal-700" />
+                <span>{painelCotasAberto ? 'Fechar Configuração de Cotas' : 'Ajustar Porcentagens de Cotas'}</span>
+              </button>
+            )}
+          </div>
+
+          {/* PAINEL DE CONFIGURAÇÃO DE COTAS (QUANDO EM ORDEM DE NOMEAÇÃO) */}
+          {subAbaClassificacao === 'ordem_nomeacao' && (
+            <div className="space-y-4">
+              {/* AVISO LEGAL ESPECULATIVO */}
+              <div className="p-4 bg-amber-50/70 border border-amber-200/90 rounded-2xl text-amber-900 text-xs space-y-1.5">
+                <div className="flex items-center gap-2 font-bold text-amber-950">
+                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span>Aviso Importante: Projeção Especulativa de Convocação</span>
+                </div>
+                <p className="text-amber-800 leading-relaxed text-[11px]">
+                  A ordem de nomeação é <strong>meramente especulativa</strong> e tem como objetivo orientar a expectativa dos candidatos.
+                  As convocações já formalizadas em <strong>lotes oficiais</strong> pelo órgão público ({concurso.orgao}) têm <strong>ordem garantida e fixada</strong>, enquanto as posições dos demais candidatos são calculadas por projeção estatística segundo o critério de alternância de cotas.
+                </p>
+              </div>
+
+              {painelCotasAberto && (
+                <div className="p-4 bg-white rounded-2xl border border-slate-200 card-shadow space-y-3 animate-in fade-in-50">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+                      <Sliders className="w-3.5 h-3.5 text-teal-600" />
+                      <span>Configurar Percentuais de Reserva de Vagas (Cotas)</span>
+                    </span>
+                    <span className="text-2xs text-slate-400">Total deve somar 100%</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-2xs font-bold text-slate-600 mb-1">
+                        Ampla Concorrência (%):
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={configCotas.ampla}
+                        onChange={(e) =>
+                          setConfigCotas((prev) => ({ ...prev, ampla: Number(e.target.value) || 0 }))
+                        }
+                        className="w-full px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono font-bold text-slate-900"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-2xs font-bold text-amber-800 mb-1">
+                        Pessoas Pretas ou Pardas - PPP (%):
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={configCotas.ppp}
+                        onChange={(e) =>
+                          setConfigCotas((prev) => ({ ...prev, ppp: Number(e.target.value) || 0 }))
+                        }
+                        className="w-full px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono font-bold text-amber-900"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-2xs font-bold text-purple-800 mb-1">
+                        Pessoas com Deficiência - PCD (%):
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={configCotas.pcd}
+                        onChange={(e) =>
+                          setConfigCotas((prev) => ({ ...prev, pcd: Number(e.target.value) || 0 }))
+                        }
+                        className="w-full px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono font-bold text-purple-900"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Banner de Aviso de Privacidade e Solicitação de Validação */}
-          <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 card-shadow flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div className="bg-white rounded-2xl border border-slate-200 p-3.5 sm:p-4 card-shadow flex flex-col md:flex-row md:items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-teal-50 border border-teal-200 text-teal-800 flex items-center justify-center shrink-0">
-                <ShieldCheck className="w-5 h-5 text-teal-600" />
+              <div className="w-9 h-9 rounded-xl bg-teal-50 border border-teal-200 text-teal-800 flex items-center justify-center shrink-0">
+                <ShieldCheck className="w-4 h-4 text-teal-600" />
               </div>
               <div>
-                <h3 className="font-bold text-sm text-slate-900">
+                <h3 className="font-bold text-xs text-slate-900">
                   {isCandidatoAprovado
                     ? 'Visualização Completa Liberada para Candidatos Homologados'
                     : 'Visualização Pública de Classificação (Posição e Nome)'}
                 </h3>
-                <p className="text-xs text-slate-500 mt-0.5">
+                <p className="text-[11px] text-slate-500 mt-0.5">
                   {isCandidatoAprovado
-                    ? 'Você possui cadastro vinculado e pode consultar as notas por disciplina, cotas e preferências de comarca de todos os candidatos.'
-                    : 'O público em geral visualiza apenas a colocação e o nome. Para visualizar notas detalhadas e preferências, identifique-se como aprovado.'}
+                    ? 'Acesso a lotes de convocação, datas de nomeação, comarcas definitivas e notas detalhadas.'
+                    : 'Para visualizar notas detalhadas e preferências completas, identifique-se como aprovado.'}
                 </p>
               </div>
             </div>
@@ -771,7 +1014,7 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
               <button
                 type="button"
                 onClick={() => setModalValidacaoAberto(true)}
-                className="px-4 py-2 bg-[#07192B] hover:bg-[#0C2640] text-[#2DD4AA] font-bold text-xs rounded-xl transition-all cursor-pointer shadow-xs whitespace-nowrap shrink-0 flex items-center gap-1.5"
+                className="px-3 py-1.5 bg-[#07192B] hover:bg-[#0C2640] text-[#2DD4AA] font-bold text-xs rounded-xl transition-all cursor-pointer shadow-xs whitespace-nowrap shrink-0 flex items-center gap-1.5"
               >
                 <AlertCircle className="w-3.5 h-3.5" />
                 <span>Não fui identificado? Solicitar ao Admin</span>
@@ -780,10 +1023,10 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
           </div>
 
           {/* Filtros da Tabela */}
-          <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 card-shadow space-y-3">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="bg-white rounded-2xl border border-slate-200 p-3.5 sm:p-4 card-shadow space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
               <div className="relative">
-                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-3" />
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
                 <input
                   type="text"
                   placeholder="Pesquisar por nome ou posição..."
@@ -792,7 +1035,7 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
                     setFiltroBusca(e.target.value);
                     setPaginaAtual(1);
                   }}
-                  className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:bg-white focus:border-teal-600 focus:outline-hidden"
+                  className="w-full pl-9 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:bg-white focus:border-teal-600 outline-hidden"
                 />
               </div>
 
@@ -802,7 +1045,7 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
                   setFiltroCota(e.target.value);
                   setPaginaAtual(1);
                 }}
-                className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-hidden"
+                className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white outline-hidden"
               >
                 <option value="todas">Todas as Cotas</option>
                 <option value="Ampla">Ampla Concorrência</option>
@@ -816,9 +1059,9 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
                   setFiltroIntencao(e.target.value);
                   setPaginaAtual(1);
                 }}
-                className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-hidden"
+                className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white outline-hidden"
               >
-                <option value="todas">Todas as Intenções de Posse</option>
+                <option value="todas">Todas as Intenções</option>
                 <option value="Sim">Pretende Assumir</option>
                 <option value="Talvez">Em Dúvida</option>
                 <option value="Não">Vai Desistir</option>
@@ -831,166 +1074,309 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
                   setFiltroStatus(e.target.value);
                   setPaginaAtual(1);
                 }}
-                className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-hidden"
+                className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white outline-hidden"
               >
                 <option value="todos">Todos os Status</option>
-                <option value="Convocado Titular">Convocado Titular</option>
-                <option value="Aguardando">Aguardando Convocação</option>
-                <option value="Desistência">Desistência Formalizada</option>
+                <option value="Próximo (previsão)">Próximo (previsão)</option>
+                <option value="Convocado titular">Convocado titular</option>
+                <option value="Convocado suplente">Convocado suplente</option>
+                <option value="Nomeado">Nomeado</option>
+                <option value="Final de lista">Final de lista</option>
+                <option value="Desistente">Desistente</option>
               </select>
             </div>
           </div>
 
-          {/* Tabela de Classificação */}
-          <div className="bg-white rounded-2xl border border-slate-200 card-shadow overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs divide-y divide-slate-100">
-                <thead className="bg-[#07192B] text-white font-serif text-2xs uppercase tracking-wider">
-                  <tr>
-                    <th className="py-3 px-3 text-center w-12 font-semibold">Pos.</th>
-                    <th className="py-3 px-4 font-semibold">Candidato</th>
-                    <th className="py-3 px-3 font-semibold text-center">Cota</th>
-                    <th className="py-3 px-3 font-semibold text-right">Nota Final</th>
-                    <th className="py-3 px-3 font-semibold text-center">Intenção</th>
-                    <th className="py-3 px-4 font-semibold">Comarca Preferencial</th>
-                    <th className="py-3 px-3 font-semibold">Status</th>
-                    <th className="py-3 px-3 font-semibold text-center">Ações</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {candidatosPaginados.length === 0 ? (
+          {/* TABELA: CLASSIFICAÇÃO GERAL POR NOTA */}
+          {subAbaClassificacao === 'geral' && (
+            <div className="bg-white rounded-2xl border border-slate-200 card-shadow overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs divide-y divide-slate-100">
+                  <thead className="bg-[#07192B] text-white font-serif text-[11px] uppercase tracking-wider">
                     <tr>
-                      <td colSpan={8} className="py-12 text-center text-xs text-slate-400">
-                        Nenhum candidato cadastrado nesta lista de classificação ainda.
-                        {isAdmin && (
-                          <div className="mt-2">
-                            <span className="text-teal-700 font-semibold">
-                              Você pode importar a planilha oficial via XLSX no Painel Admin ou cadastrar candidatos manualmente.
-                            </span>
-                          </div>
-                        )}
-                      </td>
+                      <th className="py-2.5 px-3 text-center w-12 font-semibold">Pos.</th>
+                      <th className="py-2.5 px-3 font-semibold">Candidato</th>
+                      <th className="py-2.5 px-2.5 font-semibold text-center">Cota</th>
+                      <th className="py-2.5 px-2.5 font-semibold text-right">Nota Final</th>
+                      <th className="py-2.5 px-2.5 font-semibold text-center">Lote Convocado</th>
+                      <th className="py-2.5 px-2.5 font-semibold text-center">Data Nomeação</th>
+                      <th className="py-2.5 px-3 font-semibold">Comarca Definitiva</th>
+                      <th className="py-2.5 px-3 font-semibold text-center">Status</th>
+                      <th className="py-2.5 px-2 text-center">Ações</th>
                     </tr>
-                  ) : (
-                    candidatosPaginados.map((cand) => (
-                      <tr key={cand.id} className="hover:bg-slate-50 transition-colors">
-                        <td className="py-3 px-3 text-center font-mono font-bold text-slate-900">
-                          {cand.posicao}º
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {candidatosPaginados.length === 0 ? (
+                      <tr>
+                        <td colSpan={9} className="py-10 text-center text-xs text-slate-400">
+                          Nenhum candidato localizado com os filtros selecionados.
                         </td>
-                      <td className="py-3 px-4 font-bold text-slate-900">
-                        <div>{cand.nome}</div>
-                        {isCandidatoAprovado && cand.cpf && (
-                          <span className="text-[10px] font-mono text-slate-400 block font-normal">
-                            CPF: {cand.cpf}
-                          </span>
-                        )}
-                      </td>
-                      <td className="py-3 px-3 text-center font-mono">
-                        {isCandidatoAprovado ? (
-                          <span className="px-2 py-0.5 rounded text-[11px] bg-slate-100 text-slate-700 font-semibold">
-                            {cand.cota}
-                          </span>
-                        ) : (
-                          <span className="text-slate-400 text-2xs italic">Restrito</span>
-                        )}
-                      </td>
-                      <td className="py-3 px-3 text-right font-mono font-bold text-slate-900">
-                        {isCandidatoAprovado ? (
-                          cand.nota_final.toFixed(2)
-                        ) : (
-                          <span className="text-slate-400 font-normal text-2xs italic">Restrito</span>
-                        )}
-                      </td>
-                      <td className="py-3 px-3 text-center">
-                        {isCandidatoAprovado ? (
-                          <span
-                            className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                              cand.intencao === 'Sim'
-                                ? 'bg-emerald-50 text-emerald-800'
-                                : cand.intencao === 'Não'
-                                ? 'bg-rose-50 text-rose-800'
-                                : 'bg-slate-100 text-slate-700'
-                            }`}
-                          >
-                            {cand.intencao === 'Sim' ? 'Assume' : cand.intencao === 'Não' ? 'Desiste' : 'Análise'}
-                          </span>
-                        ) : (
-                          <span className="text-slate-400 text-2xs italic">Restrito</span>
-                        )}
-                      </td>
-                      <td className="py-3 px-4 text-slate-700">
-                        {isCandidatoAprovado ? (
-                          cand.comarca_desejada_1 || 'Porto Alegre'
-                        ) : (
-                          <span className="text-slate-400 text-2xs italic flex items-center gap-1">
-                            <Lock className="w-3 h-3 text-slate-400" />
-                            <span>Restrito a Aprovados</span>
-                          </span>
-                        )}
-                      </td>
-                      <td className="py-3 px-3 text-[11px] font-semibold text-teal-800">
-                        {cand.status}
-                      </td>
-                      <td className="py-3 px-3 text-center">
-                        <div className="flex items-center justify-center gap-1">
-                          {isCandidatoAprovado && (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => setCandidatoModal(cand)}
-                                className="p-1 text-slate-600 hover:text-teal-700 rounded hover:bg-slate-100 cursor-pointer"
-                                title="Visualizar notas detalhadas"
-                              >
-                                <Eye className="w-3.5 h-3.5" />
-                              </button>
-                              {usuario && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleAbrirMensagemComCandidato(cand)}
-                                  className="p-1 text-slate-600 hover:text-[#135A7A] rounded hover:bg-slate-100 cursor-pointer"
-                                  title="Enviar mensagem privada 1 a 1"
-                                >
-                                  <MessageCircle className="w-3.5 h-3.5" />
-                                </button>
+                      </tr>
+                    ) : (
+                      candidatosPaginados.map((cand) => (
+                        <tr key={cand.id} className="hover:bg-slate-50 transition-colors">
+                          <td className="py-2.5 px-3 text-center font-mono font-bold text-slate-900">
+                            {cand.posicao}º
+                          </td>
+                          <td className="py-2.5 px-3 font-bold text-slate-900">
+                            <div>{cand.nome}</div>
+                            {isCandidatoAprovado && cand.cpf && (
+                              <span className="text-[10px] font-mono text-slate-400 block font-normal">
+                                CPF: {cand.cpf}
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-2.5 px-2.5 text-center font-mono">
+                            {isCandidatoAprovado ? (
+                              <span className="px-2 py-0.5 rounded text-[11px] bg-slate-100 text-slate-700 font-semibold">
+                                {cand.cota}
+                              </span>
+                            ) : (
+                              <span className="text-slate-400 text-2xs italic">Restrito</span>
+                            )}
+                          </td>
+                          <td className="py-2.5 px-2.5 text-right font-mono font-bold text-slate-900">
+                            {isCandidatoAprovado ? (
+                              cand.nota_final.toFixed(2)
+                            ) : (
+                              <span className="text-slate-400 font-normal text-2xs italic">Restrito</span>
+                            )}
+                          </td>
+                          <td className="py-2.5 px-2.5 text-center">
+                            {cand.numero_lote_convocado ? (
+                              <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-teal-50 text-teal-800 border border-teal-200">
+                                {cand.numero_lote_convocado}
+                              </span>
+                            ) : (
+                              <span className="text-slate-400 font-mono">-</span>
+                            )}
+                          </td>
+                          <td className="py-2.5 px-2.5 text-center font-mono text-slate-700">
+                            {cand.data_nomeacao || '-'}
+                          </td>
+                          <td className="py-2.5 px-3 text-slate-700">
+                            {cand.comarca_definitiva ? (
+                              <span className="font-semibold text-purple-950 bg-purple-50 px-2 py-0.5 rounded-md border border-purple-200 text-[11px]">
+                                {cand.comarca_definitiva}
+                              </span>
+                            ) : isCandidatoAprovado ? (
+                              <span className="text-slate-500 text-[11px] italic">
+                                {cand.comarca_desejada_1 ? `${cand.comarca_desejada_1} (1ª opção)` : '-'}
+                              </span>
+                            ) : (
+                              <span className="text-slate-400 text-2xs italic">Restrito</span>
+                            )}
+                          </td>
+                          <td className="py-2.5 px-3 text-center">
+                            {renderBadgeStatus(cand.status)}
+                          </td>
+                          <td className="py-2.5 px-2 text-center">
+                            <div className="flex items-center justify-center gap-1">
+                              {isCandidatoAprovado && (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => setCandidatoModal(cand)}
+                                    className="p-1 text-slate-600 hover:text-teal-700 rounded hover:bg-slate-100 cursor-pointer"
+                                    title="Visualizar notas detalhadas"
+                                  >
+                                    <Eye className="w-3.5 h-3.5" />
+                                  </button>
+                                  {usuario && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleAbrirMensagemComCandidato(cand)}
+                                      className="p-1 text-slate-600 hover:text-[#135A7A] rounded hover:bg-slate-100 cursor-pointer"
+                                      title="Enviar mensagem privada 1 a 1"
+                                    >
+                                      <MessageCircle className="w-3.5 h-3.5" />
+                                    </button>
+                                  )}
+                                </>
                               )}
-                            </>
-                          )}
-                        </div>
-                      </td>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Paginação */}
+              <div className="p-3.5 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                <div className="text-slate-600 font-medium">
+                  Página <strong className="text-slate-900">{paginaAtual}</strong> de{' '}
+                  <strong className="text-slate-900">{totalPaginas}</strong> | Total:{' '}
+                  <strong className="text-slate-900">{candidatosFiltrados.length}</strong> candidatos
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={paginaAtual <= 1}
+                    onClick={() => setPaginaAtual((p) => Math.max(1, p - 1))}
+                    className="px-3 py-1 bg-white hover:bg-slate-100 border border-slate-300 rounded-lg font-semibold disabled:opacity-40 cursor-pointer"
+                  >
+                    ← Anterior
+                  </button>
+                  <button
+                    type="button"
+                    disabled={paginaAtual >= totalPaginas}
+                    onClick={() => setPaginaAtual((p) => Math.min(totalPaginas, p + 1))}
+                    className="px-3 py-1 bg-white hover:bg-slate-100 border border-slate-300 rounded-lg font-semibold disabled:opacity-40 cursor-pointer"
+                  >
+                    Próxima →
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TABELA: ORDEM DE NOMEAÇÃO (PREVISÃO COM COTAS) */}
+          {subAbaClassificacao === 'ordem_nomeacao' && (
+            <div className="bg-white rounded-2xl border border-slate-200 card-shadow overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs divide-y divide-slate-100">
+                  <thead className="bg-[#07192B] text-white font-serif text-[11px] uppercase tracking-wider">
+                    <tr>
+                      <th className="py-2.5 px-3 text-center w-16 font-semibold">Ordem</th>
+                      <th className="py-2.5 px-3 font-semibold">Garantia / Tipo</th>
+                      <th className="py-2.5 px-3 font-semibold">Candidato</th>
+                      <th className="py-2.5 px-2.5 font-semibold text-center">Cota do Candidato</th>
+                      <th className="py-2.5 px-2.5 font-semibold text-center">Vaga Atribuída</th>
+                      <th className="py-2.5 px-2.5 font-semibold text-center">Lote Convocado</th>
+                      <th className="py-2.5 px-2.5 font-semibold text-center">Data Nomeação</th>
+                      <th className="py-2.5 px-3 font-semibold">Comarca Definitiva</th>
+                      <th className="py-2.5 px-3 font-semibold text-center">Status</th>
                     </tr>
-                  )))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {ordemNomeacaoPaginada.length === 0 ? (
+                      <tr>
+                        <td colSpan={9} className="py-10 text-center text-xs text-slate-400">
+                          Nenhum candidato localizado na simulação de ordem de nomeação.
+                        </td>
+                      </tr>
+                    ) : (
+                      ordemNomeacaoPaginada.map((item) => (
+                        <tr
+                          key={`${item.ordem}-${item.candidatoId}`}
+                          className={`transition-colors ${
+                            item.garantido
+                              ? 'bg-emerald-50/20 hover:bg-emerald-50/40 border-l-4 border-l-emerald-600'
+                              : 'hover:bg-slate-50'
+                          }`}
+                        >
+                          <td className="py-2.5 px-3 text-center font-mono font-bold text-slate-900">
+                            {item.ordem}º
+                          </td>
 
-            {/* Paginação */}
-            <div className="p-4 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-              <div className="text-slate-600 font-medium">
-                Página <strong className="text-slate-900">{paginaAtual}</strong> de{' '}
-                <strong className="text-slate-900">{totalPaginas}</strong> | Total:{' '}
-                <strong className="text-slate-900">{candidatosFiltrados.length}</strong> candidatos
+                          {/* Tipo de Ordem: Garantida (Oficial) vs Previsão Especulativa */}
+                          <td className="py-2.5 px-3">
+                            {item.garantido ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-100 text-emerald-900 border border-emerald-300">
+                                <CheckCircle2 className="w-3 h-3 text-emerald-700 shrink-0" />
+                                <span>Ordem Garantida (Oficial)</span>
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium bg-slate-100 text-slate-600 border border-slate-200">
+                                <Sparkles className="w-3 h-3 text-indigo-500 shrink-0" />
+                                <span>Previsão Especulativa</span>
+                              </span>
+                            )}
+                          </td>
+
+                          <td className="py-2.5 px-3 font-bold text-slate-900">
+                            <div>{item.nome}</div>
+                            <span className="text-[10px] font-mono text-slate-400 font-normal">
+                              {item.posicaoOriginal}º lugar original
+                            </span>
+                          </td>
+
+                          <td className="py-2.5 px-2.5 text-center font-mono">
+                            <span className="px-2 py-0.5 rounded text-[11px] bg-slate-100 text-slate-700 font-semibold">
+                              {item.cotaCandidato}
+                            </span>
+                          </td>
+
+                          <td className="py-2.5 px-2.5 text-center font-mono">
+                            <span
+                              className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                item.vagaAtribuida === 'PCD'
+                                  ? 'bg-purple-100 text-purple-900 border border-purple-200'
+                                  : item.vagaAtribuida === 'PPP'
+                                  ? 'bg-amber-100 text-amber-900 border border-amber-200'
+                                  : 'bg-teal-50 text-teal-900 border border-teal-200'
+                              }`}
+                            >
+                              Vaga {item.vagaAtribuida}
+                            </span>
+                          </td>
+
+                          <td className="py-2.5 px-2.5 text-center">
+                            {item.loteNumero ? (
+                              <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-teal-50 text-teal-800 border border-teal-200">
+                                {item.loteNumero}
+                              </span>
+                            ) : (
+                              <span className="text-slate-400 font-mono">-</span>
+                            )}
+                          </td>
+
+                          <td className="py-2.5 px-2.5 text-center font-mono text-slate-700">
+                            {item.dataNomeacao || '-'}
+                          </td>
+
+                          <td className="py-2.5 px-3 text-slate-700">
+                            {item.comarcaDefinitiva ? (
+                              <span className="font-semibold text-purple-950 bg-purple-50 px-2 py-0.5 rounded-md border border-purple-200 text-[11px]">
+                                {item.comarcaDefinitiva}
+                              </span>
+                            ) : (
+                              <span className="text-slate-400 font-mono">-</span>
+                            )}
+                          </td>
+
+                          <td className="py-2.5 px-3 text-center">
+                            {renderBadgeStatus(item.status)}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
               </div>
 
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  disabled={paginaAtual <= 1}
-                  onClick={() => setPaginaAtual((p) => Math.max(1, p - 1))}
-                  className="px-3 py-1 bg-white hover:bg-slate-100 border border-slate-300 rounded-lg font-semibold disabled:opacity-40 cursor-pointer"
-                >
-                  ← Anterior
-                </button>
-                <button
-                  type="button"
-                  disabled={paginaAtual >= totalPaginas}
-                  onClick={() => setPaginaAtual((p) => Math.min(totalPaginas, p + 1))}
-                  className="px-3 py-1 bg-white hover:bg-slate-100 border border-slate-300 rounded-lg font-semibold disabled:opacity-40 cursor-pointer"
-                >
-                  Próxima →
-                </button>
+              {/* Paginação */}
+              <div className="p-3.5 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                <div className="text-slate-600 font-medium">
+                  Página <strong className="text-slate-900">{paginaAtual}</strong> de{' '}
+                  <strong className="text-slate-900">{totalPaginasOrdem}</strong> | Total:{' '}
+                  <strong className="text-slate-900">{ordemNomeacaoFiltrada.length}</strong> posições
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={paginaAtual <= 1}
+                    onClick={() => setPaginaAtual((p) => Math.max(1, p - 1))}
+                    className="px-3 py-1 bg-white hover:bg-slate-100 border border-slate-300 rounded-lg font-semibold disabled:opacity-40 cursor-pointer"
+                  >
+                    ← Anterior
+                  </button>
+                  <button
+                    type="button"
+                    disabled={paginaAtual >= totalPaginasOrdem}
+                    onClick={() => setPaginaAtual((p) => Math.min(totalPaginasOrdem, p + 1))}
+                    className="px-3 py-1 bg-white hover:bg-slate-100 border border-slate-300 rounded-lg font-semibold disabled:opacity-40 cursor-pointer"
+                  >
+                    Próxima →
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </section>
       )}
 
@@ -1034,22 +1420,6 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
                 >
                   <Plus className="w-4 h-4" />
                   <span>Novo Lote de Convocação</span>
-                </button>
-              )}
-
-              {isCandidatoAprovado && (
-                <button
-                  type="button"
-                  onClick={() =>
-                    onNavigate('lote', {
-                      concursoId: concurso.id,
-                      cargoId: cargo.id,
-                    })
-                  }
-                  className="px-4 py-2.5 bg-gradient-to-r from-teal-600 to-cyan-600 hover:from-teal-500 hover:to-cyan-500 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap shrink-0"
-                >
-                  <Layers className="w-4 h-4" />
-                  <span>Abrir Simulador de Lotes TJRS →</span>
                 </button>
               )}
             </div>
@@ -1191,14 +1561,13 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
                       {estaContemplado && (
                         <button
                           type="button"
-                          onClick={() =>
-                            onNavigate('lote', {
-                              concursoId: concurso.id,
-                              cargoId: cargo.id,
-                            })
-                          }
+                          onClick={() => {
+                            setLoteSelecionadoParaEscolha(lote);
+                            setModalEscolhaComarcasAberto(true);
+                          }}
                           className="px-5 py-2.5 bg-[#07192B] hover:bg-[#0C2640] text-[#2DD4AA] font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer flex items-center justify-center gap-2 whitespace-nowrap"
                         >
+                          <MapPin className="w-3.5 h-3.5" />
                           <span>Acessar Lote e Escolher Comarcas</span>
                           <ArrowRight className="w-3.5 h-3.5" />
                         </button>
@@ -1571,6 +1940,26 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
           showToast(loteEditando ? `Lote "${salvo.nome}" atualizado!` : `Lote "${salvo.nome}" criado com sucesso!`);
         }}
       />
+
+      {/* Modal Escolha de Comarcas no Lote pelo Candidato */}
+      {modalEscolhaComarcasAberto && loteSelecionadoParaEscolha && (
+        <ModalEscolhaComarcasLote
+          aberto={modalEscolhaComarcasAberto}
+          onClose={() => {
+            setModalEscolhaComarcasAberto(false);
+            setLoteSelecionadoParaEscolha(null);
+          }}
+          lote={loteSelecionadoParaEscolha}
+          candidato={meuCandidato}
+          concursoId={concurso.id}
+          cargoId={cargo.id}
+          onSalvo={() => {
+            setCandidatos(lotesStore.getCandidatos(concurso.id, cargo.id));
+            reloadData();
+            showToast('Preferências de comarca no lote salvas com sucesso!');
+          }}
+        />
+      )}
     </div>
   );
 };
