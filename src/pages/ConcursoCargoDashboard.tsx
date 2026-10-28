@@ -2,7 +2,11 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { certamStore } from '../store/certamStore';
 import { lotesStore } from '../store/lotesStore';
 import { useAuth } from '../store/authContext';
-import { Concurso, Cargo, Candidato } from '../types';
+import { podeEditarConcurso, podeEditarCargo, podeEditarLote } from '../utils/permissions';
+import { ModalEditarConcurso } from '../components/ModalEditarConcurso';
+import { ModalEditarCargo } from '../components/ModalEditarCargo';
+import { ModalEditarLote } from '../components/ModalEditarLote';
+import { Concurso, Cargo, Candidato, Lote } from '../types';
 import { COMARCAS_RS } from '../data/comarcas';
 import { normalizarTexto } from '../data/defaultCandidates';
 import { RegionalMapSvg } from '../components/RegionalMapSvg';
@@ -22,6 +26,7 @@ import {
   Search,
   Eye,
   Plus,
+  Pencil,
   ArrowUp,
   ArrowDown,
   Trash2,
@@ -61,13 +66,48 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
 }) => {
   const { usuario, isAdmin, loginGoogle } = useAuth();
 
-  const concurso: Concurso = useMemo(() => {
+  const [concurso, setConcurso] = useState<Concurso>(() => {
     return certamStore.getConcurso(concursoId) || certamStore.getConcursos()[0];
-  }, [concursoId]);
+  });
 
-  const cargo: Cargo = useMemo(() => {
-    return certamStore.getCargo(concurso.id, cargoId) || concurso.cargos[0];
-  }, [concurso, cargoId]);
+  const [cargo, setCargo] = useState<Cargo>(() => {
+    const c = certamStore.getConcurso(concursoId) || certamStore.getConcursos()[0];
+    return certamStore.getCargo(c.id, cargoId) || c.cargos[0];
+  });
+
+  const [lotes, setLotes] = useState<Lote[]>(() => lotesStore.getLotes());
+
+  useEffect(() => {
+    const c = certamStore.getConcurso(concursoId) || certamStore.getConcursos()[0];
+    setConcurso(c);
+    setCargo(certamStore.getCargo(c.id, cargoId) || c.cargos[0]);
+    setLotes(lotesStore.getLotes());
+  }, [concursoId, cargoId]);
+
+  const [modalEditarConcursoAberto, setModalEditarConcursoAberto] = useState(false);
+  const [modalEditarCargoAberto, setModalEditarCargoAberto] = useState(false);
+  const [modalEditarLoteAberto, setModalEditarLoteAberto] = useState(false);
+  const [loteEditando, setLoteEditando] = useState<Lote | null>(null);
+
+  const podeEditarEsteConcurso = podeEditarConcurso(usuario, concurso.id);
+  const podeEditarEsteCargo = podeEditarCargo(usuario, concurso.id, cargo.id);
+  const podeEditarEsteLote = podeEditarLote(usuario, concurso.id, cargo.id);
+
+  const reloadData = () => {
+    const c = certamStore.getConcurso(concursoId) || certamStore.getConcursos()[0];
+    setConcurso(c);
+    setCargo(certamStore.getCargo(c.id, cargoId) || c.cargos[0]);
+    setLotes(lotesStore.getLotes());
+    setCandidatos(lotesStore.getCandidatos(c.id, cargo.id));
+  };
+
+  const handleExcluirLote = (loteId: string, nome: string) => {
+    if (window.confirm(`Tem certeza que deseja excluir o lote "${nome}"?`)) {
+      lotesStore.removerLote(loteId);
+      setLotes(lotesStore.getLotes());
+      showToast(`Lote "${nome}" excluído com sucesso.`);
+    }
+  };
 
   const [abaAtiva, setAbaAtiva] = useState<
     | 'dashboard'
@@ -356,7 +396,31 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
         </div>
 
         {/* Simulador de Lotes e Atalhos */}
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          {podeEditarEsteConcurso && (
+            <button
+              type="button"
+              onClick={() => setModalEditarConcursoAberto(true)}
+              className="flex items-center gap-1.5 bg-white/10 hover:bg-white/20 text-slate-200 font-bold px-3 py-2 rounded-xl text-xs shadow-xs transition-all cursor-pointer border border-white/10"
+              title="Editar dados gerais do concurso"
+            >
+              <Pencil className="w-3.5 h-3.5 text-teal-300" />
+              <span>Editar Concurso</span>
+            </button>
+          )}
+
+          {podeEditarEsteCargo && (
+            <button
+              type="button"
+              onClick={() => setModalEditarCargoAberto(true)}
+              className="flex items-center gap-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold px-3.5 py-2 rounded-xl text-xs shadow-xs transition-all cursor-pointer"
+              title="Editar dados deste cargo (vagas, escolaridade, etc.)"
+            >
+              <Pencil className="w-3.5 h-3.5 text-slate-950" />
+              <span>Editar Cargo</span>
+            </button>
+          )}
+
           <button
             type="button"
             onClick={() =>
@@ -943,27 +1007,42 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
               </p>
             </div>
 
-            {isCandidatoAprovado && (
-              <button
-                type="button"
-                onClick={() =>
-                  onNavigate('lote', {
-                    concursoId: concurso.id,
-                    cargoId: cargo.id,
-                  })
-                }
-                className="px-4 py-2.5 bg-gradient-to-r from-teal-600 to-cyan-600 hover:from-teal-500 hover:to-cyan-500 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap shrink-0"
-              >
-                <Layers className="w-4 h-4" />
-                <span>Abrir Simulador de Lotes TJRS →</span>
-              </button>
-            )}
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              {podeEditarEsteLote && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLoteEditando(null);
+                    setModalEditarLoteAberto(true);
+                  }}
+                  className="px-4 py-2.5 bg-[#07192B] hover:bg-[#0C2640] text-[#2DD4AA] font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Novo Lote de Convocação</span>
+                </button>
+              )}
+
+              {isCandidatoAprovado && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    onNavigate('lote', {
+                      concursoId: concurso.id,
+                      cargoId: cargo.id,
+                    })
+                  }
+                  className="px-4 py-2.5 bg-gradient-to-r from-teal-600 to-cyan-600 hover:from-teal-500 hover:to-cyan-500 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap shrink-0"
+                >
+                  <Layers className="w-4 h-4" />
+                  <span>Abrir Simulador de Lotes TJRS →</span>
+                </button>
+              )}
+            </div>
           </div>
 
           {/* LISTA DOS LOTES DISPONÍVEIS */}
           <div className="space-y-4">
-            {lotesStore
-              .getLotes()
+            {lotes
               .filter(
                 (l) =>
                   l.concurso_id === concurso.id &&
@@ -996,10 +1075,10 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
                           <span
                             className={`px-2.5 py-0.5 rounded-md text-[11px] font-bold ${
                               lote.travado
-                                ? 'bg-amber-100 text-amber-800 border border-amber-300'
-                                : lote.ativo
-                                ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                                : 'bg-slate-100 text-slate-700'
+                                  ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                                  : lote.ativo
+                                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                  : 'bg-slate-100 text-slate-700'
                             }`}
                           >
                             {lote.travado ? '🔒 Em Escolha / Travado' : '🟢 Ativo para Manifestação'}
@@ -1024,6 +1103,31 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
                             {totalConvocados} candidatos
                           </span>
                         </div>
+
+                        {podeEditarEsteLote && (
+                          <div className="flex items-center gap-1.5 pl-3 border-l border-slate-200">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setLoteEditando(lote);
+                                setModalEditarLoteAberto(true);
+                              }}
+                              className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs rounded-lg transition-colors cursor-pointer flex items-center gap-1 border border-slate-200"
+                              title="Editar configurações do lote"
+                            >
+                              <Pencil className="w-3.5 h-3.5 text-slate-600" />
+                              <span>Editar</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleExcluirLote(lote.id, lote.nome)}
+                              className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                              title="Excluir Lote"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </div>
 
@@ -1412,6 +1516,45 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
         onClose={() => setDmDrawerAberto(false)}
         destinatarioInicialEmail={dmDestinatarioEmail}
         destinatarioInicialNome={dmDestinatarioNome}
+      />
+
+      {/* Modal Editar Concurso */}
+      <ModalEditarConcurso
+        aberto={modalEditarConcursoAberto}
+        onClose={() => setModalEditarConcursoAberto(false)}
+        concurso={concurso}
+        onSalvo={(salvo) => {
+          reloadData();
+          showToast(`Concurso "${salvo.nome}" atualizado com sucesso!`);
+        }}
+      />
+
+      {/* Modal Editar Cargo */}
+      <ModalEditarCargo
+        aberto={modalEditarCargoAberto}
+        onClose={() => setModalEditarCargoAberto(false)}
+        concursoId={concurso.id}
+        cargo={cargo}
+        onSalvo={(salvo) => {
+          reloadData();
+          showToast(`Cargo "${salvo.nome}" atualizado com sucesso!`);
+        }}
+      />
+
+      {/* Modal Editar / Criar Lote */}
+      <ModalEditarLote
+        aberto={modalEditarLoteAberto}
+        onClose={() => {
+          setModalEditarLoteAberto(false);
+          setLoteEditando(null);
+        }}
+        concursoId={concurso.id}
+        cargoId={cargo.id}
+        lote={loteEditando}
+        onSalvo={(salvo) => {
+          reloadData();
+          showToast(loteEditando ? `Lote "${salvo.nome}" atualizado!` : `Lote "${salvo.nome}" criado com sucesso!`);
+        }}
       />
     </div>
   );

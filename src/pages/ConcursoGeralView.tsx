@@ -1,6 +1,10 @@
-import React, { useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { certamStore } from '../store/certamStore';
 import { lotesStore } from '../store/lotesStore';
+import { useAuth } from '../store/authContext';
+import { podeEditarConcurso, podeEditarCargo } from '../utils/permissions';
+import { ModalEditarConcurso } from '../components/ModalEditarConcurso';
+import { ModalEditarCargo } from '../components/ModalEditarCargo';
 import { Concurso, Cargo } from '../types';
 import { QuadroVagasView } from '../components/QuadroVagasView';
 import {
@@ -17,6 +21,8 @@ import {
   MapPin,
   ExternalLink,
   HelpCircle,
+  Pencil,
+  Plus,
 } from 'lucide-react';
 
 interface ConcursoGeralViewProps {
@@ -30,9 +36,32 @@ export const ConcursoGeralView: React.FC<ConcursoGeralViewProps> = ({
   onNavigate,
   onVoltar,
 }) => {
-  const concurso: Concurso = useMemo(() => {
+  const { usuario } = useAuth();
+  const [concurso, setConcurso] = useState<Concurso>(() => {
     return certamStore.getConcurso(concursoId) || certamStore.getConcursos()[0];
+  });
+
+  useEffect(() => {
+    const atual = certamStore.getConcurso(concursoId) || certamStore.getConcursos()[0];
+    if (atual) setConcurso(atual);
   }, [concursoId]);
+
+  const [modalEditarConcursoAberto, setModalEditarConcursoAberto] = useState(false);
+  const [modalEditarCargoAberto, setModalEditarCargoAberto] = useState(false);
+  const [cargoEditando, setCargoEditando] = useState<Cargo | null>(null);
+
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
+  const showToast = (msg: string) => {
+    setToastMsg(msg);
+    setTimeout(() => setToastMsg(null), 3000);
+  };
+
+  const reloadData = () => {
+    const atualizado = certamStore.getConcurso(concursoId) || certamStore.getConcursos()[0];
+    if (atualizado) setConcurso(atualizado);
+  };
+
+  const podeEditarEsteConcurso = podeEditarConcurso(usuario, concurso.id);
 
   const cargosAtivos = useMemo(() => {
     return concurso.cargos?.filter((c) => c.ativo) || [];
@@ -105,6 +134,17 @@ export const ConcursoGeralView: React.FC<ConcursoGeralViewProps> = ({
 
           {/* Atalhos Rápidos do Concurso */}
           <div className="flex flex-wrap lg:flex-col gap-2 shrink-0">
+            {podeEditarEsteConcurso && (
+              <button
+                type="button"
+                onClick={() => setModalEditarConcursoAberto(true)}
+                className="flex items-center gap-2 px-4 py-2.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer"
+              >
+                <Pencil className="w-4 h-4 text-slate-950" />
+                <span>Editar Concurso</span>
+              </button>
+            )}
+
             <button
               type="button"
               onClick={() =>
@@ -182,9 +222,24 @@ export const ConcursoGeralView: React.FC<ConcursoGeralViewProps> = ({
             </p>
           </div>
 
-          <span className="text-xs text-slate-500">
-            {cargosAtivos.length} cargo(s) cadastrado(s)
-          </span>
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-slate-500">
+              {cargosAtivos.length} cargo(s) cadastrado(s)
+            </span>
+            {podeEditarEsteConcurso && (
+              <button
+                type="button"
+                onClick={() => {
+                  setCargoEditando(null);
+                  setModalEditarCargoAberto(true);
+                }}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 bg-[#07192B] hover:bg-[#0C2640] text-[#2DD4AA] font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Adicionar Cargo</span>
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -199,14 +254,32 @@ export const ConcursoGeralView: React.FC<ConcursoGeralViewProps> = ({
               >
                 <div className="space-y-3">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="px-2.5 py-0.5 rounded-md bg-teal-50 text-teal-800 text-[11px] font-bold border border-teal-200">
-                      Nível {cg.nivel}
-                    </span>
-
-                    {cg.tem_cr && (
-                      <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 text-[10px] font-mono font-bold">
-                        CR Ativo
+                    <div className="flex items-center gap-2">
+                      <span className="px-2.5 py-0.5 rounded-md bg-teal-50 text-teal-800 text-[11px] font-bold border border-teal-200">
+                        Nível {cg.nivel}
                       </span>
+
+                      {cg.tem_cr && (
+                        <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 text-[10px] font-mono font-bold">
+                          CR Ativo
+                        </span>
+                      )}
+                    </div>
+
+                    {podeEditarCargo(usuario, concurso.id, cg.id) && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setCargoEditando(cg);
+                          setModalEditarCargoAberto(true);
+                        }}
+                        className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-teal-50 hover:text-teal-800 text-slate-700 text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                        title="Editar dados deste cargo"
+                      >
+                        <Pencil className="w-3 h-3 text-slate-500" />
+                        <span>Editar</span>
+                      </button>
                     )}
                   </div>
 
@@ -348,6 +421,40 @@ export const ConcursoGeralView: React.FC<ConcursoGeralViewProps> = ({
           </div>
         </div>
       </section>
+
+      {/* Toast Feedback */}
+      {toastMsg && (
+        <div className="fixed bottom-5 right-5 z-50 flex items-center gap-2 px-4 py-3 rounded-xl shadow-xl text-xs font-semibold text-white bg-[#07192B] border border-[#2DD4AA]/40 animate-bounce">
+          <CheckCircle2 className="w-4 h-4 text-[#2DD4AA]" />
+          <span>{toastMsg}</span>
+        </div>
+      )}
+
+      {/* Modal Editar Concurso */}
+      <ModalEditarConcurso
+        aberto={modalEditarConcursoAberto}
+        onClose={() => setModalEditarConcursoAberto(false)}
+        concurso={concurso}
+        onSalvo={(salvo) => {
+          reloadData();
+          showToast(`Concurso "${salvo.nome}" atualizado com sucesso!`);
+        }}
+      />
+
+      {/* Modal Editar / Adicionar Cargo */}
+      <ModalEditarCargo
+        aberto={modalEditarCargoAberto}
+        onClose={() => {
+          setModalEditarCargoAberto(false);
+          setCargoEditando(null);
+        }}
+        concursoId={concurso.id}
+        cargo={cargoEditando}
+        onSalvo={(salvo) => {
+          reloadData();
+          showToast(cargoEditando ? `Cargo "${salvo.nome}" atualizado!` : `Cargo "${salvo.nome}" cadastrado com sucesso!`);
+        }}
+      />
     </div>
   );
 };

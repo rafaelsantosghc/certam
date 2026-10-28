@@ -17,6 +17,7 @@ import {
   MensagemContatoAdmin,
   NotificacaoItem,
   TipoNotificacao,
+  Lote,
 } from '../types';
 import { sanitizeInput, sanitizeFileName } from '../utils/security';
 import * as XLSX from 'xlsx';
@@ -47,8 +48,13 @@ import {
   Send,
   Inbox,
   ArrowLeft,
+  Layers,
+  Briefcase,
 } from 'lucide-react';
 import { userRegistryStore } from '../store/userRegistryStore';
+import { ModalEditarConcurso } from '../components/ModalEditarConcurso';
+import { ModalEditarCargo } from '../components/ModalEditarCargo';
+import { ModalEditarLote } from '../components/ModalEditarLote';
 
 interface AdminPanelProps {
   initialTab?: string;
@@ -67,6 +73,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   const [abaAdmin, setAbaAdmin] = useState<
     | 'concursos'
+    | 'lotes'
     | 'auditoria'
     | 'validacoes'
     | 'contatos'
@@ -77,6 +84,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   >((initialTab as any) || 'concursos');
 
   const [concursos, setConcursos] = useState<Concurso[]>(() => certamStore.getConcursos());
+  const [lotesLista, setLotesLista] = useState<Lote[]>(() => lotesStore.getLotes());
+  const [filtroLoteConcurso, setFiltroLoteConcurso] = useState<string>('todos');
+  const [modalEditarLoteAberto, setModalEditarLoteAberto] = useState(false);
+  const [loteEditando, setLoteEditando] = useState<Lote | null>(null);
+  const [loteConcursoAlvoId, setLoteConcursoAlvoId] = useState<string>('');
+  const [loteCargoAlvoId, setLoteCargoAlvoId] = useState<string>('');
   const [busca, setBusca] = useState('');
 
   // -------------------------------------------------------------
@@ -354,6 +367,31 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   const reloadData = () => {
     setConcursos(certamStore.getConcursos());
+    setLotesLista(lotesStore.getLotes());
+  };
+
+  const handleExcluirConcurso = (concursoId: string, nome: string) => {
+    if (window.confirm(`Tem certeza que deseja excluir o concurso "${nome}" e todos os seus cargos associados?`)) {
+      certamStore.removerConcurso(concursoId);
+      reloadData();
+      showToast(`Concurso "${nome}" excluído com sucesso.`);
+    }
+  };
+
+  const handleExcluirCargo = (concursoId: string, cargoId: string, nome: string) => {
+    if (window.confirm(`Tem certeza que deseja excluir o cargo "${nome}"?`)) {
+      certamStore.removerCargo(concursoId, cargoId);
+      reloadData();
+      showToast(`Cargo "${nome}" excluído com sucesso.`);
+    }
+  };
+
+  const handleExcluirLote = (loteId: string, nome: string) => {
+    if (window.confirm(`Tem certeza que deseja excluir o lote de convocação "${nome}"?`)) {
+      lotesStore.removerLote(loteId);
+      setLotesLista(lotesStore.getLotes());
+      showToast(`Lote "${nome}" excluído com sucesso.`);
+    }
   };
 
   // Metrics
@@ -712,6 +750,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
           <button
             type="button"
+            onClick={() => setAbaAdmin('lotes')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+              abaAdmin === 'lotes'
+                ? 'bg-[#0C2640] text-[#2DD4AA]'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            <Layers className="w-4 h-4" />
+            <span>Lotes de Convocação</span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => setAbaAdmin('auditoria')}
             className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap relative ${
               abaAdmin === 'auditoria'
@@ -816,18 +867,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 Concursos & Cargos Cadastrados
               </h2>
               <p className="text-xs text-slate-500">
-                Gestão dos certames ativos no CERTAM. Configure editais, órgãos e adicione cargos específicos.
+                Gestão dos certames ativos no CERTAM. Configure editais, órgãos, adicione ou edite cargos específicos.
               </p>
             </div>
 
             <button
               type="button"
               onClick={() => {
-                setFormId('');
-                setFormNome('');
-                setFormOrgao('');
-                setFormDesc('');
-                setModalNovoConcursoAberto(true);
+                setConcursoEditando(null);
+                setModalEditarConcursoAberto(true);
               }}
               className="px-4 py-2 bg-[#07192B] hover:bg-[#0C2640] text-[#2DD4AA] font-bold text-xs rounded-xl transition-all cursor-pointer shadow-xs flex items-center gap-2 shrink-0"
             >
@@ -851,11 +899,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               <button
                 type="button"
                 onClick={() => {
-                  setFormId('');
-                  setFormNome('');
-                  setFormOrgao('');
-                  setFormDesc('');
-                  setModalNovoConcursoAberto(true);
+                  setConcursoEditando(null);
+                  setModalEditarConcursoAberto(true);
                 }}
                 className="px-5 py-2.5 bg-[#07192B] hover:bg-[#0C2640] text-[#2DD4AA] font-bold text-xs rounded-xl transition-all cursor-pointer shadow-md inline-flex items-center gap-2"
               >
@@ -888,16 +933,34 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     <button
                       type="button"
                       onClick={() => {
+                        setConcursoEditando(c);
+                        setModalEditarConcursoAberto(true);
+                      }}
+                      className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs rounded-lg transition-colors cursor-pointer flex items-center gap-1 border border-slate-200"
+                      title="Editar informações do concurso"
+                    >
+                      <Pencil className="w-3.5 h-3.5 text-slate-600" />
+                      <span>Editar Concurso</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
                         setConcursoAlvoId(c.id);
-                        setFormCargoNome('');
-                        setFormCargoId('');
-                        setFormCargoVagas(0);
-                        setModalNovoCargoAberto(true);
+                        setCargoEditando(null);
+                        setModalEditarCargoAberto(true);
                       }}
                       className="px-3 py-1.5 bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 font-bold text-xs rounded-lg transition-colors cursor-pointer flex items-center gap-1"
                     >
                       <Plus className="w-3.5 h-3.5" />
                       <span>Adicionar Cargo</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleExcluirConcurso(c.id, c.nome)}
+                      className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer border border-transparent hover:border-rose-200"
+                      title="Excluir Concurso"
+                    >
+                      <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
                 </div>
@@ -916,6 +979,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                           <th className="py-2.5 px-3 text-right">Vagas Imediatas</th>
                           <th className="py-2.5 px-3 text-right">Vagas Reais Abertas</th>
                           <th className="py-2.5 px-3 text-center">Status</th>
+                          <th className="py-2.5 px-3 text-right">Ações</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
@@ -928,7 +992,34 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                               {cg.vagas_reais_abertas || '-'}
                             </td>
                             <td className="py-2.5 px-3 text-center">
-                              <span className="text-emerald-700 font-semibold">Ativo</span>
+                              <span className={cg.ativo ? 'text-emerald-700 font-semibold' : 'text-slate-400 font-semibold'}>
+                                {cg.ativo ? 'Ativo' : 'Inativo'}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-3 text-right">
+                              <div className="flex items-center justify-end gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setConcursoAlvoId(c.id);
+                                    setCargoEditando(cg);
+                                    setModalEditarCargoAberto(true);
+                                  }}
+                                  className="px-2.5 py-1 bg-slate-100 hover:bg-teal-50 hover:text-teal-800 text-slate-700 font-semibold rounded-md transition-colors cursor-pointer flex items-center gap-1 text-[11px]"
+                                  title="Editar dados deste cargo"
+                                >
+                                  <Pencil className="w-3 h-3 text-slate-600" />
+                                  <span>Editar</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleExcluirCargo(c.id, cg.id, cg.nome)}
+                                  className="p-1 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-md transition-colors cursor-pointer"
+                                  title="Excluir Cargo"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         ))}
@@ -938,6 +1029,205 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 </div>
               </div>
             ))}
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* ============================================================== */}
+      {/* ABA: LOTES DE CONVOCAÇÃO (ADMIN)                                */}
+      {/* ============================================================== */}
+      {abaAdmin === 'lotes' && (
+        <section className="space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h2 className="text-xl font-bold font-serif text-slate-900 flex items-center gap-2">
+                <Layers className="w-5 h-5 text-teal-600" />
+                <span>Gestão de Lotes de Convocação</span>
+              </h2>
+              <p className="text-xs text-slate-500">
+                Cadastre e edite lotes de convocação, configure vagas ofertadas por comarca, trave escolhas e controle visibilidade de ranking.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                const primConc = concursos[0];
+                const primCargo = primConc?.cargos?.[0];
+                setLoteConcursoAlvoId(primConc?.id || '');
+                setLoteCargoAlvoId(primCargo?.id || '');
+                setLoteEditando(null);
+                setModalEditarLoteAberto(true);
+              }}
+              className="px-4 py-2 bg-[#07192B] hover:bg-[#0C2640] text-[#2DD4AA] font-bold text-xs rounded-xl transition-all cursor-pointer shadow-xs flex items-center gap-2 shrink-0"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Novo Lote de Convocação</span>
+            </button>
+          </div>
+
+          {/* Filtro por Concurso */}
+          <div className="bg-white rounded-2xl border border-slate-200 p-4 card-shadow flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <span className="text-xs font-semibold text-slate-600">Filtrar por Concurso:</span>
+              <select
+                value={filtroLoteConcurso}
+                onChange={(e) => setFiltroLoteConcurso(e.target.value)}
+                className="px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium text-slate-800 focus:outline-hidden"
+              >
+                <option value="todos">Todos os Concursos ({lotesLista.length} lotes)</option>
+                {concursos.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.nome} ({c.orgao})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <span className="text-2xs text-slate-400 font-mono">
+              Total exibindo: {
+                lotesLista.filter((l) => filtroLoteConcurso === 'todos' || l.concurso_id === filtroLoteConcurso).length
+              } lote(s)
+            </span>
+          </div>
+
+          {/* Lista de Lotes */}
+          {lotesLista.filter((l) => filtroLoteConcurso === 'todos' || l.concurso_id === filtroLoteConcurso).length === 0 ? (
+            <div className="bg-white rounded-2xl border border-dashed border-slate-300 p-12 text-center space-y-4 card-shadow">
+              <div className="w-12 h-12 rounded-2xl bg-teal-50 text-teal-700 flex items-center justify-center mx-auto shadow-xs">
+                <Layers className="w-6 h-6" />
+              </div>
+              <div className="max-w-md mx-auto space-y-1">
+                <h3 className="font-bold text-base text-slate-800">Nenhum lote cadastrado</h3>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  Crie o primeiro lote de convocação para permitir que candidatos convocados realizem simulações de audiência de escolha de comarcas.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  const primConc = concursos[0];
+                  const primCargo = primConc?.cargos?.[0];
+                  setLoteConcursoAlvoId(primConc?.id || '');
+                  setLoteCargoAlvoId(primCargo?.id || '');
+                  setLoteEditando(null);
+                  setModalEditarLoteAberto(true);
+                }}
+                className="px-5 py-2.5 bg-[#07192B] hover:bg-[#0C2640] text-[#2DD4AA] font-bold text-xs rounded-xl transition-all cursor-pointer shadow-md inline-flex items-center gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Criar Primeiro Lote</span>
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-5">
+              {lotesLista
+                .filter((l) => filtroLoteConcurso === 'todos' || l.concurso_id === filtroLoteConcurso)
+                .map((lote) => {
+                  const conc = concursos.find((c) => c.id === lote.concurso_id);
+                  const cargo = conc?.cargos?.find((cg) => cg.id === lote.cargo_id);
+                  const totalVagas = lote.comarcas?.reduce((acc, c) => acc + c.vagas, 0) || 0;
+                  const totalConvocados = lote.candidatos_ids?.length || 0;
+
+                  return (
+                    <div
+                      key={lote.id}
+                      className="bg-white rounded-2xl border border-slate-200 card-shadow p-5 sm:p-6 space-y-4"
+                    >
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+                        <div className="space-y-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-bold text-xs text-teal-800 bg-teal-50 border border-teal-200 px-2 py-0.5 rounded-md font-mono uppercase">
+                              {conc?.orgao || lote.concurso_id} {cargo ? `• ${cargo.nome}` : ''}
+                            </span>
+                            <span
+                              className={`text-[11px] font-bold px-2 py-0.5 rounded ${
+                                lote.travado
+                                  ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                                  : lote.ativo
+                                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                  : 'bg-slate-100 text-slate-700'
+                              }`}
+                            >
+                              {lote.travado ? '🔒 Escolha Travada' : lote.ativo ? '🟢 Aberto para Escolha' : 'Inativo'}
+                            </span>
+                            <span className="text-[11px] font-mono text-slate-500 bg-slate-100 px-2 py-0.5 rounded">
+                              ID: {lote.id}
+                            </span>
+                          </div>
+                          <h3 className="text-lg font-bold font-serif text-slate-900">{lote.nome}</h3>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setLoteConcursoAlvoId(lote.concurso_id);
+                              setLoteCargoAlvoId(lote.cargo_id || '');
+                              setLoteEditando(lote);
+                              setModalEditarLoteAberto(true);
+                            }}
+                            className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs rounded-lg transition-colors cursor-pointer flex items-center gap-1 border border-slate-200"
+                          >
+                            <Pencil className="w-3.5 h-3.5 text-slate-600" />
+                            <span>Editar Lote</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleExcluirLote(lote.id, lote.nome)}
+                            className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer border border-transparent hover:border-rose-200"
+                            title="Excluir Lote"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Métricas do Lote */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
+                          <span className="text-2xs text-slate-400 font-bold uppercase block">Vagas Ofertadas</span>
+                          <span className="text-lg font-bold font-mono text-teal-700">{totalVagas}</span>
+                        </div>
+                        <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
+                          <span className="text-2xs text-slate-400 font-bold uppercase block">Convocados no Lote</span>
+                          <span className="text-lg font-bold font-mono text-slate-800">{totalConvocados}</span>
+                        </div>
+                        <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
+                          <span className="text-2xs text-slate-400 font-bold uppercase block">Comarcas Ofertadas</span>
+                          <span className="text-lg font-bold font-mono text-slate-800">{lote.comarcas?.length || 0}</span>
+                        </div>
+                        <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
+                          <span className="text-2xs text-slate-400 font-bold uppercase block">Visibilidade do Ranking</span>
+                          <span className="text-xs font-bold text-slate-800 mt-1 block">
+                            {lote.is_ranking_visible ? '✓ Visível' : 'Oculto'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Distribuição de Comarcas */}
+                      <div>
+                        <span className="text-2xs font-bold text-slate-400 uppercase tracking-wider block mb-2">
+                          Comarcas e Quantidade de Vagas:
+                        </span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {lote.comarcas?.map((c, i) => (
+                            <span
+                              key={i}
+                              className="px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-700 flex items-center gap-1.5"
+                            >
+                              <span className="font-medium">{c.nome}</span>
+                              <span className="px-1.5 py-0.2 rounded bg-teal-100 text-teal-800 font-mono font-bold text-[10px]">
+                                {c.vagas} {c.vagas === 1 ? 'vaga' : 'vagas'}
+                              </span>
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
             </div>
           )}
         </section>
@@ -1648,232 +1938,50 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         </section>
       )}
 
-      {/* MODAL NOVO CONCURSO */}
-      {modalNovoConcursoAberto && (
-        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <h3 className="font-bold text-slate-900 text-base font-serif">Cadastrar Novo Concurso</h3>
-              <button
-                type="button"
-                onClick={() => setModalNovoConcursoAberto(false)}
-                className="text-slate-400 hover:text-slate-600 font-bold"
-              >
-                ✕
-              </button>
-            </div>
+      {/* ============================================================== */}
+      {/* MODAIS GERENCIAIS: CONCURSO, CARGO & LOTE                     */}
+      {/* ============================================================== */}
+      <ModalEditarConcurso
+        aberto={modalEditarConcursoAberto}
+        onClose={() => {
+          setModalEditarConcursoAberto(false);
+          setConcursoEditando(null);
+        }}
+        concurso={concursoEditando}
+        onSalvo={(salvo) => {
+          reloadData();
+          showToast(concursoEditando ? `Concurso "${salvo.nome}" atualizado!` : `Concurso "${salvo.nome}" cadastrado com sucesso!`);
+        }}
+      />
 
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (!formNome.trim() || !formOrgao.trim()) return;
+      <ModalEditarCargo
+        aberto={modalEditarCargoAberto}
+        onClose={() => {
+          setModalEditarCargoAberto(false);
+          setCargoEditando(null);
+        }}
+        concursoId={concursoAlvoId}
+        cargo={cargoEditando}
+        onSalvo={(salvo) => {
+          reloadData();
+          showToast(cargoEditando ? `Cargo "${salvo.nome}" atualizado!` : `Cargo "${salvo.nome}" cadastrado com sucesso!`);
+        }}
+      />
 
-                const novo: Concurso = {
-                  id: (formId.trim() || formNome.toLowerCase().replace(/[^a-z0-9]/g, '_')).slice(0, 30),
-                  nome: formNome,
-                  orgao: formOrgao,
-                  ano: formAno,
-                  edital: formEdital,
-                  status: formStatus,
-                  homologado: formStatus === 'Homologado',
-                  regiao: 'Sul',
-                  esfera: 'Estadual',
-                  descricao: formDesc || `Concurso público para provimento de vagas no ${formOrgao}.`,
-                  cargos: [
-                    {
-                      id: formCargoInicial.toLowerCase().replace(/[^a-z0-9]/g, '_'),
-                      nome: formCargoInicial,
-                      nivel: 'Superior',
-                      vagas_imediatas: 10,
-                      tem_cr: true,
-                      ativo: true,
-                    },
-                  ],
-                };
-
-                certamStore.salvarConcurso(novo);
-                reloadData();
-                setModalNovoConcursoAberto(false);
-                showToast('Novo concurso cadastrado com sucesso!');
-              }}
-              className="space-y-3 text-xs"
-            >
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">Nome Completo do Concurso:</label>
-                <input
-                  type="text"
-                  placeholder="Ex: Tribunal de Justiça de Santa Catarina (TJSC)"
-                  value={formNome}
-                  onChange={(e) => setFormNome(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl"
-                  required
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Órgão / Sigla:</label>
-                  <input
-                    type="text"
-                    placeholder="Ex: TJSC"
-                    value={formOrgao}
-                    onChange={(e) => setFormOrgao(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Ano:</label>
-                  <input
-                    type="text"
-                    value={formAno}
-                    onChange={(e) => setFormAno(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Status:</label>
-                  <select
-                    value={formStatus}
-                    onChange={(e) => setFormStatus(e.target.value as any)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl"
-                  >
-                    <option value="ativo">Em Andamento</option>
-                    <option value="Homologado">Homologado</option>
-                    <option value="Convocando">Convocando</option>
-                    <option value="Inscrições Abertas">Inscrições Abertas</option>
-                    <option value="previsto">Previsto</option>
-                    <option value="encerrado">Encerrado</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Cargo Inicial:</label>
-                  <input
-                    type="text"
-                    value={formCargoInicial}
-                    onChange={(e) => setFormCargoInicial(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="pt-2 flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setModalNovoConcursoAberto(false)}
-                  className="px-4 py-2 border border-slate-300 rounded-xl text-slate-600"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 bg-[#07192B] text-[#2DD4AA] font-bold rounded-xl"
-                >
-                  Salvar Concurso
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL NOVO CARGO */}
-      {modalNovoCargoAberto && (
-        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <h3 className="font-bold text-slate-900 text-base font-serif">Adicionar Cargo ao Concurso</h3>
-              <button
-                type="button"
-                onClick={() => setModalNovoCargoAberto(false)}
-                className="text-slate-400 hover:text-slate-600 font-bold"
-              >
-                ✕
-              </button>
-            </div>
-
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (!formCargoNome.trim()) return;
-                const novoCargo: Cargo = {
-                  id: (formCargoId.trim() || formCargoNome.toLowerCase().replace(/[^a-z0-9]/g, '_')).slice(0, 30),
-                  nome: formCargoNome,
-                  nivel: formCargoNivel,
-                  vagas_imediatas: Number(formCargoVagas) || 0,
-                  tem_cr: formCargoCr,
-                  ativo: true,
-                };
-                certamStore.salvarCargo(concursoAlvoId, novoCargo);
-                reloadData();
-                setModalNovoCargoAberto(false);
-                showToast('Novo cargo adicionado!');
-              }}
-              className="space-y-3 text-xs"
-            >
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">Nome do Cargo:</label>
-                <input
-                  type="text"
-                  placeholder="Ex: Oficial de Justiça"
-                  value={formCargoNome}
-                  onChange={(e) => setFormCargoNome(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl"
-                  required
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Nível de Escolaridade:</label>
-                  <select
-                    value={formCargoNivel}
-                    onChange={(e) => setFormCargoNivel(e.target.value as any)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl"
-                  >
-                    <option value="Superior">Superior</option>
-                    <option value="Médio">Médio</option>
-                    <option value="Técnico">Técnico</option>
-                    <option value="Fundamental">Fundamental</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Vagas Imediatas:</label>
-                  <input
-                    type="number"
-                    min="0"
-                    value={formCargoVagas}
-                    onChange={(e) => setFormCargoVagas(Number(e.target.value))}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-mono"
-                  />
-                </div>
-              </div>
-
-              <div className="pt-2 flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setModalNovoCargoAberto(false)}
-                  className="px-4 py-2 border border-slate-300 rounded-xl text-slate-600"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 bg-[#07192B] text-[#2DD4AA] font-bold rounded-xl"
-                >
-                  Adicionar Cargo
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      <ModalEditarLote
+        aberto={modalEditarLoteAberto}
+        onClose={() => {
+          setModalEditarLoteAberto(false);
+          setLoteEditando(null);
+        }}
+        concursoId={loteConcursoAlvoId}
+        cargoId={loteCargoAlvoId}
+        lote={loteEditando}
+        onSalvo={(salvo) => {
+          reloadData();
+          showToast(loteEditando ? `Lote "${salvo.nome}" atualizado!` : `Lote "${salvo.nome}" cadastrado com sucesso!`);
+        }}
+      />
 
       {/* ============================================================== */}
       {/* MODAL DE JUSTIFICATIVA DE INDEFERIMENTO - AUDITORIA DE PERFIL   */}

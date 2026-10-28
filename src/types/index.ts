@@ -256,6 +256,8 @@ export interface Usuario {
   canais_silenciados?: string[];
   usuarios_bloqueados?: string[];
   cpf_verificado?: boolean;
+  admin_concursos?: string[];
+  admin_cargos?: { concurso_id: string; cargo_id: string }[];
 }
 
 // -------------------------------------------------------------
