@@ -663,11 +663,15 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
                           </div>
 
                           <div className="flex items-center gap-2">
-                            {cg.vagas_reais_abertas && (
+                            {(cg.vagas_disponiveis !== undefined || cg.vagas_reais_abertas !== undefined) ? (
                               <span className="text-[10px] font-mono font-semibold text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded">
-                                {cg.vagas_reais_abertas} vagas abertas
+                                {cg.vagas_disponiveis ?? cg.vagas_reais_abertas} vagas disponíveis
                               </span>
-                            )}
+                            ) : cg.vagas_imediatas > 0 ? (
+                              <span className="text-[10px] font-mono font-semibold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">
+                                {cg.vagas_imediatas} vagas
+                              </span>
+                            ) : null}
                             <ArrowRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-teal-700" />
                           </div>
                         </div>

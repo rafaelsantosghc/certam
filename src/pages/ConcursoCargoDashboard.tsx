@@ -634,14 +634,29 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
             </div>
 
             <div className="bg-white rounded-2xl p-5 border border-slate-200 card-shadow flex flex-col justify-between">
-              <span className="text-xs font-semibold text-slate-500">Cargos Vagos Reais no Órgão</span>
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-slate-500">Vagas Disponíveis no Quadro</span>
+                {cargo.data_atualizacao_vagas && (
+                  <span className="text-[10px] text-slate-400 font-mono" title="Data da última alteração">
+                    {cargo.data_atualizacao_vagas}
+                  </span>
+                )}
+              </div>
               <div className="mt-2 flex items-baseline gap-2">
                 <span className="text-3xl font-extrabold text-amber-900 font-mono">
-                  {cargo.vagas_reais_abertas || 284}
+                  {cargo.vagas_disponiveis !== undefined
+                    ? cargo.vagas_disponiveis
+                    : cargo.vagas_reais_abertas !== undefined
+                    ? cargo.vagas_reais_abertas
+                    : '-'}
                 </span>
-                <span className="text-xs text-amber-700 font-semibold">vacâncias</span>
+                <span className="text-xs text-amber-700 font-semibold">disponíveis</span>
               </div>
-              <span className="text-xs text-slate-400 mt-1">Espaço orçamentário para nomeações</span>
+              <span className="text-xs text-slate-400 mt-1">
+                {cargo.vagas_previstas_proximo_lote !== undefined
+                  ? `Próx. lote: ${cargo.vagas_previstas_proximo_lote} vagas${cargo.data_prevista_proximo_lote ? ` (${cargo.data_prevista_proximo_lote})` : ''}`
+                  : 'Total existente para provimento'}
+              </span>
             </div>
           </div>
 

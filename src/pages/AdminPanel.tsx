@@ -975,26 +975,58 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       <thead className="bg-slate-50 text-slate-700 font-bold text-2xs uppercase tracking-wider">
                         <tr>
                           <th className="py-2.5 px-3">Cargo</th>
-                          <th className="py-2.5 px-3 text-center">Nível</th>
-                          <th className="py-2.5 px-3 text-right">Vagas Imediatas</th>
-                          <th className="py-2.5 px-3 text-right">Vagas Reais Abertas</th>
-                          <th className="py-2.5 px-3 text-center">Status</th>
+                          <th className="py-2.5 px-2 text-center">Nível</th>
+                          <th className="py-2.5 px-2 text-right">Quant. Total</th>
+                          <th className="py-2.5 px-2 text-right text-amber-900">Vagas Disponíveis</th>
+                          <th className="py-2.5 px-2 text-right">Vagas Imediatas</th>
+                          <th className="py-2.5 px-2 text-right text-emerald-800">Nomeados</th>
+                          <th className="py-2.5 px-2 text-right text-cyan-800">Convocados</th>
+                          <th className="py-2.5 px-2 text-right text-indigo-900">Próx. Lote</th>
+                          <th className="py-2.5 px-2 text-center">Atualizado em</th>
                           <th className="py-2.5 px-3 text-right">Ações</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
                         {c.cargos?.map((cg) => (
                           <tr key={cg.id} className="hover:bg-slate-50">
-                            <td className="py-2.5 px-3 font-bold text-slate-900">{cg.nome}</td>
-                            <td className="py-2.5 px-3 text-center font-mono">{cg.nivel}</td>
-                            <td className="py-2.5 px-3 text-right font-mono font-bold">{cg.vagas_imediatas}</td>
-                            <td className="py-2.5 px-3 text-right font-mono text-amber-800 font-bold">
-                              {cg.vagas_reais_abertas || '-'}
-                            </td>
-                            <td className="py-2.5 px-3 text-center">
-                              <span className={cg.ativo ? 'text-emerald-700 font-semibold' : 'text-slate-400 font-semibold'}>
-                                {cg.ativo ? 'Ativo' : 'Inativo'}
+                            <td className="py-2.5 px-3 font-bold text-slate-900">
+                              <div>{cg.nome}</div>
+                              <span className="text-[10px] text-slate-400 font-mono font-normal">
+                                {cg.ativo ? '🟢 Ativo' : '⚪ Inativo'} {cg.tem_cr ? '• CR' : ''}
                               </span>
+                            </td>
+                            <td className="py-2.5 px-2 text-center font-mono">{cg.nivel}</td>
+                            <td className="py-2.5 px-2 text-right font-mono text-slate-800 font-semibold">
+                              {cg.quantitativo_total !== undefined ? cg.quantitativo_total.toLocaleString('pt-BR') : '-'}
+                            </td>
+                            <td className="py-2.5 px-2 text-right font-mono text-amber-900 font-bold bg-amber-50/40">
+                              {cg.vagas_disponiveis !== undefined
+                                ? cg.vagas_disponiveis.toLocaleString('pt-BR')
+                                : cg.vagas_reais_abertas !== undefined
+                                ? cg.vagas_reais_abertas.toLocaleString('pt-BR')
+                                : '-'}
+                            </td>
+                            <td className="py-2.5 px-2 text-right font-mono font-bold text-slate-900">
+                              {cg.vagas_imediatas}
+                            </td>
+                            <td className="py-2.5 px-2 text-right font-mono text-emerald-800 font-semibold">
+                              {cg.nomeados_concurso !== undefined ? cg.nomeados_concurso : '0'}
+                            </td>
+                            <td className="py-2.5 px-2 text-right font-mono text-cyan-800 font-semibold">
+                              {cg.convocados_nao_nomeados !== undefined ? cg.convocados_nao_nomeados : '0'}
+                            </td>
+                            <td className="py-2.5 px-2 text-right font-mono text-indigo-900 text-[11px]">
+                              {cg.vagas_previstas_proximo_lote !== undefined ? (
+                                <span>
+                                  {cg.vagas_previstas_proximo_lote} vag.
+                                  {cg.data_prevista_proximo_lote && ` (${cg.data_prevista_proximo_lote})`}
+                                </span>
+                              ) : (
+                                '-'
+                              )}
+                            </td>
+                            <td className="py-2.5 px-2 text-center font-mono text-[10px] text-slate-500">
+                              {cg.data_atualizacao_vagas || 'Em apuração'}
                             </td>
                             <td className="py-2.5 px-3 text-right">
                               <div className="flex items-center justify-end gap-1.5">

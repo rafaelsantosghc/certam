@@ -23,6 +23,7 @@ import {
   HelpCircle,
   Pencil,
   Plus,
+  Clock,
 } from 'lucide-react';
 
 interface ConcursoGeralViewProps {
@@ -71,8 +72,11 @@ export const ConcursoGeralView: React.FC<ConcursoGeralViewProps> = ({
     return cargosAtivos.reduce((acc, c) => acc + (c.vagas_imediatas || 0), 0);
   }, [cargosAtivos]);
 
-  const totalVagasReais = useMemo(() => {
-    return cargosAtivos.reduce((acc, c) => acc + (c.vagas_reais_abertas || 0), 0);
+  const totalVagasDisponiveis = useMemo(() => {
+    return cargosAtivos.reduce(
+      (acc, c) => acc + (c.vagas_disponiveis ?? c.vagas_reais_abertas ?? 0),
+      0
+    );
   }, [cargosAtivos]);
 
   return (
@@ -194,9 +198,9 @@ export const ConcursoGeralView: React.FC<ConcursoGeralViewProps> = ({
           </div>
 
           <div className="bg-white/5 rounded-2xl p-3.5 border border-white/10">
-            <span className="text-[11px] text-slate-400 block font-medium">Levantamento de Vagas</span>
+            <span className="text-[11px] text-slate-400 block font-medium">Vagas Disponíveis</span>
             <span className="text-xl font-bold font-mono text-amber-300 mt-0.5 block">
-              {totalVagasReais > 0 ? `${totalVagasReais} abertas` : 'Em apuração'}
+              {totalVagasDisponiveis > 0 ? `${totalVagasDisponiveis} disponíveis` : 'Em apuração'}
             </span>
           </div>
 
@@ -302,12 +306,33 @@ export const ConcursoGeralView: React.FC<ConcursoGeralViewProps> = ({
                     </div>
 
                     <div className="bg-slate-50 rounded-xl p-2.5">
-                      <span className="text-2xs text-slate-400 block font-medium">Candidatos Cadastrados</span>
-                      <span className="text-sm font-bold font-mono text-teal-700">
-                        {totalAprovados} aprovados
+                      <span className="text-2xs text-slate-400 block font-medium">Vagas Disponíveis</span>
+                      <span className="text-sm font-bold font-mono text-amber-900">
+                        {cg.vagas_disponiveis !== undefined
+                          ? cg.vagas_disponiveis
+                          : cg.vagas_reais_abertas !== undefined
+                          ? cg.vagas_reais_abertas
+                          : '-'}
                       </span>
                     </div>
+
+                    {cg.quantitativo_total !== undefined && (
+                      <div className="bg-slate-50 rounded-xl p-2.5 col-span-2 flex items-center justify-between text-2xs">
+                        <span className="text-slate-500 font-medium">Quantitativo Total:</span>
+                        <span className="font-mono font-bold text-slate-800">
+                          {cg.quantitativo_total.toLocaleString('pt-BR')} vagas
+                        </span>
+                      </div>
+                    )}
                   </div>
+
+                  {/* Data da última atualização dos dados */}
+                  {cg.data_atualizacao_vagas && (
+                    <div className="text-[10px] text-slate-400 font-mono flex items-center gap-1 pt-1">
+                      <Clock className="w-3 h-3 text-slate-400 shrink-0" />
+                      <span>Atualizado em: {cg.data_atualizacao_vagas}</span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Botão Principal de Acesso ao Cargo */}

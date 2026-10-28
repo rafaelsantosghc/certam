@@ -2,10 +2,28 @@ export interface Cargo {
   id: string;
   nome: string;
   nivel: 'Superior' | 'Médio' | 'Técnico' | 'Fundamental';
-  vagas_imediatas: number;
   tem_cr: boolean;
   ativo: boolean;
   remuneracao_inicial?: string;
+
+  // 1. Quantitativo total do cargo: número do total de vagas do cargo, sejam ocupadas ou não
+  quantitativo_total?: number;
+  // 2. Vagas disponíveis: total de vagas existentes desse cargo disponíveis para provimento no quadro
+  vagas_disponiveis?: number;
+  // 3. Vagas imediatas: total de vagas disponibilizadas no edital
+  vagas_imediatas: number;
+  // 4. Nomeados por este concurso: total de vagas já ocupadas pelo concurso atual neste cargo
+  nomeados_concurso?: number;
+  // 5. Convocados ainda não nomeados: total de candidatos já convocados, com processo de nomeação em andamento
+  convocados_nao_nomeados?: number;
+  // 6. Vagas previstas para o próximo lote: previsão de quantas vagas serão providas no próximo lote
+  vagas_previstas_proximo_lote?: number;
+  // Data prevista para o próximo lote (dia/mês/ano ou mês/ano)
+  data_prevista_proximo_lote?: string;
+  // Marcação com a data da última alteração dessas informações
+  data_atualizacao_vagas?: string;
+
+  // Campos legados opcionais
   vagas_ocupadas?: number;
   vagas_reais_abertas?: number;
 }
