@@ -1156,6 +1156,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             <div className="grid grid-cols-1 gap-5">
               {lotesLista
                 .filter((l) => filtroLoteConcurso === 'todos' || l.concurso_id === filtroLoteConcurso)
+                .sort((a, b) => {
+                  const numA = (a.numero_lote || a.nome || '').toString().replace(/[^\d.]/g, '');
+                  const numB = (b.numero_lote || b.nome || '').toString().replace(/[^\d.]/g, '');
+                  return numA.localeCompare(numB, undefined, { numeric: true, sensitivity: 'base' });
+                })
                 .map((lote) => {
                   const conc = concursos.find((c) => c.id === lote.concurso_id);
                   const cargo = conc?.cargos?.find((cg) => cg.id === lote.cargo_id);

@@ -1433,6 +1433,11 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
                   l.concurso_id === concurso.id &&
                   (l.cargo_id === cargo.id || !l.cargo_id || l.concurso_id === 'tjrs_2025')
               )
+              .sort((a, b) => {
+                const numA = (a.numero_lote || a.nome || '').toString().replace(/[^\d.]/g, '');
+                const numB = (b.numero_lote || b.nome || '').toString().replace(/[^\d.]/g, '');
+                return numA.localeCompare(numB, undefined, { numeric: true, sensitivity: 'base' });
+              })
               .map((lote) => {
                 const totalVagas = lote.comarcas.reduce((acc, c) => acc + c.vagas, 0);
                 const totalConvocados = lote.candidatos_ids?.length || totalVagas;

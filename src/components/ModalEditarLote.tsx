@@ -67,8 +67,12 @@ export const ModalEditarLote: React.FC<ModalEditarLoteProps> = ({
 
   useEffect(() => {
     if (lote) {
-      setNome(lote.nome || '');
-      setNumeroLote(lote.numero_lote?.toString() || '1');
+      const numRaw = lote.numero_lote !== undefined && lote.numero_lote !== null
+        ? lote.numero_lote.toString()
+        : (lote.nome || '').replace(/^lote\s*/i, '').trim();
+      const numFinal = numRaw || '1';
+      setNumeroLote(numFinal);
+      setNome(`Lote ${numFinal}`);
       setAtivo(lote.ativo ?? true);
       setTravado(lote.travado ?? false);
       setStatusLote(lote.status_lote || (lote.travado ? 'escolhas_definidas' : 'em_escolha'));
@@ -79,8 +83,8 @@ export const ModalEditarLote: React.FC<ModalEditarLoteProps> = ({
       setComarcas(lote.comarcas ? [...lote.comarcas] : []);
       setConvocados(lote.convocados ? [...lote.convocados] : []);
     } else {
-      setNome('');
       setNumeroLote('1');
+      setNome('Lote 1');
       setAtivo(true);
       setTravado(false);
       setStatusLote('em_escolha');
@@ -326,8 +330,9 @@ export const ModalEditarLote: React.FC<ModalEditarLoteProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!nome.trim()) {
-      setErro('Informe o nome ou identificação do lote.');
+    const numLimpo = numeroLote.trim();
+    if (!numLimpo) {
+      setErro('Informe o número do lote (ex: 1, 1.1, 1.2, 2, 2.1).');
       return;
     }
     if (!concursoId || !cargoId) {
@@ -336,6 +341,7 @@ export const ModalEditarLote: React.FC<ModalEditarLoteProps> = ({
     }
 
     const finalId = lote?.id || `lote-${concursoId}-${cargoId}-${Date.now().toString(36)}`;
+    const nomeFinal = `Lote ${numLimpo}`;
 
     // Criar mapa de candidatos_ids
     const candidatosIds = convocados.map((c) => c.candidato_id || c.nome);
@@ -344,8 +350,8 @@ export const ModalEditarLote: React.FC<ModalEditarLoteProps> = ({
       id: finalId,
       concurso_id: concursoId,
       cargo_id: cargoId,
-      nome: nome.trim(),
-      numero_lote: numeroLote.trim() || undefined,
+      nome: nomeFinal,
+      numero_lote: numLimpo,
       ativo,
       travado: travado || statusLote === 'escolhas_definidas' || statusLote === 'encerrado',
       status_lote: statusLote,
@@ -424,7 +430,7 @@ export const ModalEditarLote: React.FC<ModalEditarLoteProps> = ({
             </div>
             <div>
               <h3 className="font-bold text-slate-900 text-base font-serif">
-                {isEdicao ? `Editar Lote: ${lote?.nome}` : 'Cadastrar Novo Lote de Convocação'}
+                {isEdicao ? `Editar Lote ${numeroLote || lote?.numero_lote || ''}` : 'Cadastrar Novo Lote de Convocação'}
               </h3>
               <p className="text-2xs text-slate-500">
                 Gerencie comarcas ofertadas, candidatos convocados e importações em massa do Excel
@@ -489,31 +495,25 @@ export const ModalEditarLote: React.FC<ModalEditarLoteProps> = ({
           {/* =============================================================== */}
           {abaInterna === 'dados_comarcas' && (
             <div className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="sm:col-span-2">
-                  <label className="block font-bold text-slate-700 mb-1">
-                    Nome do Lote / Identificação <span className="text-rose-500">*</span>:
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Ex: Lote 1 (1º Chamamento Oficial)"
-                    value={nome}
-                    onChange={(e) => setNome(e.target.value)}
-                    className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl focus:border-teal-600 outline-hidden font-semibold text-slate-900"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Número do Lote:</label>
-                  <input
-                    type="text"
-                    placeholder="Ex: 1 ou Lote 1"
-                    value={numeroLote}
-                    onChange={(e) => setNumeroLote(e.target.value)}
-                    className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl font-mono focus:border-teal-600 outline-hidden"
-                  />
-                </div>
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">
+                  Número do Lote <span className="text-rose-500">*</span>:
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ex: 1, 1.1, 1.2, 2, 2.1..."
+                  value={numeroLote}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setNumeroLote(val);
+                    setNome(val ? `Lote ${val.trim()}` : '');
+                  }}
+                  className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl focus:border-teal-600 outline-hidden font-mono font-bold text-slate-900 text-sm"
+                  required
+                />
+                <span className="text-2xs text-slate-500 mt-1 block">
+                  Informe apenas o número do lote. Lotes complementares podem ser numerados como 1.1, 1.2, 2.1, 2.2, etc.
+                </span>
               </div>
 
               {/* Status do Lote e Data da Nomeação */}
