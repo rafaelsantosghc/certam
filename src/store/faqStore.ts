@@ -1,4 +1,5 @@
 import { FaqItem } from '../types';
+import { cloudSync } from './cloudSync';
 
 const FAQ_STORAGE_KEY = 'certam_faq_items_v6';
 
@@ -38,7 +39,6 @@ export const faqStore = {
 
     if (items.length === 0) {
       items = INITIAL_FAQS;
-      this.salvarTodos(items);
     }
 
     if (!concursoId) return items;
@@ -54,7 +54,9 @@ export const faqStore = {
 
   salvarTodos(faqs: FaqItem[]) {
     try {
-      localStorage.setItem(FAQ_STORAGE_KEY, JSON.stringify(faqs));
+      const jsonStr = JSON.stringify(faqs);
+      localStorage.setItem(FAQ_STORAGE_KEY, jsonStr);
+      cloudSync.pushKey(FAQ_STORAGE_KEY, jsonStr, true);
       window.dispatchEvent(new CustomEvent('certam_faqs_updated', { detail: faqs }));
     } catch {
       // ignore

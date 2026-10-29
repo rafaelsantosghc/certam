@@ -5,6 +5,7 @@ import { useAuth } from '../store/authContext';
 import { Concurso, Cargo, Candidato } from '../types';
 import { PerfilCandidatoModal } from '../components/PerfilCandidatoModal';
 import { ContatoAdminModal } from '../components/ContatoAdminModal';
+import { SolicitarVinculacaoModal } from '../components/SolicitarVinculacaoModal';
 import {
   Search,
   Plus,
@@ -14,19 +15,18 @@ import {
   LogOut,
   Edit3,
   CheckCircle2,
-  Phone,
   Mail,
   ShieldCheck,
   Building2,
   BookmarkCheck,
-  Check,
-  X,
-  MapPin,
   ListOrdered,
   Calendar,
   Layers,
-  HelpCircle,
   TrendingUp,
+  AlertCircle,
+  Clock,
+  Archive,
+  FileCheck2,
 } from 'lucide-react';
 
 interface PortalHomeProps {
@@ -38,9 +38,6 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
     usuario,
     isAdmin,
     loginGoogle,
-    loginAdmin,
-    loginCandidato,
-    simularEmailCandidato,
     inscreverConcurso,
     desinscreverConcurso,
     acompanharConcurso,
@@ -49,6 +46,7 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
   } = useAuth();
 
   const [concursos, setConcursos] = useState<Concurso[]>(() => certamStore.getConcursos());
+  const [versaoLotes, setVersaoLotes] = useState(0);
   const [filtroTexto, setFiltroTexto] = useState('');
   const [filtroStatus, setFiltroStatus] = useState<
     'todos' | 'em_andamento' | 'homologados' | 'previstos' | 'encerrados'
@@ -60,13 +58,29 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
   const [modalContatoAberto, setModalContatoAberto] = useState(false);
   const [motivoContato, setMotivoContato] = useState<any>('inclusao_concurso');
 
-  // Sincronizar concursos com certamStore
+  // Modal de aviso de aprovação não reconhecida (Seção Reprovações - Item 1)
+  const [modalVinculacaoAberto, setModalVinculacaoAberto] = useState(false);
+  const [vinculacaoAlvo, setVinculacaoAlvo] = useState<{
+    concursoId: string;
+    concursoNome: string;
+    cargoId: string;
+    cargoNome: string;
+  } | null>(null);
+
+  // Sincronizar concursos e listas de candidatos em tempo real (Item 5)
   React.useEffect(() => {
     const handleUpdate = () => {
       setConcursos(certamStore.getConcursos());
+      setVersaoLotes((v) => v + 1);
     };
     window.addEventListener('certam_concursos_updated', handleUpdate);
-    return () => window.removeEventListener('certam_concursos_updated', handleUpdate);
+    window.addEventListener('certam_lotes_updated', handleUpdate);
+    window.addEventListener('storage', handleUpdate);
+    return () => {
+      window.removeEventListener('certam_concursos_updated', handleUpdate);
+      window.removeEventListener('certam_lotes_updated', handleUpdate);
+      window.removeEventListener('storage', handleUpdate);
+    };
   }, []);
 
   // Toast feedback
@@ -77,22 +91,53 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
     setTimeout(() => setToastMsg(null), 3500);
   };
 
-  // Inscrições e aprovações estritamente vinculadas ao candidato atual (Item 1)
-  const inscricoesCandidato = useMemo(() => {
-    if (!usuario) return [];
-    const resultado: {
+  // Classificação completa dos vínculos do candidato em 4 categorias (Item 1):
+  // 1. Aprovações (homologados onde consta na lista de classificação e não vencidos)
+  // 2. Inscrições (inscrito/fez a prova, mas homologação ainda não ocorreu e não vencido)
+  // 3. Reprovações (inscrito/fez a prova, concurso já homologado, mas candidato não consta na lista de classificação)
+  // 4. Vencidos (qualquer concurso com prazo de validade encerrado em que o candidato estava aprovado ou inscrito)
+  const paineisCandidato = useMemo(() => {
+    const aprovacoes: {
       concurso: Concurso;
       cargo: Cargo;
       candidato: Candidato;
+    }[] = [];
+    const inscricoes: {
+      concurso: Concurso;
+      cargo: Cargo;
       dataInscricao: string;
     }[] = [];
+    const reprovacoes: {
+      concurso: Concurso;
+      cargo: Cargo;
+      dataInscricao: string;
+    }[] = [];
+    const vencidos: {
+      concurso: Concurso;
+      cargo: Cargo;
+      candidato?: Candidato;
+      situacaoAnterior: 'Aprovado' | 'Inscrito';
+    }[] = [];
+
+    if (!usuario) {
+      return { aprovacoes, inscricoes, reprovacoes, vencidos };
+    }
 
     const cpfLimpo = usuario.cpf ? usuario.cpf.replace(/\D/g, '') : '';
     const nomeLimpo = usuario.nome ? usuario.nome.trim().toLowerCase() : '';
+    const listaInscritosUsuario = usuario.concursos_inscritos || [];
 
-    const inscricoesSet = new Set<string>();
+    const aprovadosKeys = new Set<string>();
 
+    // 1. Verificar em todas as listas de classificação onde o candidato figura como aprovado
     concursos.forEach((conc) => {
+      const isVencido = conc.status === 'encerrado';
+      const isHomologado =
+        Boolean(conc.homologado) ||
+        conc.status === 'Homologado' ||
+        conc.status === 'Convocando' ||
+        conc.status === 'ativo';
+
       conc.cargos?.forEach((cg) => {
         const cands = lotesStore.getCandidatos(conc.id, cg.id);
         const candEncontrado = cands.find((c) => {
@@ -106,21 +151,72 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
 
         if (candEncontrado) {
           const key = `${conc.id}_${cg.id}`;
-          if (!inscricoesSet.has(key)) {
-            inscricoesSet.add(key);
-            resultado.push({
+          aprovadosKeys.add(key);
+
+          if (isVencido) {
+            vencidos.push({
               concurso: conc,
               cargo: cg,
               candidato: candEncontrado,
-              dataInscricao: 'Aprovado / Homologado',
+              situacaoAnterior: 'Aprovado',
+            });
+          } else if (isHomologado || cands.length > 0) {
+            aprovacoes.push({
+              concurso: conc,
+              cargo: cg,
+              candidato: candEncontrado,
             });
           }
         }
       });
     });
 
-    return resultado;
-  }, [usuario, concursos]);
+    // 2. Verificar os concursos em que o candidato marcou que se inscreveu / fez a prova
+    listaInscritosUsuario.forEach((insc) => {
+      const conc = concursos.find((c) => c.id === insc.concurso_id);
+      if (!conc) return;
+      const cargo =
+        conc.cargos?.find((cg) => cg.id === insc.cargo_id) ||
+        conc.cargos?.[0];
+      if (!cargo) return;
+
+      const key = `${conc.id}_${cargo.id}`;
+      // Se já está contabilizado como aprovado na lista de classificação, não duplica
+      if (aprovadosKeys.has(key)) return;
+
+      const isVencido = conc.status === 'encerrado';
+      const candsDoCargo = lotesStore.getCandidatos(conc.id, cargo.id);
+      const isHomologado =
+        Boolean(conc.homologado) ||
+        conc.status === 'Homologado' ||
+        conc.status === 'Convocando' ||
+        candsDoCargo.length > 0;
+
+      if (isVencido) {
+        vencidos.push({
+          concurso: conc,
+          cargo,
+          situacaoAnterior: 'Inscrito',
+        });
+      } else if (isHomologado) {
+        // O concurso já foi homologado e o candidato inscrito não consta na lista de aprovados -> Reprovações
+        reprovacoes.push({
+          concurso: conc,
+          cargo,
+          dataInscricao: insc.data_inscricao || 'Inscrito',
+        });
+      } else {
+        // Ainda não homologado -> Inscrições
+        inscricoes.push({
+          concurso: conc,
+          cargo,
+          dataInscricao: insc.data_inscricao || 'Inscrito',
+        });
+      }
+    });
+
+    return { aprovacoes, inscricoes, reprovacoes, vencidos };
+  }, [usuario, concursos, versaoLotes]);
 
   // Concursos que o candidato escolheu acompanhar (Item 1)
   const concursosAcompanhados = useMemo(() => {
@@ -141,7 +237,7 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
       if (filtroStatus === 'em_andamento') {
         matchStatus = c.status === 'ativo' || c.status === 'Convocando';
       } else if (filtroStatus === 'homologados') {
-        matchStatus = c.homologado || c.status === 'Homologado';
+        matchStatus = Boolean(c.homologado) || c.status === 'Homologado';
       } else if (filtroStatus === 'previstos') {
         matchStatus = c.status === 'previsto' || c.status === 'Inscrições Abertas';
       } else if (filtroStatus === 'encerrados') {
@@ -175,7 +271,7 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
             Acompanhamento de Concursos & Nomeações
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 mt-1 max-w-3xl leading-relaxed">
-            Consulte cronogramas oficiais em linha do tempo, rankings de classificação, quantitativo de cargos vagos, comunicados e preferências de comarcas.
+            Consulte cronogramas oficiais em linha do tempo, rankings de classificação, quantitativo de cargos vagos, comunicados e preferências de lotações.
           </p>
         </div>
 
@@ -217,7 +313,7 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
                   <span>Acesse sua conta de concurseiro</span>
                 </div>
                 <p className="text-xs text-slate-500 mt-1">
-                  Identifique-se com sua conta Google para vincular seu CPF ao cadastro geral, acessar chats de aprovados e simular escolhas de comarcas.
+                  Identifique-se com sua conta Google para vincular seu CPF ao cadastro geral, acessar chats de aprovados e simular escolhas de lotação.
                 </p>
               </div>
 
@@ -271,7 +367,7 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
                       </span>
                     ) : (
                       <span className="text-[10px] font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
-                        Cadastro em Validação
+                        Cadastro Ativo
                       </span>
                     )}
                   </div>
@@ -322,23 +418,28 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
         )}
       </div>
 
-      {/* SEÇÃO 2: MEUS CONCURSOS EM ANDAMENTO (INSCRITO OU APROVADO) */}
-      {usuario && inscricoesCandidato.length > 0 && (
+      {/* =================================================================== */}
+      {/* SEÇÃO 2A: APROVAÇÕES (Concursos homologados onde o candidato consta) */}
+      {/* =================================================================== */}
+      {usuario && paineisCandidato.aprovacoes.length > 0 && (
         <div className="bg-white rounded-2xl border border-slate-200/90 card-shadow p-5 sm:p-6 space-y-4">
           <div className="flex items-center justify-between pb-3 border-b border-slate-100">
             <div className="flex items-center gap-2">
-              <BookmarkCheck className="w-5 h-5 text-teal-600" />
+              <BookmarkCheck className="w-5 h-5 text-emerald-600" />
               <h2 className="text-base sm:text-lg font-bold font-serif text-slate-900">
-                Meus Concursos em Andamento
+                Aprovações
               </h2>
               <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-900 text-xs font-bold font-mono">
-                {inscricoesCandidato.length} Aprovado / Inscrito
+                {paineisCandidato.aprovacoes.length} aprovado(s)
               </span>
             </div>
+            <span className="text-2xs text-slate-400 hidden sm:inline">
+              Concursos homologados em que você consta na lista oficial de classificação
+            </span>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {inscricoesCandidato.map((item) => {
+            {paineisCandidato.aprovacoes.map((item) => {
               const tipoLot = item.concurso.tipo_lotacao || 'Lotação';
               return (
                 <div
@@ -368,7 +469,7 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
                     <div className="p-3 bg-white rounded-xl border border-slate-200/80 grid grid-cols-2 gap-2 text-xs">
                       <div>
                         <span className="text-[10px] uppercase text-slate-400 font-bold block">
-                          Classificação
+                          Classificação Oficial
                         </span>
                         <span className="font-bold text-[#135A7A] text-sm font-mono">
                           {item.candidato ? `${item.candidato.posicao}º lugar` : 'Homologado'}
@@ -380,7 +481,9 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
                           {tipoLot} Preferencial
                         </span>
                         <span className="font-semibold text-slate-800 text-xs truncate block">
-                          {item.candidato?.comarca_desejada_1 || 'Pendente de escolha'}
+                          {item.candidato?.comarca_desejada_1 ||
+                            item.candidato?.escolhas_comarcas?.[0] ||
+                            'Pendente de escolha'}
                         </span>
                       </div>
                     </div>
@@ -423,13 +526,15 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
                     <button
                       type="button"
                       onClick={() =>
-                        onNavigate('concurso_geral', {
+                        onNavigate('concurso', {
                           concursoId: item.concurso.id,
+                          cargoId: item.cargo.id,
+                          tab: 'dashboard',
                         })
                       }
                       className="text-xs font-bold bg-[#135A7A] hover:bg-[#0C2640] text-white px-3.5 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
                     >
-                      <span>Acessar Concurso</span>
+                      <span>Acessar Cargo</span>
                       <ArrowRight className="w-3.5 h-3.5" />
                     </button>
                   </div>
@@ -440,7 +545,254 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
         </div>
       )}
 
-      {/* SEÇÃO 2B: CONCURSOS QUE ESTOU ACOMPANHANDO (Item 1) */}
+      {/* =================================================================== */}
+      {/* SEÇÃO 2B: INSCRIÇÕES (Inscrito/fez a prova, aguardando homologação) */}
+      {/* =================================================================== */}
+      {usuario && paineisCandidato.inscricoes.length > 0 && (
+        <div className="bg-white rounded-2xl border border-slate-200/90 card-shadow p-5 sm:p-6 space-y-4">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+            <div className="flex items-center gap-2">
+              <Clock className="w-5 h-5 text-amber-600" />
+              <h2 className="text-base sm:text-lg font-bold font-serif text-slate-900">
+                Inscrições
+              </h2>
+              <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 text-xs font-bold font-mono">
+                {paineisCandidato.inscricoes.length} aguardando homologação
+              </span>
+            </div>
+            <span className="text-2xs text-slate-400 hidden sm:inline">
+              Concursos em que você está inscrito ou realizou a prova e aguardam homologação
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {paineisCandidato.inscricoes.map((item) => (
+              <div
+                key={`insc_${item.concurso.id}_${item.cargo.id}`}
+                className="p-4 rounded-2xl bg-amber-50/30 border border-amber-200/90 flex flex-col justify-between space-y-3"
+              >
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="px-2 py-0.5 rounded bg-[#07192B] text-teal-300 text-[10px] font-bold font-mono uppercase">
+                      {item.concurso.orgao} • {item.concurso.ano}
+                    </span>
+                    <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-900 text-[10px] font-bold">
+                      Aguardando Homologação
+                    </span>
+                  </div>
+                  <h3 className="text-sm font-bold font-serif text-slate-900">
+                    {item.concurso.nome}
+                  </h3>
+                  <div className="flex items-center gap-1.5 text-xs text-slate-700 font-semibold">
+                    <Briefcase className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                    <span>{item.cargo.nome}</span>
+                  </div>
+                </div>
+
+                <div className="pt-2.5 border-t border-amber-200/60 flex items-center justify-between gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      desinscreverConcurso(item.concurso.id, item.cargo.id);
+                      showToast(`Inscrição removida de ${item.concurso.nome}.`);
+                    }}
+                    className="text-[11px] font-semibold text-rose-600 hover:underline cursor-pointer"
+                  >
+                    Remover inscrição
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onNavigate('concurso', {
+                        concursoId: item.concurso.id,
+                        cargoId: item.cargo.id,
+                        tab: 'dashboard',
+                      })
+                    }
+                    className="text-xs font-bold text-teal-800 hover:text-teal-950 flex items-center gap-1 cursor-pointer"
+                  >
+                    <span>Acessar Cargo</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* =================================================================== */}
+      {/* SEÇÃO 2C: REPROVAÇÕES (Homologado sem constar na lista + Botão Admin) */}
+      {/* =================================================================== */}
+      {usuario && paineisCandidato.reprovacoes.length > 0 && (
+        <div className="bg-white rounded-2xl border border-slate-200/90 card-shadow p-5 sm:p-6 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-100">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-5 h-5 text-rose-600" />
+              <h2 className="text-base sm:text-lg font-bold font-serif text-slate-900">
+                Reprovações / Não Identificados na Homologação
+              </h2>
+              <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-900 text-xs font-bold font-mono">
+                {paineisCandidato.reprovacoes.length} registro(s)
+              </span>
+            </div>
+            <span className="text-2xs text-slate-500">
+              Concursos homologados em que você se inscreveu, mas não foi localizado na lista de classificação
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {paineisCandidato.reprovacoes.map((item) => (
+              <div
+                key={`rep_${item.concurso.id}_${item.cargo.id}`}
+                className="p-5 rounded-2xl bg-rose-50/30 border border-rose-200/90 space-y-4 flex flex-col justify-between"
+              >
+                <div className="space-y-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="px-2.5 py-0.5 rounded-md bg-[#07192B] text-teal-300 text-xs font-bold font-mono uppercase">
+                      {item.concurso.orgao} • {item.concurso.ano}
+                    </span>
+                    <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-rose-100 text-rose-800 border border-rose-200">
+                      Não identificado na lista homologada
+                    </span>
+                  </div>
+
+                  <div>
+                    <h3 className="text-sm sm:text-base font-bold font-serif text-slate-900">
+                      {item.concurso.nome}
+                    </h3>
+                    <div className="flex items-center gap-1.5 text-xs text-slate-700 font-semibold mt-1">
+                      <Briefcase className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                      <span>{item.cargo.nome}</span>
+                    </div>
+                  </div>
+
+                  <p className="text-2xs text-slate-600 leading-relaxed bg-white/80 p-2.5 rounded-xl border border-rose-200/60">
+                    Este concurso já foi homologado e seu nome/CPF ainda não foi reconhecido na lista de aprovados deste cargo. Se você foi aprovado, clique no botão abaixo para informar sua classificação oficial à administração.
+                  </p>
+                </div>
+
+                <div className="pt-2 border-t border-rose-200/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setVinculacaoAlvo({
+                        concursoId: item.concurso.id,
+                        concursoNome: item.concurso.nome,
+                        cargoId: item.cargo.id,
+                        cargoNome: item.cargo.nome,
+                      });
+                      setModalVinculacaoAberto(true);
+                    }}
+                    className="px-3.5 py-2 bg-[#07192B] hover:bg-[#0C2640] text-[#2DD4AA] font-bold text-xs rounded-xl transition-all cursor-pointer shadow-xs flex items-center justify-center gap-1.5"
+                  >
+                    <ShieldCheck className="w-4 h-4 shrink-0" />
+                    <span>Estou aprovado, mas o sistema não me reconheceu</span>
+                  </button>
+
+                  <div className="flex items-center justify-between sm:justify-end gap-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        desinscreverConcurso(item.concurso.id, item.cargo.id);
+                        showToast(`Registro removido de ${item.concurso.nome}.`);
+                      }}
+                      className="text-[11px] font-semibold text-slate-500 hover:text-rose-600 cursor-pointer"
+                    >
+                      Remover
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        onNavigate('concurso', {
+                          concursoId: item.concurso.id,
+                          cargoId: item.cargo.id,
+                          tab: 'classificacao',
+                        })
+                      }
+                      className="text-xs font-bold text-slate-700 hover:text-slate-950 flex items-center gap-1 cursor-pointer"
+                    >
+                      <span>Ver Lista</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* =================================================================== */}
+      {/* SEÇÃO 2D: VENCIDOS (Concursos com prazo de validade encerrado)      */}
+      {/* =================================================================== */}
+      {usuario && paineisCandidato.vencidos.length > 0 && (
+        <div className="bg-white rounded-2xl border border-slate-200/90 card-shadow p-5 sm:p-6 space-y-4">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+            <div className="flex items-center gap-2">
+              <Archive className="w-5 h-5 text-slate-500" />
+              <h2 className="text-base sm:text-lg font-bold font-serif text-slate-900">
+                Vencidos
+              </h2>
+              <span className="px-2 py-0.5 rounded-full bg-slate-200 text-slate-800 text-xs font-bold font-mono">
+                {paineisCandidato.vencidos.length} encerrado(s)
+              </span>
+            </div>
+            <span className="text-2xs text-slate-400 hidden sm:inline">
+              Concursos que já encerraram seu prazo de validade
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {paineisCandidato.vencidos.map((item) => (
+              <div
+                key={`venc_${item.concurso.id}_${item.cargo.id}`}
+                className="p-4 rounded-xl bg-slate-50 border border-slate-200 flex flex-col justify-between space-y-3 opacity-90"
+              >
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="px-2 py-0.5 rounded bg-slate-700 text-slate-200 text-[10px] font-bold font-mono uppercase">
+                      {item.concurso.orgao} • {item.concurso.ano}
+                    </span>
+                    <span className="px-2 py-0.5 rounded bg-slate-200 text-slate-700 text-[10px] font-bold">
+                      Prazo Vencido ({item.situacaoAnterior})
+                    </span>
+                  </div>
+                  <h3 className="text-sm font-bold font-serif text-slate-800">
+                    {item.concurso.nome}
+                  </h3>
+                  <p className="text-xs text-slate-600 font-medium">
+                    {item.cargo.nome}
+                    {item.candidato ? ` • ${item.candidato.posicao}º lugar` : ''}
+                  </p>
+                </div>
+
+                <div className="pt-2 border-t border-slate-200 flex items-center justify-end">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onNavigate('concurso', {
+                        concursoId: item.concurso.id,
+                        cargoId: item.cargo.id,
+                        tab: 'dashboard',
+                      })
+                    }
+                    className="text-xs font-bold text-slate-700 hover:text-slate-900 flex items-center gap-1 cursor-pointer"
+                  >
+                    <span>Consultar Histórico</span>
+                    <ArrowRight className="w-3 h-3" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* =================================================================== */}
+      {/* SEÇÃO 2E: CONCURSOS QUE ESTOU ACOMPANHANDO (Item 1)                 */}
+      {/* =================================================================== */}
       {usuario && concursosAcompanhados.length > 0 && (
         <div className="bg-white rounded-2xl border border-slate-200/90 card-shadow p-5 sm:p-6 space-y-4">
           <div className="flex items-center justify-between pb-3 border-b border-slate-100">
@@ -638,7 +990,7 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
                 Nenhum concurso cadastrado no momento
               </h3>
               <p className="text-xs text-slate-500 leading-relaxed">
-                Todas as informações de teste foram removidas. O sistema está limpo e pronto para o cadastro de certames reais, cargos, cronogramas e importação de listas oficiais.
+                O sistema está pronto para o cadastro de certames, cargos, cronogramas e importação de listas oficiais.
               </p>
             </div>
 
@@ -672,171 +1024,207 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             {concursosFiltrados.map((conc) => {
-            const cargosAtivos = conc.cargos?.filter((cg) => cg.ativo) || [];
+              const cargosAtivos = conc.cargos?.filter((cg) => cg.ativo) || [];
 
-            return (
-              <div
-                key={conc.id}
-                className="bg-white rounded-2xl border border-slate-200 card-shadow p-5 sm:p-6 flex flex-col justify-between space-y-4 hover:border-teal-500/50 transition-all"
-              >
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <span className="px-2.5 py-0.5 rounded-md bg-[#07192B] text-teal-300 text-xs font-bold font-mono uppercase">
-                        {conc.orgao} • {conc.ano}
+              return (
+                <div
+                  key={conc.id}
+                  className="bg-white rounded-2xl border border-slate-200 card-shadow p-5 sm:p-6 flex flex-col justify-between space-y-4 hover:border-teal-500/50 transition-all"
+                >
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="px-2.5 py-0.5 rounded-md bg-[#07192B] text-teal-300 text-xs font-bold font-mono uppercase">
+                          {conc.orgao} • {conc.ano}
+                        </span>
+                        <span className="text-2xs font-semibold text-slate-500">{conc.esfera}</span>
+                      </div>
+
+                      <span
+                        className={`px-2.5 py-0.5 rounded-md text-[11px] font-bold ${
+                          conc.homologado || conc.status === 'Homologado'
+                            ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                            : conc.status === 'Convocando'
+                            ? 'bg-amber-50 text-amber-800 border border-amber-300'
+                            : 'bg-slate-100 text-slate-700'
+                        }`}
+                      >
+                        {conc.status}
                       </span>
-                      <span className="text-2xs font-semibold text-slate-500">{conc.esfera}</span>
                     </div>
 
-                    <span
-                      className={`px-2.5 py-0.5 rounded-md text-[11px] font-bold ${
-                        conc.homologado || conc.status === 'Homologado'
-                          ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                          : conc.status === 'Convocando'
-                          ? 'bg-amber-50 text-amber-800 border border-amber-300'
-                          : 'bg-slate-100 text-slate-700'
-                      }`}
-                    >
-                      {conc.status}
-                    </span>
-                  </div>
+                    <div>
+                      <h3 className="text-base sm:text-lg font-bold font-serif text-slate-900 leading-snug">
+                        {conc.nome}
+                      </h3>
+                      <p className="text-xs text-slate-500 mt-1 line-clamp-2 leading-relaxed">
+                        {conc.descricao}
+                      </p>
+                    </div>
 
-                  <div>
-                    <h3 className="text-base sm:text-lg font-bold font-serif text-slate-900 leading-snug">
-                      {conc.nome}
-                    </h3>
-                    <p className="text-xs text-slate-500 mt-1 line-clamp-2 leading-relaxed">
-                      {conc.descricao}
-                    </p>
-                  </div>
+                    {/* Cargos deste Concurso com Links Diretos e botão de Inscrição */}
+                    <div className="space-y-2 pt-2 border-t border-slate-100">
+                      <span className="text-2xs font-bold text-slate-400 uppercase tracking-wider block">
+                        Cargos Disponíveis ({cargosAtivos.length})
+                      </span>
 
-                  {/* Cargos deste Concurso com Links Diretos */}
-                  <div className="space-y-2 pt-2 border-t border-slate-100">
-                    <span className="text-2xs font-bold text-slate-400 uppercase tracking-wider block">
-                      Cargos Disponíveis ({cargosAtivos.length})
-                    </span>
+                      <div className="space-y-1.5">
+                        {cargosAtivos.map((cg) => {
+                          const jaInscritoNoCargo = usuario?.concursos_inscritos?.some(
+                            (i) => i.concurso_id === conc.id && i.cargo_id === cg.id
+                          );
 
-                    <div className="space-y-1.5">
-                      {cargosAtivos.map((cg) => (
-                        <div
-                          key={cg.id}
-                          onClick={() =>
-                            onNavigate('concurso', {
-                              concursoId: conc.id,
-                              cargoId: cg.id,
-                              tab: 'dashboard',
-                            })
-                          }
-                          className="p-2.5 bg-slate-50 hover:bg-teal-50/50 rounded-xl border border-slate-200/80 flex items-center justify-between text-xs cursor-pointer group transition-all"
-                          title={`Acessar página do cargo ${cg.nome}`}
-                        >
-                          <div className="flex items-center gap-2">
-                            <Briefcase className="w-3.5 h-3.5 text-slate-400 group-hover:text-teal-700" />
-                            <span className="font-semibold text-slate-800 group-hover:text-teal-900">
-                              {cg.nome}
-                            </span>
-                            <span className="text-[10px] text-slate-400">({cg.nivel})</span>
-                          </div>
+                          return (
+                            <div
+                              key={cg.id}
+                              onClick={() =>
+                                onNavigate('concurso', {
+                                  concursoId: conc.id,
+                                  cargoId: cg.id,
+                                  tab: 'dashboard',
+                                })
+                              }
+                              className="p-2.5 bg-slate-50 hover:bg-teal-50/50 rounded-xl border border-slate-200/80 flex items-center justify-between gap-2 text-xs cursor-pointer group transition-all"
+                              title={`Acessar página do cargo ${cg.nome}`}
+                            >
+                              <div className="flex items-center gap-2 min-w-0">
+                                <Briefcase className="w-3.5 h-3.5 text-slate-400 group-hover:text-teal-700 shrink-0" />
+                                <span className="font-semibold text-slate-800 group-hover:text-teal-900 truncate">
+                                  {cg.nome}
+                                </span>
+                                <span className="text-[10px] text-slate-400 shrink-0">({cg.nivel})</span>
+                              </div>
 
-                          <div className="flex items-center gap-2">
-                            {(cg.vagas_disponiveis !== undefined || cg.vagas_reais_abertas !== undefined) ? (
-                              <span className="text-[10px] font-mono font-semibold text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded">
-                                {cg.vagas_disponiveis ?? cg.vagas_reais_abertas} vagas disponíveis
-                              </span>
-                            ) : cg.vagas_imediatas > 0 ? (
-                              <span className="text-[10px] font-mono font-semibold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">
-                                {cg.vagas_imediatas} vagas
-                              </span>
-                            ) : null}
-                            <ArrowRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-teal-700" />
-                          </div>
-                        </div>
-                      ))}
+                              <div className="flex items-center gap-2 shrink-0">
+                                {usuario && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (jaInscritoNoCargo) {
+                                        desinscreverConcurso(conc.id, cg.id);
+                                        showToast(`Inscrição desmarcada em ${cg.nome}.`);
+                                      } else {
+                                        inscreverConcurso(conc.id, cg.id);
+                                        showToast(`Você marcou que se inscreveu / fez a prova para ${cg.nome}!`);
+                                      }
+                                    }}
+                                    className={`px-2 py-0.5 rounded-md text-[10px] font-bold border transition-all cursor-pointer flex items-center gap-1 ${
+                                      jaInscritoNoCargo
+                                        ? 'bg-amber-100 text-amber-900 border-amber-300 hover:bg-amber-200'
+                                        : 'bg-white text-slate-600 border-slate-300 hover:border-teal-500 hover:text-teal-800'
+                                    }`}
+                                    title={
+                                      jaInscritoNoCargo
+                                        ? 'Clique para desmarcar sua inscrição neste cargo'
+                                        : 'Marcar que me inscrevi / fiz a prova neste cargo'
+                                    }
+                                  >
+                                    <FileCheck2 className="w-3 h-3" />
+                                    <span>{jaInscritoNoCargo ? 'Inscrito' : 'Marcar Inscrição'}</span>
+                                  </button>
+                                )}
+
+                                {(cg.vagas_disponiveis !== undefined || cg.vagas_reais_abertas !== undefined) ? (
+                                  <span className="text-[10px] font-mono font-semibold text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded">
+                                    {cg.vagas_disponiveis ?? cg.vagas_reais_abertas} vagas disp.
+                                  </span>
+                                ) : cg.vagas_imediatas > 0 ? (
+                                  <span className="text-[10px] font-mono font-semibold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">
+                                    {cg.vagas_imediatas} vagas
+                                  </span>
+                                ) : null}
+                                <ArrowRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-teal-700" />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                {/* Rodapé do Card do Concurso com Ações de Acesso */}
-                <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        onNavigate('concurso', {
-                          concursoId: conc.id,
-                          cargoId: cargosAtivos[0]?.id || 'geral',
-                          tab: 'cronograma',
-                        })
-                      }
-                      className="text-xs font-semibold text-slate-600 hover:text-slate-900 flex items-center gap-1 cursor-pointer"
-                    >
-                      <Calendar className="w-3.5 h-3.5 text-teal-600" />
-                      <span>Cronograma</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() =>
-                        onNavigate('lote', {
-                          concursoId: conc.id,
-                          cargoId: cargosAtivos[0]?.id || 'geral',
-                        })
-                      }
-                      className="text-xs font-semibold text-slate-600 hover:text-slate-900 flex items-center gap-1 cursor-pointer"
-                    >
-                      <Layers className="w-3.5 h-3.5 text-teal-600" />
-                      <span>Lotes</span>
-                    </button>
-
-                    {usuario && (
+                  {/* Rodapé do Card do Concurso com Ações de Acesso */}
+                  <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <button
                         type="button"
-                        onClick={() => {
-                          if (usuario.concursos_acompanhados?.includes(conc.id)) {
-                            desacompanharConcurso(conc.id);
-                            showToast(`Você deixou de acompanhar ${conc.nome}.`);
-                          } else {
-                            acompanharConcurso(conc.id);
-                            showToast(`Agora você está acompanhando ${conc.nome}!`);
-                          }
-                        }}
-                        className={`text-xs font-semibold px-2.5 py-1 rounded-lg border transition-all cursor-pointer flex items-center gap-1 ${
-                          usuario.concursos_acompanhados?.includes(conc.id)
-                            ? 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100'
-                            : 'bg-teal-50 text-teal-800 border-teal-200 hover:bg-teal-100'
-                        }`}
-                        title={
-                          usuario.concursos_acompanhados?.includes(conc.id)
-                            ? 'Clique para deixar de acompanhar este certame'
-                            : 'Acompanhar este certame para receber atualizações rápidas'
+                        onClick={() =>
+                          onNavigate('concurso', {
+                            concursoId: conc.id,
+                            cargoId: cargosAtivos[0]?.id || 'geral',
+                            tab: 'cronograma',
+                          })
                         }
+                        className="text-xs font-semibold text-slate-600 hover:text-slate-900 flex items-center gap-1 cursor-pointer"
                       >
-                        <BookmarkCheck className="w-3.5 h-3.5" />
-                        <span>
-                          {usuario.concursos_acompanhados?.includes(conc.id)
-                            ? 'Deixar de Acompanhar'
-                            : 'Acompanhar'}
-                        </span>
+                        <Calendar className="w-3.5 h-3.5 text-teal-600" />
+                        <span>Cronograma</span>
                       </button>
-                    )}
-                  </div>
 
-                  <button
-                    type="button"
-                    onClick={() =>
-                      onNavigate('concurso_geral', {
-                        concursoId: conc.id,
-                      })
-                    }
-                    className="flex items-center justify-center gap-1.5 px-4 py-2 bg-[#07192B] hover:bg-[#0C2640] text-[#2DD4AA] font-bold text-xs rounded-xl transition-all cursor-pointer shadow-xs shrink-0"
-                  >
-                    <span>Acessar Concurso</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          onNavigate('concurso', {
+                            concursoId: conc.id,
+                            cargoId: cargosAtivos[0]?.id || 'geral',
+                            tab: 'lotes',
+                          })
+                        }
+                        className="text-xs font-semibold text-slate-600 hover:text-slate-900 flex items-center gap-1 cursor-pointer"
+                      >
+                        <Layers className="w-3.5 h-3.5 text-teal-600" />
+                        <span>Lotes</span>
+                      </button>
+
+                      {usuario && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (usuario.concursos_acompanhados?.includes(conc.id)) {
+                              desacompanharConcurso(conc.id);
+                              showToast(`Você deixou de acompanhar ${conc.nome}.`);
+                            } else {
+                              acompanharConcurso(conc.id);
+                              showToast(`Agora você está acompanhando ${conc.nome}!`);
+                            }
+                          }}
+                          className={`text-xs font-semibold px-2.5 py-1 rounded-lg border transition-all cursor-pointer flex items-center gap-1 ${
+                            usuario.concursos_acompanhados?.includes(conc.id)
+                              ? 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100'
+                              : 'bg-teal-50 text-teal-800 border-teal-200 hover:bg-teal-100'
+                          }`}
+                          title={
+                            usuario.concursos_acompanhados?.includes(conc.id)
+                              ? 'Clique para deixar de acompanhar este certame'
+                              : 'Acompanhar este certame para receber atualizações rápidas'
+                          }
+                        >
+                          <BookmarkCheck className="w-3.5 h-3.5" />
+                          <span>
+                            {usuario.concursos_acompanhados?.includes(conc.id)
+                              ? 'Deixar de Acompanhar'
+                              : 'Acompanhar'}
+                          </span>
+                        </button>
+                      )}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        onNavigate('concurso_geral', {
+                          concursoId: conc.id,
+                        })
+                      }
+                      className="flex items-center justify-center gap-1.5 px-4 py-2 bg-[#07192B] hover:bg-[#0C2640] text-[#2DD4AA] font-bold text-xs rounded-xl transition-all cursor-pointer shadow-xs shrink-0"
+                    >
+                      <span>Acessar Concurso</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
           </div>
         )}
       </div>
@@ -856,6 +1244,20 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
         onClose={() => setModalContatoAberto(false)}
         motivoInicial={motivoContato}
       />
+
+      {vinculacaoAlvo && (
+        <SolicitarVinculacaoModal
+          aberto={modalVinculacaoAberto}
+          onClose={() => {
+            setModalVinculacaoAberto(false);
+            setVinculacaoAlvo(null);
+          }}
+          concursoId={vinculacaoAlvo.concursoId}
+          concursoNome={vinculacaoAlvo.concursoNome}
+          cargoId={vinculacaoAlvo.cargoId}
+          cargoNome={vinculacaoAlvo.cargoNome}
+        />
+      )}
     </div>
   );
 };

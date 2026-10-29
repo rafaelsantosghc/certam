@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../store/authContext';
 import { auditStore } from '../store/auditStore';
 import { sanitizeInput } from '../utils/security';
@@ -25,10 +25,18 @@ export const SolicitarVinculacaoModal: React.FC<SolicitarVinculacaoModalProps> =
   const [nome, setNome] = useState(usuario?.nome || '');
   const [cpf, setCpf] = useState(usuario?.cpf || '');
   const [posicao, setPosicao] = useState('');
+  const [cotaDeclarada, setCotaDeclarada] = useState('Ampla');
   const [nota, setNota] = useState('');
   const [comprovanteInfo, setComprovanteInfo] = useState('');
   const [sucesso, setSucesso] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (aberto && usuario) {
+      setNome(usuario.nome || '');
+      setCpf(usuario.cpf || '');
+    }
+  }, [aberto, usuario]);
 
   if (!aberto) return null;
 
@@ -37,7 +45,7 @@ export const SolicitarVinculacaoModal: React.FC<SolicitarVinculacaoModalProps> =
     setErro(null);
 
     if (!nome.trim()) {
-      setErro('Informe seu nome completo conforme a lista de aprovados.');
+      setErro('Informe seu nome completo conforme a lista oficial de aprovados.');
       return;
     }
     if (!cpf.trim()) {
@@ -45,7 +53,7 @@ export const SolicitarVinculacaoModal: React.FC<SolicitarVinculacaoModalProps> =
       return;
     }
     if (!posicao.trim()) {
-      setErro('Informe a sua posição no resultado final.');
+      setErro('Informe a sua classificação oficial obtida na homologação.');
       return;
     }
 
@@ -54,8 +62,11 @@ export const SolicitarVinculacaoModal: React.FC<SolicitarVinculacaoModalProps> =
       usuario_nome: sanitizeInput(nome, 100),
       cpf: sanitizeInput(cpf, 20),
       concurso_id: concursoId,
+      concurso_nome: concursoNome,
       cargo_id: cargoId,
+      cargo_nome: cargoNome,
       posicao_declarada: parseInt(posicao, 10) || 1,
+      cota_declarada: cotaDeclarada,
       nota_declarada: nota ? parseFloat(nota.replace(',', '.')) : undefined,
       comprovante_info: sanitizeInput(comprovanteInfo, 500),
     });
@@ -77,7 +88,7 @@ export const SolicitarVinculacaoModal: React.FC<SolicitarVinculacaoModalProps> =
               <ShieldCheck className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="font-serif font-bold text-base text-white">Solicitar Validação de Aprovado</h3>
+              <h3 className="font-serif font-bold text-base text-white">Informar Aprovação Oficial ao Admin</h3>
               <p className="text-2xs text-slate-300">{concursoNome} • {cargoNome}</p>
             </div>
           </div>
@@ -93,9 +104,9 @@ export const SolicitarVinculacaoModal: React.FC<SolicitarVinculacaoModalProps> =
         {sucesso ? (
           <div className="p-8 text-center space-y-3">
             <CheckCircle2 className="w-12 h-12 text-[#2DD4AA] mx-auto animate-bounce" />
-            <h4 className="font-serif font-bold text-lg text-slate-900">Solicitação Enviada!</h4>
+            <h4 className="font-serif font-bold text-lg text-slate-900">Aviso Enviado à Administração!</h4>
             <p className="text-xs text-slate-600 max-w-sm mx-auto leading-relaxed">
-              O administrador analisará sua classificação na publicação oficial e homologará seu acesso ao chat e simulador de comarcas.
+              O administrador recebeu seu alerta e analisará sua classificação oficial para vincular sua conta ao registro de aprovado no Cadastro Geral.
             </p>
           </div>
         ) : (
@@ -108,7 +119,7 @@ export const SolicitarVinculacaoModal: React.FC<SolicitarVinculacaoModalProps> =
             )}
 
             <div className="p-3 bg-teal-50/50 border border-teal-200 rounded-xl text-teal-900 text-2xs leading-relaxed">
-              Se o seu nome consta na lista oficial homologada mas não foi vinculado automaticamente, envie os dados abaixo para verificação manual imediata pelo administrador.
+              Você está aprovado neste concurso, mas o sistema não reconheceu automaticamente seu vínculo? Preencha sua classificação oficial abaixo para que o administrador analise e vincule seu perfil ao aprovado correspondente no cadastro geral.
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -140,10 +151,10 @@ export const SolicitarVinculacaoModal: React.FC<SolicitarVinculacaoModalProps> =
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">
-                  Posição Obtida na Homologação <span className="text-rose-500">*</span>
+                  Classificação Oficial <span className="text-rose-500">*</span>
                 </label>
                 <input
                   type="number"
@@ -153,6 +164,24 @@ export const SolicitarVinculacaoModal: React.FC<SolicitarVinculacaoModalProps> =
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:border-teal-600 focus:outline-hidden font-mono"
                   required
                 />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  Lista / Cota
+                </label>
+                <select
+                  value={cotaDeclarada}
+                  onChange={(e) => setCotaDeclarada(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:border-teal-600 focus:outline-hidden font-semibold"
+                >
+                  <option value="Ampla">Ampla Concorrência</option>
+                  <option value="PPP">PPP / Negros</option>
+                  <option value="PCD">PCD</option>
+                  <option value="PCD + PPP">PCD + PPP (Ambas)</option>
+                  <option value="Indígena">Indígena</option>
+                  <option value="Trans">Trans</option>
+                </select>
               </div>
 
               <div>
@@ -171,11 +200,11 @@ export const SolicitarVinculacaoModal: React.FC<SolicitarVinculacaoModalProps> =
 
             <div>
               <label className="block font-semibold text-slate-700 mb-1">
-                Informações Comprobatórias (Inscrição / Diário Oficial)
+                Observações / Informações Comprobatórias (Inscrição / Diário Oficial)
               </label>
               <textarea
                 rows={2}
-                placeholder="Ex: Inscrição nº 109281, publicado no Diário Oficial de 18/10/2025, página 42."
+                placeholder="Ex: Aprovado em 8º lugar na Ampla Concorrência, publicação no DOE de 18/10/2025..."
                 value={comprovanteInfo}
                 onChange={(e) => setComprovanteInfo(e.target.value)}
                 className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:border-teal-600 focus:outline-hidden leading-relaxed"
@@ -195,7 +224,7 @@ export const SolicitarVinculacaoModal: React.FC<SolicitarVinculacaoModalProps> =
                 className="flex items-center gap-1.5 px-5 py-2 bg-[#07192B] hover:bg-[#0C2640] text-[#2DD4AA] font-bold rounded-xl transition-colors cursor-pointer shadow-sm"
               >
                 <Send className="w-3.5 h-3.5" />
-                <span>Submeter para Validação</span>
+                <span>Enviar Aviso para Administração</span>
               </button>
             </div>
           </form>

@@ -111,8 +111,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [userFormEmail, setUserFormEmail] = useState('');
   const [userFormTelefone, setUserFormTelefone] = useState('');
   const [userFormRole, setUserFormRole] = useState<'admin' | 'candidato'>('candidato');
-  const [userFormStatus, setUserFormStatus] = useState<'ativo' | 'aguardando_primeiro_acesso'>('ativo');
+  const [userFormStatus, setUserFormStatus] = useState<'ativo' | 'primeiro_acesso' | 'aguardando_primeiro_acesso'>('ativo');
   const [userFormBloqueado, setUserFormBloqueado] = useState(false);
+  const [vinculoCandSelecionado, setVinculoCandSelecionado] = useState<Record<string, string>>({});
 
   // -------------------------------------------------------------
   // DADOS AUDITORIA, VINCULAÇÕES, CONTATOS & NOTIFICAÇÕES
@@ -284,6 +285,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [nomeArquivo, setNomeArquivo] = useState('');
   const [erroImportacao, setErroImportacao] = useState<string | null>(null);
   const [importando, setImportando] = useState(false);
+  const [limitePreview, setLimitePreview] = useState<100 | 250 | 500 | 'todos'>(100);
+  const [paginaPreview, setPaginaPreview] = useState<number>(1);
 
   const handleConcursoChange = (novoId: string) => {
     setImportConcursoId(novoId);
@@ -313,7 +316,38 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   ) => {
     if (!rows || rows.length === 0) return;
 
-    const parsed: Partial<Candidato>[] = rows.map((row, idx) => {
+    const extrairCotasDeTexto = (txt: string, acumulador: Set<Candidato['cota']>) => {
+      const lower = txt
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '');
+      if (
+        lower.includes('pcd') ||
+        lower.includes('defic') ||
+        lower.includes('p.c.d') ||
+        lower.includes('especial')
+      ) {
+        acumulador.add('PCD');
+      }
+      if (
+        lower.includes('ppp') ||
+        lower.includes('negro') ||
+        lower.includes('pardo') ||
+        lower.includes('preto') ||
+        lower.includes('afro') ||
+        /\bcn\b/.test(lower)
+      ) {
+        acumulador.add('PPP');
+      }
+      if (lower.includes('indig')) {
+        acumulador.add('Indígena');
+      }
+      if (lower.includes('trans')) {
+        acumulador.add('Trans');
+      }
+    };
+
+    const parsedRaw: Partial<Candidato>[] = rows.map((row, idx) => {
       const getVal = (colName: string) =>
         colName && row[colName] !== undefined ? String(row[colName]).trim() : '';
 
@@ -332,21 +366,76 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       const email = getVal(mapa.email).toLowerCase() || undefined;
       const whatsapp = getVal(mapa.whatsapp) || undefined;
 
-      // Item 8: Suporte a múltiplas cotas
-      const cotaNorm = normalizarCota(rawCota);
-      const cotasIdentificadas: Candidato['cota'][] = [];
-      const lower = rawCota.toLowerCase();
-      if (lower.includes('pcd') || lower.includes('defic')) cotasIdentificadas.push('PCD');
-      if (
-        lower.includes('ppp') ||
-        lower.includes('negro') ||
-        lower.includes('pardo') ||
-        lower.includes('cn')
-      )
-        cotasIdentificadas.push('PPP');
-      if (lower.includes('indig')) cotasIdentificadas.push('Indígena');
-      if (lower.includes('trans')) cotasIdentificadas.push('Trans');
-      if (cotasIdentificadas.length === 0) cotasIdentificadas.push('Ampla');
+      // Item 8: Detectar múltiplas cotas (PCD e PPP simultaneamente) tanto na coluna mapeada quanto em colunas auxiliares de cota da planilha
+      const setCotas = new Set<Candidato['cota']>(['Ampla']);
+      extrairCotasDeTexto(rawCota, setCotas);
+
+      // Inspecionar também outras colunas da linha cujo nome mencione cota/pcd/ppp/negro/deficiência/modalidade/lista
+      Object.keys(row || {}).forEach((colKey) => {
+        const keyNorm = colKey
+          .toLowerCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '');
+        const valStr = String(row[colKey] ?? '').trim();
+        if (!valStr) return;
+        const valNorm = valStr
+          .toLowerCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '');
+
+        // Se o cabeçalho da coluna é específico de PCD (ex: "PCD", "Cota PCD", "Classif PCD") e a célula tem valor positivo ("Sim", "S", "X", número de posição, "PCD")
+        if (keyNorm.includes('pcd') || keyNorm.includes('defic')) {
+          if (
+            valNorm !== 'nao' &&
+            valNorm !== 'n' &&
+            valNorm !== '-' &&
+            valNorm !== '0' &&
+            valNorm !== 'false' &&
+            valNorm !== 'ampla'
+          ) {
+            setCotas.add('PCD');
+          }
+        }
+        // Se o cabeçalho da coluna é específico de PPP/Negros (ex: "PPP", "CN", "Cota Negros", "Classif PPP") e a célula tem valor positivo
+        if (
+          keyNorm.includes('ppp') ||
+          keyNorm.includes('negro') ||
+          keyNorm.includes('pardo') ||
+          /\bcn\b/.test(keyNorm)
+        ) {
+          if (
+            valNorm !== 'nao' &&
+            valNorm !== 'n' &&
+            valNorm !== '-' &&
+            valNorm !== '0' &&
+            valNorm !== 'false' &&
+            valNorm !== 'ampla'
+          ) {
+            setCotas.add('PPP');
+          }
+        }
+        // Se o cabeçalho menciona cota/modalidade/reserva/lista, extrai cotas do texto da célula
+        if (
+          keyNorm.includes('cota') ||
+          keyNorm.includes('modalidade') ||
+          keyNorm.includes('reserva') ||
+          keyNorm.includes('lista') ||
+          keyNorm.includes('concorrencia')
+        ) {
+          extrairCotasDeTexto(valStr, setCotas);
+        }
+      });
+
+      const cotasIdentificadas = Array.from(setCotas);
+      const cotaPrincipal: Candidato['cota'] = cotasIdentificadas.includes('PCD')
+        ? 'PCD'
+        : cotasIdentificadas.includes('PPP')
+        ? 'PPP'
+        : cotasIdentificadas.includes('Indígena')
+        ? 'Indígena'
+        : cotasIdentificadas.includes('Trans')
+        ? 'Trans'
+        : normalizarCota(rawCota);
 
       let statusCalc: Candidato['status'] = 'Aguardando Convocação';
       if (dataNomeacao) {
@@ -363,7 +452,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         nome,
         cpf,
         nota_final: nota,
-        cota: cotaNorm,
+        cota: cotaPrincipal,
         cotas: cotasIdentificadas,
         data_convocacao: dataConvocacao,
         data_nomeacao: dataNomeacao,
@@ -376,8 +465,52 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       };
     });
 
+    // Item 8: Unificar linhas duplicadas do mesmo candidato (quando a planilha traz o candidato em uma linha da lista PCD e outra da lista PPP/Ampla)
+    const mapaUnificados = new Map<string, Partial<Candidato>>();
+    parsedRaw.forEach((cand) => {
+      const cpfKey = cand.cpf ? cand.cpf.replace(/\D/g, '') : '';
+      const nomeKey = (cand.nome || '')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+      const chave = cpfKey.length >= 6 ? `cpf:${cpfKey}` : `nome:${nomeKey}`;
+
+      const existente = mapaUnificados.get(chave);
+      if (!existente) {
+        mapaUnificados.set(chave, cand);
+      } else {
+        const cotasUnidas = Array.from(
+          new Set<Candidato['cota']>([
+            'Ampla',
+            ...(existente.cotas || [existente.cota || 'Ampla']),
+            ...(cand.cotas || [cand.cota || 'Ampla']),
+          ])
+        );
+        const cotaPrin: Candidato['cota'] = cotasUnidas.includes('PCD')
+          ? 'PCD'
+          : cotasUnidas.includes('PPP')
+          ? 'PPP'
+          : existente.cota || 'Ampla';
+        mapaUnificados.set(chave, {
+          ...existente,
+          posicao: Math.min(existente.posicao || 999999, cand.posicao || 999999),
+          nota_final: Math.max(existente.nota_final || 0, cand.nota_final || 0),
+          cpf: existente.cpf || cand.cpf,
+          cota: cotaPrin,
+          cotas: cotasUnidas,
+          data_convocacao: existente.data_convocacao || cand.data_convocacao,
+          data_nomeacao: existente.data_nomeacao || cand.data_nomeacao,
+          comarca_definitiva: existente.comarca_definitiva || cand.comarca_definitiva,
+        });
+      }
+    });
+
+    const parsed = Array.from(mapaUnificados.values());
     parsed.sort((a, b) => (a.posicao || 0) - (b.posicao || 0));
     setPreviewPlanilha(parsed);
+    setPaginaPreview(1);
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -741,35 +874,53 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const handleAprovarVinculacao = (v: SolicitacaoVinculacao) => {
     auditStore.aprovarVinculacao(v.id);
 
-    // Inserir ou atualizar na lista do concurso
+    // Inserir ou atualizar na lista do concurso vinculando ao aprovado selecionado (Item 1)
     const cands = lotesStore.getCandidatos(v.concurso_id, v.cargo_id);
-    const candExistente = cands.find((c) => c.posicao === v.posicao_declarada);
+    const idEscolhidoAdmin = vinculoCandSelecionado[v.id] || v.candidato_vinculado_id;
+    const candExistente =
+      (idEscolhidoAdmin ? cands.find((c) => c.id === idEscolhidoAdmin) : undefined) ||
+      cands.find((c) => c.posicao === v.posicao_declarada);
+
+    let idCandFinal = candExistente?.id || `cand-aprovado-${Date.now().toString(36)}`;
 
     if (candExistente) {
       lotesStore.salvarCandidato(v.concurso_id, v.cargo_id, {
         ...candExistente,
-        nome: v.usuario_nome,
-        cpf: v.cpf,
+        cpf: v.cpf || candExistente.cpf,
         email: v.usuario_email,
       });
     } else {
+      const cotaDecl = (v.cota_declarada as Candidato['cota']) || 'Ampla';
       const novo: Candidato = {
-        id: `cand-aprovado-${Date.now().toString(36)}`,
+        id: idCandFinal,
         concurso_id: v.concurso_id,
         cargo_id: v.cargo_id,
         posicao: v.posicao_declarada,
         nome: v.usuario_nome,
-        cota: 'Ampla',
+        cota: cotaDecl,
+        cotas: cotaDecl !== 'Ampla' ? ['Ampla', cotaDecl] : ['Ampla'],
         nota_final: v.nota_declarada || 90.0,
         intencao: 'Sim',
-        status: 'Convocado Titular',
+        status: 'Aguardando Convocação',
         cpf: v.cpf,
         email: v.usuario_email,
-        escolhas_comarcas: ['Porto Alegre'],
+        escolhas_comarcas: [],
       };
       cands.push(novo);
       lotesStore.salvarCandidatos(v.concurso_id, v.cargo_id, cands);
     }
+
+    // Atualizar o Cadastro Geral vinculando o usuário que fez a solicitação ao aprovado
+    userRegistryStore.vincularOuRegistrarUsuarioLogin({
+      email: v.usuario_email,
+      nome: candExistente?.nome || v.usuario_nome,
+      cpf: v.cpf || candExistente?.cpf,
+      is_admin: false,
+      candidato_id: idCandFinal,
+      concurso_id: v.concurso_id,
+      cargo_id: v.cargo_id,
+    });
+    setUsuariosGerais(userRegistryStore.getAllUsers());
 
     notificationStore.criarNotificacao({
       concurso_id: v.concurso_id,
@@ -777,13 +928,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       destinatario_email: v.usuario_email,
       destinatario_nome: v.usuario_nome,
       titulo: 'Validação de Aprovado Deferida',
-      mensagem: `Sua vinculação ao certame ${v.concurso_nome || v.concurso_id} no cargo ${v.cargo_nome || v.cargo_id} (${v.posicao_declarada}º lugar) foi DEFERIDA e homologada no sistema.`,
+      mensagem: `Sua vinculação ao certame ${v.concurso_nome || v.concurso_id} no cargo ${v.cargo_nome || v.cargo_id} (${candExistente?.posicao || v.posicao_declarada}º lugar) foi DEFERIDA e homologada no sistema.`,
       tipo: 'validacao_aprovada',
       link_destino: `/concurso?id=${v.concurso_id}&tab=dashboard`,
       urgente: false,
     });
 
-    showToast(`Candidato ${v.usuario_nome} validado e homologado no cargo!`);
+    showToast(`Candidato ${v.usuario_nome} vinculado ao aprovado e homologado no cargo!`);
   };
 
   const handleAbrirIndeferirVinculacao = (v: SolicitacaoVinculacao) => {
@@ -945,11 +1096,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         (u.cpf && u.cpf.replace(/\D/g, '').includes(buscaUsuario.replace(/\D/g, ''))) ||
         (u.telefone && u.telefone.includes(buscaUsuario.trim()));
 
+      const isPrimeiroAcesso =
+        u.status_cadastro === 'primeiro_acesso' ||
+        u.status_cadastro === 'aguardando_primeiro_acesso' ||
+        u.status_cadastro === 'aguardando_vinculacao';
+
       const matchStatus =
         filtroStatusUsuario === 'todos' ||
         (filtroStatusUsuario === 'bloqueado' && u.bloqueado) ||
         (filtroStatusUsuario === 'ativo' && !u.bloqueado && u.status_cadastro === 'ativo') ||
-        (filtroStatusUsuario === 'aguardando' && u.status_cadastro === 'aguardando_primeiro_acesso');
+        (filtroStatusUsuario === 'aguardando' && !u.bloqueado && isPrimeiroAcesso);
 
       const matchRole =
         filtroRoleUsuario === 'todos' || u.role === filtroRoleUsuario;
@@ -1697,9 +1853,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                               <Lock className="w-3 h-3" />
                               <span>Bloqueado</span>
                             </span>
-                          ) : u.status_cadastro === 'aguardando_primeiro_acesso' ? (
+                          ) : u.status_cadastro === 'primeiro_acesso' ||
+                            u.status_cadastro === 'aguardando_primeiro_acesso' ||
+                            u.status_cadastro === 'aguardando_vinculacao' ? (
                             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
-                              <span>Aguardando 1º Acesso</span>
+                              <span>Primeiro Acesso</span>
                             </span>
                           ) : (
                             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
@@ -1810,13 +1968,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   </div>
 
                   <div>
-                    <label className="block font-bold text-slate-700 mb-1">E-mail de Acesso / Vinculação:</label>
+                    <label className="block font-bold text-slate-700 mb-1">
+                      E-mail de Acesso / Vinculação (em branco até o 1º acesso):
+                    </label>
                     <input
                       type="email"
+                      placeholder="Preenchido automaticamente quando o candidato fizer o 1º acesso"
                       value={userFormEmail}
                       onChange={(e) => setUserFormEmail(e.target.value)}
                       className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-mono"
-                      required
                     />
                   </div>
 
@@ -1840,7 +2000,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-semibold"
                       >
                         <option value="ativo">Ativo (Vinculado)</option>
-                        <option value="aguardando_primeiro_acesso">Aguardando 1º Acesso</option>
+                        <option value="primeiro_acesso">Primeiro Acesso (Aguardando Vínculo)</option>
                       </select>
                     </div>
                   </div>
@@ -2004,83 +2164,132 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             </div>
           ) : (
             <div className="space-y-4">
-              {vinculacoes.map((v) => (
-                <div
-                  key={v.id}
-                  className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 card-shadow flex flex-col md:flex-row md:items-center justify-between gap-4"
-                >
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-sm text-slate-900">{v.usuario_nome}</span>
-                      <span className="text-2xs font-mono text-slate-400">CPF: {v.cpf}</span>
-                      <span
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded ${
-                          v.status === 'pendente'
-                            ? 'bg-amber-100 text-amber-900'
-                            : v.status === 'aprovado'
-                            ? 'bg-emerald-100 text-emerald-900'
-                            : 'bg-rose-100 text-rose-900'
-                        }`}
-                      >
-                        {v.status}
-                      </span>
-                    </div>
+              {vinculacoes.map((v) => {
+                const candsDoCargo = lotesStore.getCandidatos(v.concurso_id, v.cargo_id);
+                const candSugerido = candsDoCargo.find((c) => c.posicao === v.posicao_declarada);
+                const idSelecionado =
+                  vinculoCandSelecionado[v.id] !== undefined
+                    ? vinculoCandSelecionado[v.id]
+                    : candSugerido?.id || '';
 
-                    <div className="text-xs text-slate-600 flex flex-wrap items-center gap-2">
-                      <span className="font-semibold text-teal-800">
-                        {v.concurso_nome || v.concurso_id} • {v.cargo_nome || v.cargo_id}
-                      </span>
-                      {v.ano_concurso && (
-                        <span className="text-2xs font-mono text-slate-500">({v.ano_concurso})</span>
-                      )}
-                      <span className="text-slate-300">·</span>
-                      <span className="font-mono font-bold text-slate-800">
-                        Posição declarada: {v.posicao_declarada}º lugar
-                      </span>
-                      {v.nota_declarada && (
-                        <>
+                return (
+                  <div
+                    key={v.id}
+                    className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 card-shadow flex flex-col gap-4"
+                  >
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-bold text-sm text-slate-900">{v.usuario_nome}</span>
+                          <span className="text-2xs font-mono text-slate-500">({v.usuario_email})</span>
+                          <span className="text-2xs font-mono text-slate-400">CPF: {v.cpf}</span>
+                          <span
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${
+                              v.status === 'pendente'
+                                ? 'bg-amber-100 text-amber-900'
+                                : v.status === 'aprovado'
+                                ? 'bg-emerald-100 text-emerald-900'
+                                : 'bg-rose-100 text-rose-900'
+                            }`}
+                          >
+                            {v.status}
+                          </span>
+                        </div>
+
+                        <div className="text-xs text-slate-600 flex flex-wrap items-center gap-2">
+                          <span className="font-semibold text-teal-800">
+                            {v.concurso_nome || v.concurso_id} • {v.cargo_nome || v.cargo_id}
+                          </span>
+                          {v.ano_concurso && (
+                            <span className="text-2xs font-mono text-slate-500">({v.ano_concurso})</span>
+                          )}
                           <span className="text-slate-300">·</span>
-                          <span className="font-mono text-slate-600">Nota: {v.nota_declarada}</span>
-                        </>
+                          <span className="font-mono font-bold text-slate-800">
+                            Classificação oficial declarada: {v.posicao_declarada}º lugar
+                          </span>
+                          {v.cota_declarada && (
+                            <>
+                              <span className="text-slate-300">·</span>
+                              <span className="font-mono font-bold text-purple-800">
+                                Modalidade: {v.cota_declarada}
+                              </span>
+                            </>
+                          )}
+                          {v.nota_declarada && (
+                            <>
+                              <span className="text-slate-300">·</span>
+                              <span className="font-mono text-slate-600">Nota: {v.nota_declarada}</span>
+                            </>
+                          )}
+                        </div>
+
+                        {v.comprovante_info && (
+                          <p className="text-2xs text-slate-500 bg-slate-50 p-2 rounded-lg border border-slate-100 max-w-xl">
+                            <strong>Observação / Justificativa do candidato:</strong> {v.comprovante_info}
+                          </p>
+                        )}
+                      </div>
+
+                      {v.status === 'pendente' && (
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => handleAbrirIndeferirVinculacao(v)}
+                            className="px-3.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1"
+                          >
+                            <XCircle className="w-3.5 h-3.5" />
+                            <span>Indeferir...</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleAprovarVinculacao(v)}
+                            className="px-4 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1 shadow-xs"
+                          >
+                            <Check className="w-3.5 h-3.5" />
+                            <span>Vincular e Homologar Aprovado</span>
+                          </button>
+                        </div>
                       )}
                     </div>
 
-                    {v.comprovante_info && (
-                      <p className="text-2xs text-slate-500 bg-slate-50 p-2 rounded-lg border border-slate-100 max-w-xl">
-                        <strong>Comprovante / Referência:</strong> {v.comprovante_info}
-                      </p>
+                    {/* Seletor para vincular a solicitação a um aprovado da lista / cadastro geral (Item 1) */}
+                    {v.status === 'pendente' && (
+                      <div className="p-3 bg-teal-50/50 border border-teal-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                        <label className="font-bold text-teal-950 flex items-center gap-1.5">
+                          <UserCheck className="w-4 h-4 text-teal-700 shrink-0" />
+                          <span>Vincular usuário ao aprovado na lista de classificação / cadastro geral:</span>
+                        </label>
+                        <select
+                          value={idSelecionado}
+                          onChange={(e) =>
+                            setVinculoCandSelecionado((prev) => ({
+                              ...prev,
+                              [v.id]: e.target.value,
+                            }))
+                          }
+                          className="px-3 py-1.5 bg-white border border-teal-300 rounded-lg text-xs font-semibold text-slate-800 max-w-md w-full"
+                        >
+                          <option value="">
+                            -- Criar novo registro na {v.posicao_declarada}ª posição ({v.usuario_nome}) --
+                          </option>
+                          {candsDoCargo.map((cand) => (
+                            <option key={cand.id} value={cand.id}>
+                              {cand.posicao}º lugar — {cand.nome} ({cand.cota} • Nota {cand.nota_final})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    {v.status === 'rejeitado' && v.motivo_rejeicao && (
+                      <div className="w-full mt-1 p-2.5 bg-rose-50 border border-rose-200 rounded-lg text-2xs text-rose-800">
+                        <span className="font-bold block text-rose-900">Motivo do Indeferimento:</span>
+                        <p className="mt-0.5">{v.motivo_rejeicao}</p>
+                      </div>
                     )}
                   </div>
-
-                  {v.status === 'pendente' && (
-                    <div className="flex items-center gap-2 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => handleAbrirIndeferirVinculacao(v)}
-                        className="px-3.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1"
-                      >
-                        <XCircle className="w-3.5 h-3.5" />
-                        <span>Indeferir...</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleAprovarVinculacao(v)}
-                        className="px-4 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1 shadow-xs"
-                      >
-                        <Check className="w-3.5 h-3.5" />
-                        <span>Homologar Aprovado</span>
-                      </button>
-                    </div>
-                  )}
-
-                  {v.status === 'rejeitado' && v.motivo_rejeicao && (
-                    <div className="w-full mt-2 p-2.5 bg-rose-50 border border-rose-200 rounded-lg text-2xs text-rose-800">
-                      <span className="font-bold block text-rose-900">Motivo do Indeferimento:</span>
-                      <p className="mt-0.5">{v.motivo_rejeicao}</p>
-                    </div>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </section>
@@ -2562,146 +2771,280 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   </div>
                 </div>
 
-                {/* Tabela Editável de Prévia dos Candidatos */}
-                <div className="border border-slate-200 rounded-xl overflow-x-auto max-h-[480px]">
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-[#07192B] text-white text-[11px] uppercase tracking-wider sticky top-0 z-10">
-                      <tr>
-                        <th className="py-2.5 px-2 w-16">Pos.</th>
-                        <th className="py-2.5 px-2 min-w-[200px]">Nome Completo</th>
-                        <th className="py-2.5 px-2 w-32">CPF</th>
-                        <th className="py-2.5 px-2 w-20">Nota</th>
-                        <th className="py-2.5 px-2 w-36">Cota Principal</th>
-                        <th className="py-2.5 px-2 w-40">Múltiplas Cotas (Ex: PCD,PPP)</th>
-                        <th className="py-2.5 px-2 w-32">Data Convocação</th>
-                        <th className="py-2.5 px-2 w-32">Data Nomeação</th>
-                        <th className="py-2.5 px-2 w-36">Lotação Definitiva</th>
-                        <th className="py-2.5 px-2 w-10 text-center">Ação</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 bg-white">
-                      {previewPlanilha.slice(0, 100).map((cand, idx) => (
-                        <tr key={cand.id || idx} className="hover:bg-slate-50">
-                          <td className="py-1.5 px-2">
-                            <input
-                              type="number"
-                              value={cand.posicao || idx + 1}
-                              onChange={(e) =>
-                                handleEditarCelulaPreview(idx, 'posicao', parseInt(e.target.value, 10) || 1)
-                              }
-                              className="w-14 px-1.5 py-1 bg-slate-50 border border-slate-200 rounded font-mono font-bold text-slate-900 text-xs"
-                            />
-                          </td>
-                          <td className="py-1.5 px-2">
-                            <input
-                              type="text"
-                              value={cand.nome || ''}
-                              onChange={(e) => handleEditarCelulaPreview(idx, 'nome', e.target.value)}
-                              className="w-full px-2 py-1 bg-slate-50 border border-slate-200 rounded font-semibold text-slate-800 text-xs"
-                            />
-                          </td>
-                          <td className="py-1.5 px-2">
-                            <input
-                              type="text"
-                              placeholder="CPF"
-                              value={cand.cpf || ''}
-                              onChange={(e) => handleEditarCelulaPreview(idx, 'cpf', e.target.value)}
-                              className="w-28 px-2 py-1 bg-slate-50 border border-slate-200 rounded font-mono text-slate-600 text-[11px]"
-                            />
-                          </td>
-                          <td className="py-1.5 px-2">
-                            <input
-                              type="number"
-                              step="0.01"
-                              value={cand.nota_final ?? 0}
-                              onChange={(e) =>
-                                handleEditarCelulaPreview(idx, 'nota_final', parseFloat(e.target.value) || 0)
-                              }
-                              className="w-18 px-1.5 py-1 bg-slate-50 border border-slate-200 rounded font-mono font-bold text-teal-700 text-xs"
-                            />
-                          </td>
-                          <td className="py-1.5 px-2">
-                            <select
-                              value={cand.cota || 'Ampla'}
-                              onChange={(e) => handleEditarCelulaPreview(idx, 'cota', e.target.value as any)}
-                              className="w-full px-1.5 py-1 bg-slate-50 border border-slate-200 rounded text-[11px] font-bold"
-                            >
-                              <option value="Ampla">Ampla</option>
-                              <option value="PPP">PPP / CN</option>
-                              <option value="PCD">PCD</option>
-                              <option value="Indígena">Indígena</option>
-                              <option value="Trans">Trans</option>
-                            </select>
-                          </td>
-                          <td className="py-1.5 px-2">
-                            <input
-                              type="text"
-                              placeholder="Ampla, PCD, PPP"
-                              value={(cand.cotas || [cand.cota || 'Ampla']).join(', ')}
-                              onChange={(e) => {
-                                const arr = e.target.value
-                                  .split(',')
-                                  .map((s) => normalizarCota(s.trim()))
-                                  .filter(Boolean);
-                                handleEditarCelulaPreview(idx, 'cotas', arr.length > 0 ? arr : ['Ampla']);
-                              }}
-                              className="w-36 px-2 py-1 bg-slate-50 border border-slate-200 rounded font-mono text-[11px] text-slate-700"
-                            />
-                          </td>
-                          <td className="py-1.5 px-2">
-                            <input
-                              type="text"
-                              placeholder="dd/mm/aaaa"
-                              value={cand.data_convocacao || ''}
-                              onChange={(e) =>
-                                handleEditarCelulaPreview(idx, 'data_convocacao', e.target.value)
-                              }
-                              className="w-28 px-2 py-1 bg-slate-50 border border-slate-200 rounded font-mono text-[11px] text-slate-700"
-                            />
-                          </td>
-                          <td className="py-1.5 px-2">
-                            <input
-                              type="text"
-                              placeholder="dd/mm/aaaa"
-                              value={cand.data_nomeacao || ''}
-                              onChange={(e) =>
-                                handleEditarCelulaPreview(idx, 'data_nomeacao', e.target.value)
-                              }
-                              className="w-28 px-2 py-1 bg-slate-50 border border-slate-200 rounded font-mono text-[11px] text-slate-700"
-                            />
-                          </td>
-                          <td className="py-1.5 px-2">
-                            <input
-                              type="text"
-                              placeholder="Lotação oficial"
-                              value={cand.comarca_definitiva || ''}
-                              onChange={(e) =>
-                                handleEditarCelulaPreview(idx, 'comarca_definitiva', e.target.value)
-                              }
-                              className="w-32 px-2 py-1 bg-slate-50 border border-slate-200 rounded text-[11px] text-slate-700"
-                            />
-                          </td>
-                          <td className="py-1.5 px-2 text-center">
-                            <button
-                              type="button"
-                              onClick={() => handleRemoverLinhaPreview(idx)}
-                              className="p-1 text-rose-500 hover:bg-rose-50 rounded cursor-pointer"
-                              title="Remover linha"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                {/* Seletor de Quantidade de Linhas e Paginação do Importador (Item 15) */}
+                {(() => {
+                  const totalLinhas = previewPlanilha.length;
+                  const totalPagsPreview =
+                    limitePreview === 'todos'
+                      ? 1
+                      : Math.max(1, Math.ceil(totalLinhas / (limitePreview as number)));
+                  const pagSegura = Math.min(paginaPreview, totalPagsPreview);
+                  const offsetInicio =
+                    limitePreview === 'todos' ? 0 : (pagSegura - 1) * (limitePreview as number);
+                  const linhasExibidas =
+                    limitePreview === 'todos'
+                      ? previewPlanilha
+                      : previewPlanilha.slice(offsetInicio, offsetInicio + (limitePreview as number));
 
-                {previewPlanilha.length > 100 && (
-                  <p className="text-2xs text-slate-400 italic text-center">
-                    Exibindo os primeiros 100 registros editáveis de um total de {previewPlanilha.length} candidatos da planilha. Todos os {previewPlanilha.length} serão importados ao confirmar.
-                  </p>
-                )}
+                  const renderControlesPreview = () => (
+                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <span className="text-slate-600">
+                          Exibindo{' '}
+                          <strong className="text-slate-900">
+                            {totalLinhas === 0 ? 0 : offsetInicio + 1} a{' '}
+                            {offsetInicio + linhasExibidas.length}
+                          </strong>{' '}
+                          de <strong className="text-slate-900">{totalLinhas}</strong> candidatos
+                        </span>
+
+                        <div className="flex items-center gap-1">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase mr-1">
+                            Linhas por página:
+                          </span>
+                          {([100, 250, 500, 'todos'] as const).map((lim) => (
+                            <button
+                              key={lim}
+                              type="button"
+                              onClick={() => {
+                                setLimitePreview(lim);
+                                setPaginaPreview(1);
+                              }}
+                              className={`px-2.5 py-1 rounded-lg font-mono text-[11px] font-bold cursor-pointer transition-colors ${
+                                limitePreview === lim
+                                  ? 'bg-[#07192B] text-[#2DD4AA]'
+                                  : 'bg-white hover:bg-slate-200 text-slate-700 border border-slate-200'
+                              }`}
+                            >
+                              {lim === 'todos' ? `Todos (${totalLinhas})` : lim}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {totalPagsPreview > 1 && (
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            disabled={pagSegura <= 1}
+                            onClick={() => setPaginaPreview(Math.max(1, pagSegura - 1))}
+                            className="px-3 py-1 bg-white hover:bg-slate-100 border border-slate-300 rounded-lg font-semibold disabled:opacity-40 cursor-pointer"
+                          >
+                            ← Anterior
+                          </button>
+                          <span className="font-mono text-slate-700 font-bold">
+                            Pág. {pagSegura} / {totalPagsPreview}
+                          </span>
+                          <button
+                            type="button"
+                            disabled={pagSegura >= totalPagsPreview}
+                            onClick={() => setPaginaPreview(Math.min(totalPagsPreview, pagSegura + 1))}
+                            className="px-3 py-1 bg-white hover:bg-slate-100 border border-slate-300 rounded-lg font-semibold disabled:opacity-40 cursor-pointer"
+                          >
+                            Próxima →
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+
+                  return (
+                    <>
+                      {renderControlesPreview()}
+
+                      {/* Tabela Editável de Prévia dos Candidatos */}
+                      <div className="border border-slate-200 rounded-xl overflow-x-auto max-h-[540px]">
+                        <table className="w-full text-left text-xs">
+                          <thead className="bg-[#07192B] text-white text-[11px] uppercase tracking-wider sticky top-0 z-10">
+                            <tr>
+                              <th className="py-2.5 px-2 w-16">Pos.</th>
+                              <th className="py-2.5 px-2 min-w-[200px]">Nome Completo</th>
+                              <th className="py-2.5 px-2 w-32">CPF</th>
+                              <th className="py-2.5 px-2 w-20">Nota</th>
+                              <th className="py-2.5 px-2 w-56">Cotas Contempladas (Ampla + PCD/PPP)</th>
+                              <th className="py-2.5 px-2 w-32">Data Convocação</th>
+                              <th className="py-2.5 px-2 w-32">Data Nomeação</th>
+                              <th className="py-2.5 px-2 w-36">Lotação Definitiva</th>
+                              <th className="py-2.5 px-2 w-10 text-center">Ação</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 bg-white">
+                            {linhasExibidas.map((cand, localIdx) => {
+                              const realIdx = offsetInicio + localIdx;
+                              const cotasAtuais: Candidato['cota'][] =
+                                cand.cotas && cand.cotas.length > 0
+                                  ? cand.cotas
+                                  : [cand.cota || 'Ampla'];
+
+                              const toggleCotaCand = (cotaAlvo: Candidato['cota']) => {
+                                const set = new Set<Candidato['cota']>(['Ampla', ...cotasAtuais]);
+                                if (set.has(cotaAlvo)) {
+                                  set.delete(cotaAlvo);
+                                } else {
+                                  set.add(cotaAlvo);
+                                }
+                                const novas = Array.from(set);
+                                const novaPrincipal: Candidato['cota'] = novas.includes('PCD')
+                                  ? 'PCD'
+                                  : novas.includes('PPP')
+                                  ? 'PPP'
+                                  : novas.includes('Indígena')
+                                  ? 'Indígena'
+                                  : novas.includes('Trans')
+                                  ? 'Trans'
+                                  : 'Ampla';
+                                handleEditarCelulaPreview(realIdx, 'cotas', novas);
+                                handleEditarCelulaPreview(realIdx, 'cota', novaPrincipal);
+                              };
+
+                              return (
+                                <tr key={cand.id || realIdx} className="hover:bg-slate-50">
+                                  <td className="py-1.5 px-2">
+                                    <input
+                                      type="number"
+                                      value={cand.posicao || realIdx + 1}
+                                      onChange={(e) =>
+                                        handleEditarCelulaPreview(
+                                          realIdx,
+                                          'posicao',
+                                          parseInt(e.target.value, 10) || 1
+                                        )
+                                      }
+                                      className="w-14 px-1.5 py-1 bg-slate-50 border border-slate-200 rounded font-mono font-bold text-slate-900 text-xs"
+                                    />
+                                  </td>
+                                  <td className="py-1.5 px-2">
+                                    <input
+                                      type="text"
+                                      value={cand.nome || ''}
+                                      onChange={(e) =>
+                                        handleEditarCelulaPreview(realIdx, 'nome', e.target.value)
+                                      }
+                                      className="w-full px-2 py-1 bg-slate-50 border border-slate-200 rounded font-semibold text-slate-800 text-xs"
+                                    />
+                                  </td>
+                                  <td className="py-1.5 px-2">
+                                    <input
+                                      type="text"
+                                      placeholder="CPF"
+                                      value={cand.cpf || ''}
+                                      onChange={(e) =>
+                                        handleEditarCelulaPreview(realIdx, 'cpf', e.target.value)
+                                      }
+                                      className="w-28 px-2 py-1 bg-slate-50 border border-slate-200 rounded font-mono text-slate-600 text-[11px]"
+                                    />
+                                  </td>
+                                  <td className="py-1.5 px-2">
+                                    <input
+                                      type="number"
+                                      step="0.01"
+                                      value={cand.nota_final ?? 0}
+                                      onChange={(e) =>
+                                        handleEditarCelulaPreview(
+                                          realIdx,
+                                          'nota_final',
+                                          parseFloat(e.target.value) || 0
+                                        )
+                                      }
+                                      className="w-18 px-1.5 py-1 bg-slate-50 border border-slate-200 rounded font-mono font-bold text-teal-700 text-xs"
+                                    />
+                                  </td>
+                                  {/* Item 8: Seletor multi-cota (PCD + PPP simultâneos) */}
+                                  <td className="py-1.5 px-2">
+                                    <div className="flex items-center gap-1 flex-wrap">
+                                      <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                                        Ampla
+                                      </span>
+                                      {(['PCD', 'PPP', 'Indígena', 'Trans'] as const).map((ct) => {
+                                        const ativo = cotasAtuais.includes(ct);
+                                        return (
+                                          <button
+                                            key={ct}
+                                            type="button"
+                                            onClick={() => toggleCotaCand(ct)}
+                                            className={`px-2 py-0.5 rounded text-[10px] font-bold cursor-pointer border transition-colors ${
+                                              ativo
+                                                ? ct === 'PCD'
+                                                  ? 'bg-purple-600 text-white border-purple-700'
+                                                  : ct === 'PPP'
+                                                  ? 'bg-amber-600 text-white border-amber-700'
+                                                  : 'bg-teal-700 text-white border-teal-800'
+                                                : 'bg-white text-slate-400 border-slate-200 hover:border-slate-400'
+                                            }`}
+                                            title="Clique para marcar/desmarcar esta cota para o candidato"
+                                          >
+                                            {ct}
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                  </td>
+                                  <td className="py-1.5 px-2">
+                                    <input
+                                      type="text"
+                                      placeholder="dd/mm/aaaa"
+                                      value={cand.data_convocacao || ''}
+                                      onChange={(e) =>
+                                        handleEditarCelulaPreview(
+                                          realIdx,
+                                          'data_convocacao',
+                                          e.target.value
+                                        )
+                                      }
+                                      className="w-28 px-2 py-1 bg-slate-50 border border-slate-200 rounded font-mono text-[11px] text-slate-700"
+                                    />
+                                  </td>
+                                  <td className="py-1.5 px-2">
+                                    <input
+                                      type="text"
+                                      placeholder="dd/mm/aaaa"
+                                      value={cand.data_nomeacao || ''}
+                                      onChange={(e) =>
+                                        handleEditarCelulaPreview(
+                                          realIdx,
+                                          'data_nomeacao',
+                                          e.target.value
+                                        )
+                                      }
+                                      className="w-28 px-2 py-1 bg-slate-50 border border-slate-200 rounded font-mono text-[11px] text-slate-700"
+                                    />
+                                  </td>
+                                  <td className="py-1.5 px-2">
+                                    <input
+                                      type="text"
+                                      placeholder="Lotação oficial"
+                                      value={cand.comarca_definitiva || ''}
+                                      onChange={(e) =>
+                                        handleEditarCelulaPreview(
+                                          realIdx,
+                                          'comarca_definitiva',
+                                          e.target.value
+                                        )
+                                      }
+                                      className="w-32 px-2 py-1 bg-slate-50 border border-slate-200 rounded text-[11px] text-slate-700"
+                                    />
+                                  </td>
+                                  <td className="py-1.5 px-2 text-center">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoverLinhaPreview(realIdx)}
+                                      className="p-1 text-rose-500 hover:bg-rose-50 rounded cursor-pointer"
+                                      title="Remover linha"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {renderControlesPreview()}
+                    </>
+                  );
+                })()}
               </div>
             )}
           </div>

@@ -46,6 +46,7 @@ export interface CronogramaItem {
   status: 'concluido' | 'em_andamento' | 'pendente';
   link_edital?: string;
   descricao?: string;
+  observacao?: string;
 }
 
 export interface QuadroVagas {
@@ -319,9 +320,14 @@ export interface Usuario {
   avatar?: string;
   is_admin: boolean;
   bloqueado?: boolean;
+  role?: 'admin' | 'candidato';
   tipo_usuario?: 'admin' | 'candidato' | 'convidado';
-  status_cadastro?: 'ativo' | 'aguardando_vinculacao' | 'bloqueado';
+  status_cadastro?: 'ativo' | 'primeiro_acesso' | 'aguardando_primeiro_acesso' | 'aguardando_vinculacao' | 'bloqueado';
   candidato_id?: string;
+  concurso_id?: string;
+  cargo_id?: string;
+  orgao?: string;
+  cargo_nome?: string;
   telefone?: string;
   whatsapp?: string;
   cpf?: string;
@@ -371,8 +377,10 @@ export interface SolicitacaoVinculacao {
   concurso_id: string;
   cargo_id: string;
   posicao_declarada: number;
+  cota_declarada?: string;
   nota_declarada?: number;
   comprovante_info?: string;
+  candidato_vinculado_id?: string;
   data_solicitacao: string;
   status: 'pendente' | 'aprovado' | 'rejeitado';
   motivo_rejeicao?: string;

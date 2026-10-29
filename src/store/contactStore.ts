@@ -1,4 +1,5 @@
 import { MensagemContatoAdmin, MotivoContato } from '../types';
+import { cloudSync } from './cloudSync';
 
 const CONTACT_STORAGE_KEY = 'certam_contact_messages_v5';
 
@@ -26,13 +27,14 @@ export const contactStore = {
     } catch {
       // ignore
     }
-    this.salvarMensagens(DEFAULT_CONTATOS);
     return DEFAULT_CONTATOS;
   },
 
   salvarMensagens(list: MensagemContatoAdmin[]) {
     try {
-      localStorage.setItem(CONTACT_STORAGE_KEY, JSON.stringify(list));
+      const jsonStr = JSON.stringify(list);
+      localStorage.setItem(CONTACT_STORAGE_KEY, jsonStr);
+      cloudSync.pushKey(CONTACT_STORAGE_KEY, jsonStr, true);
       window.dispatchEvent(new CustomEvent('certam_contact_updated', { detail: list }));
     } catch {
       // ignore

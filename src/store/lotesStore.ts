@@ -7,6 +7,7 @@ import {
   CANDIDATOS_TECNICO_MPRS,
 } from '../data/defaultCandidates';
 import { COMARCAS_RS } from '../data/comarcas';
+import { cloudSync } from './cloudSync';
 
 const LOTES_KEY = 'certam_lotes_data_v6';
 const CANDIDATOS_KEY = 'certam_candidatos_data_v6';
@@ -47,13 +48,14 @@ export const lotesStore = {
       // ignore
     }
     const defaultLotes: Lote[] = [];
-    this.salvarLotes(defaultLotes);
     return defaultLotes;
   },
 
   salvarLotes(lotes: Lote[]) {
     try {
-      localStorage.setItem(LOTES_KEY, JSON.stringify(lotes));
+      const jsonStr = JSON.stringify(lotes);
+      localStorage.setItem(LOTES_KEY, jsonStr);
+      cloudSync.pushKey(LOTES_KEY, jsonStr, true);
       window.dispatchEvent(new CustomEvent('certam_lotes_updated', { detail: lotes }));
     } catch {
       // ignore
@@ -73,15 +75,15 @@ export const lotesStore = {
       // ignore
     }
 
-    const base: Candidato[] = [];
-    this.salvarCandidatos(concursoId, cargoId, base);
-    return base;
+    return [];
   },
 
   salvarCandidatos(concursoId: string, cargoId: string, candidatos: Candidato[]) {
     const key = `${CANDIDATOS_KEY}_${concursoId}_${cargoId}`;
     try {
-      localStorage.setItem(key, JSON.stringify(candidatos));
+      const jsonStr = JSON.stringify(candidatos);
+      localStorage.setItem(key, jsonStr);
+      cloudSync.pushKey(key, jsonStr, true);
       window.dispatchEvent(new CustomEvent('certam_candidatos_updated', { detail: candidatos }));
     } catch {
       // ignore

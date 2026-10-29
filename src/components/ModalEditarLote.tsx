@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Lote, CandidatoConvocadoLote, StatusLote, Candidato } from '../types';
 import { lotesStore } from '../store/lotesStore';
 import { certamStore } from '../store/certamStore';
+import { userRegistryStore } from '../store/userRegistryStore';
 import { normalizarCota } from '../utils/ordemNomeacao';
 import {
   X,
@@ -19,6 +20,8 @@ import {
   CheckCircle2,
   FileText,
   MapPin,
+  UserCheck,
+  Search,
 } from 'lucide-react';
 
 interface ModalEditarLoteProps {
@@ -66,7 +69,17 @@ export const ModalEditarLote: React.FC<ModalEditarLoteProps> = ({
   // Candidatos Convocados
   const [convocados, setConvocados] = useState<CandidatoConvocadoLote[]>([]);
   const [modalImportarConvocadosAberto, setModalImportarConvocadosAberto] = useState(false);
+  const [seletorListaCargoAberto, setSeletorListaCargoAberto] = useState(true);
   const [textoColadoConvocados, setTextoColadoConvocados] = useState('');
+  const [buscaCandCargo, setBuscaCandCargo] = useState('');
+  const [faixaPosInicio, setFaixaPosInicio] = useState<number>(1);
+  const [faixaPosFim, setFaixaPosFim] = useState<number>(10);
+  const [papelPadraoFaixa, setPapelPadraoFaixa] = useState<'Titular' | 'Suplente'>('Titular');
+
+  const candidatosDoCargo = React.useMemo(
+    () => lotesStore.getCandidatos(concursoId, cargoId),
+    [concursoId, cargoId, aberto]
+  );
 
   const [erro, setErro] = useState<string | null>(null);
   const [sucessoMsg, setSucessoMsg] = useState<string | null>(null);
@@ -281,9 +294,13 @@ export const ModalEditarLote: React.FC<ModalEditarLoteProps> = ({
         }
 
         if (nomeCand) {
+          const candMatch = candidatosDoCargo.find(
+            (c) => c.nome.trim().toLowerCase() === nomeCand.trim().toLowerCase()
+          );
           novosConvocados.push({
+            candidato_id: candMatch?.id,
             ordem_nomeacao: ordem,
-            nome: nomeCand,
+            nome: candMatch?.nome || nomeCand,
             tipo_vaga: tipoVaga,
             papel: papel,
           });
@@ -337,6 +354,70 @@ export const ModalEditarLote: React.FC<ModalEditarLoteProps> = ({
 
   const handleRemoverConvocado = (index: number) => {
     setConvocados((prev) => prev.filter((_, idx) => idx !== index));
+  };
+
+  const handleToggleCandidatoDaLista = (cand: Candidato, papel: 'Titular' | 'Suplente' = 'Titular') => {
+    setConvocados((prev) => {
+      const jaExiste = prev.some(
+        (cv) =>
+          (cv.candidato_id && cv.candidato_id === cand.id) ||
+          cv.nome.trim().toLowerCase() === cand.nome.trim().toLowerCase()
+      );
+      if (jaExiste) {
+        return prev.filter(
+          (cv) =>
+            !(
+              (cv.candidato_id && cv.candidato_id === cand.id) ||
+              cv.nome.trim().toLowerCase() === cand.nome.trim().toLowerCase()
+            )
+        );
+      }
+      const proxOrdem = prev.length > 0 ? Math.max(...prev.map((p) => p.ordem_nomeacao || 0)) + 1 : 1;
+      const atualizado = [
+        ...prev,
+        {
+          candidato_id: cand.id,
+          ordem_nomeacao: proxOrdem,
+          nome: cand.nome,
+          tipo_vaga: cand.cota || 'Ampla',
+          papel,
+        },
+      ];
+      return atualizado;
+    });
+  };
+
+  const handleAdicionarFaixaClassificacao = () => {
+    const ini = Math.max(1, Number(faixaPosInicio) || 1);
+    const fim = Math.max(ini, Number(faixaPosFim) || ini);
+    const selecionados = candidatosDoCargo.filter((c) => c.posicao >= ini && c.posicao <= fim);
+    if (selecionados.length === 0) {
+      setErro(`Nenhum candidato encontrado entre a ${ini}ª e a ${fim}ª posição.`);
+      return;
+    }
+    setConvocados((prev) => {
+      const copy = [...prev];
+      let proxOrdem = copy.length > 0 ? Math.max(...copy.map((p) => p.ordem_nomeacao || 0)) + 1 : 1;
+      selecionados.forEach((cand) => {
+        const jaExiste = copy.some(
+          (cv) =>
+            (cv.candidato_id && cv.candidato_id === cand.id) ||
+            cv.nome.trim().toLowerCase() === cand.nome.trim().toLowerCase()
+        );
+        if (!jaExiste) {
+          copy.push({
+            candidato_id: cand.id,
+            ordem_nomeacao: proxOrdem++,
+            nome: cand.nome,
+            tipo_vaga: cand.cota || 'Ampla',
+            papel: papelPadraoFaixa,
+          });
+        }
+      });
+      return copy;
+    });
+    setSucessoMsg(`Adicionados candidatos da ${ini}ª à ${fim}ª posição ao lote!`);
+    setErro(null);
   };
 
   const totalVagas = comarcas.reduce((acc, c) => acc + (Number(c.vagas) || 0), 0);
@@ -850,15 +931,162 @@ export const ModalEditarLote: React.FC<ModalEditarLoteProps> = ({
                   </p>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => setModalImportarConvocadosAberto((v) => !v)}
-                  className="px-3.5 py-1.5 bg-teal-700 hover:bg-teal-800 text-white font-bold rounded-xl text-xs transition-colors cursor-pointer flex items-center gap-1.5 self-start sm:self-auto shrink-0 shadow-xs"
-                >
-                  <FileSpreadsheet className="w-4 h-4" />
-                  <span>{modalImportarConvocadosAberto ? 'Fechar Importador' : '📋 Colar Convocados do Excel'}</span>
-                </button>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => setSeletorListaCargoAberto((v) => !v)}
+                    className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 font-bold rounded-xl text-xs transition-colors cursor-pointer flex items-center gap-1.5"
+                  >
+                    <Users className="w-3.5 h-3.5 text-teal-700" />
+                    <span>{seletorListaCargoAberto ? 'Ocultar Lista do Cargo' : 'Selecionar da Lista do Cargo'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setModalImportarConvocadosAberto((v) => !v)}
+                    className="px-3.5 py-1.5 bg-teal-700 hover:bg-teal-800 text-white font-bold rounded-xl text-xs transition-colors cursor-pointer flex items-center gap-1.5 shrink-0 shadow-xs"
+                  >
+                    <FileSpreadsheet className="w-4 h-4" />
+                    <span>{modalImportarConvocadosAberto ? 'Fechar Importador' : '📋 Colar Convocados do Excel'}</span>
+                  </button>
+                </div>
               </div>
+
+              {/* SELETOR INTERATIVO DE CANDIDATOS DA LISTA DE CLASSIFICAÇÃO DO CARGO (Item 6) */}
+              {seletorListaCargoAberto && (
+                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div>
+                      <span className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
+                        <Users className="w-4 h-4 text-teal-700" />
+                        <span>Configurar Candidatos Chamados neste Lote ({candidatosDoCargo.length} aprovados no cargo)</span>
+                      </span>
+                      <p className="text-[11px] text-slate-500">
+                        Defina quais aprovados fazem parte deste lote. Apenas os candidatos incluídos abaixo terão acesso liberado à página deste lote.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Adição rápida por faixa de classificação */}
+                  <div className="flex flex-wrap items-center gap-2 p-2.5 bg-white rounded-xl border border-slate-200">
+                    <span className="text-[11px] font-bold text-slate-700">Adicionar faixa da lista:</span>
+                    <div className="flex items-center gap-1">
+                      <span className="text-[10px] text-slate-400">De</span>
+                      <input
+                        type="number"
+                        min={1}
+                        value={faixaPosInicio}
+                        onChange={(e) => setFaixaPosInicio(parseInt(e.target.value, 10) || 1)}
+                        className="w-16 px-2 py-1 bg-slate-50 border border-slate-300 rounded-lg font-mono font-bold text-center text-xs"
+                      />
+                      <span className="text-[10px] text-slate-400">até</span>
+                      <input
+                        type="number"
+                        min={1}
+                        value={faixaPosFim}
+                        onChange={(e) => setFaixaPosFim(parseInt(e.target.value, 10) || 1)}
+                        className="w-16 px-2 py-1 bg-slate-50 border border-slate-300 rounded-lg font-mono font-bold text-center text-xs"
+                      />
+                    </div>
+                    <select
+                      value={papelPadraoFaixa}
+                      onChange={(e) => setPapelPadraoFaixa(e.target.value as 'Titular' | 'Suplente')}
+                      className="px-2 py-1 bg-slate-50 border border-slate-300 rounded-lg text-xs font-bold"
+                    >
+                      <option value="Titular">Como Titular</option>
+                      <option value="Suplente">Como Suplente</option>
+                    </select>
+                    <button
+                      type="button"
+                      onClick={handleAdicionarFaixaClassificacao}
+                      className="px-3 py-1 bg-[#07192B] hover:bg-[#0C2640] text-[#2DD4AA] font-bold rounded-lg text-xs cursor-pointer flex items-center gap-1"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Incluir Faixa</span>
+                    </button>
+
+                    <div className="relative ml-auto min-w-[180px]">
+                      <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2" />
+                      <input
+                        type="text"
+                        placeholder="Filtrar candidato..."
+                        value={buscaCandCargo}
+                        onChange={(e) => setBuscaCandCargo(e.target.value)}
+                        className="w-full pl-8 pr-2.5 py-1 bg-slate-50 border border-slate-300 rounded-lg text-xs"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Lista de seleção individual com indicador de usuário vinculado */}
+                  <div className="max-h-44 overflow-y-auto border border-slate-200 rounded-xl bg-white divide-y divide-slate-100">
+                    {candidatosDoCargo
+                      .filter(
+                        (c) =>
+                          !buscaCandCargo.trim() ||
+                          c.nome.toLowerCase().includes(buscaCandCargo.toLowerCase()) ||
+                          String(c.posicao) === buscaCandCargo.trim()
+                      )
+                      .slice(0, 150)
+                      .map((cand) => {
+                        const selecionado = convocados.some(
+                          (cv) =>
+                            (cv.candidato_id && cv.candidato_id === cand.id) ||
+                            cv.nome.trim().toLowerCase() === cand.nome.trim().toLowerCase()
+                        );
+                        const infoVinculo = userRegistryStore.verificarVinculoCandidato(cand);
+                        return (
+                          <div
+                            key={cand.id}
+                            className={`px-3 py-2 flex items-center justify-between gap-2 text-xs hover:bg-slate-50 ${
+                              selecionado ? 'bg-teal-50/50' : ''
+                            }`}
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              <input
+                                type="checkbox"
+                                checked={selecionado}
+                                onChange={() => handleToggleCandidatoDaLista(cand, papelPadraoFaixa)}
+                                className="rounded border-slate-300 text-teal-600 cursor-pointer"
+                              />
+                              <span className="font-mono font-bold text-slate-700 w-8 shrink-0">
+                                {cand.posicao}º
+                              </span>
+                              <span className="font-semibold text-slate-900 truncate">{cand.nome}</span>
+                              <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 font-mono text-[10px]">
+                                {(cand.cotas && cand.cotas.length > 0 ? cand.cotas : [cand.cota]).join('/')}
+                              </span>
+                              {infoVinculo.vinculado ? (
+                                <span
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 shrink-0"
+                                  title={`Usuário vinculado: ${infoVinculo.usuario?.email || infoVinculo.usuario?.nome}`}
+                                >
+                                  <UserCheck className="w-3 h-3 text-emerald-700" />
+                                  <span>Conta Vinculada</span>
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-500 border border-slate-200 shrink-0">
+                                  <span>Sem acesso ainda</span>
+                                </span>
+                              )}
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => handleToggleCandidatoDaLista(cand, papelPadraoFaixa)}
+                              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold cursor-pointer shrink-0 ${
+                                selecionado
+                                  ? 'bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200'
+                                  : 'bg-teal-50 text-teal-800 hover:bg-teal-100 border border-teal-200'
+                              }`}
+                            >
+                              {selecionado ? 'Remover' : '+ Convocar'}
+                            </button>
+                          </div>
+                        );
+                      })}
+                  </div>
+                </div>
+              )}
 
               {/* CAIXA DE IMPORTAÇÃO EM MASSA DE CONVOCADOS */}
               {modalImportarConvocadosAberto && (
@@ -914,9 +1142,9 @@ export const ModalEditarLote: React.FC<ModalEditarLoteProps> = ({
                 {convocados.length === 0 ? (
                   <div className="p-8 text-center text-xs text-slate-400 space-y-2">
                     <Users className="w-8 h-8 mx-auto text-slate-300" />
-                    <p>Nenhum candidato convocado importado neste lote ainda.</p>
+                    <p>Nenhum candidato convocado configurado neste lote ainda.</p>
                     <p className="text-teal-700 font-semibold">
-                      Clique no botão &quot;📋 Colar Convocados do Excel&quot; acima para importar em massa.
+                      Selecione candidatos da lista do cargo acima ou cole do Excel.
                     </p>
                   </div>
                 ) : (
@@ -925,60 +1153,92 @@ export const ModalEditarLote: React.FC<ModalEditarLoteProps> = ({
                       <tr>
                         <th className="py-2.5 px-3 w-16 text-center">Ordem</th>
                         <th className="py-2.5 px-3">Nome do Candidato</th>
+                        <th className="py-2.5 px-3 text-center">Vínculo no Site</th>
                         <th className="py-2.5 px-3 text-center">Tipo de Vaga</th>
                         <th className="py-2.5 px-3 text-center">Papel</th>
                         <th className="py-2.5 px-3 w-16 text-center">Remover</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 bg-white">
-                      {convocados.map((cv, idx) => (
-                        <tr key={idx} className="hover:bg-slate-50 transition-colors">
-                          <td className="py-2 px-3 text-center font-mono font-bold text-slate-900">
-                            {cv.ordem_nomeacao}º
-                          </td>
-                          <td className="py-2 px-3 font-semibold text-slate-800">
-                            {cv.nome}
-                          </td>
-                          <td className="py-2 px-3 text-center">
-                            <span
-                              className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                                cv.tipo_vaga === 'PCD'
-                                  ? 'bg-purple-100 text-purple-900 border border-purple-200'
-                                  : cv.tipo_vaga === 'PPP'
-                                  ? 'bg-amber-100 text-amber-900 border border-amber-200'
-                                  : cv.tipo_vaga === 'Indígena'
-                                  ? 'bg-emerald-100 text-emerald-900 border border-emerald-200'
-                                  : cv.tipo_vaga === 'Trans'
-                                  ? 'bg-pink-100 text-pink-900 border border-pink-200'
-                                  : 'bg-slate-100 text-slate-700'
-                              }`}
-                            >
-                              {cv.tipo_vaga === 'PPP' ? 'PPP / CN' : cv.tipo_vaga}
-                            </span>
-                          </td>
-                          <td className="py-2 px-3 text-center">
-                            <span
-                              className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                                cv.papel === 'Titular'
-                                  ? 'bg-emerald-50 text-emerald-800'
-                                  : 'bg-cyan-50 text-cyan-800'
-                              }`}
-                            >
-                              {cv.papel}
-                            </span>
-                          </td>
-                          <td className="py-2 px-3 text-center">
-                            <button
-                              type="button"
-                              onClick={() => handleRemoverConvocado(idx)}
-                              className="p-1 text-slate-400 hover:text-rose-600 rounded-md cursor-pointer transition-colors"
-                              title="Remover convocado"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
+                      {convocados.map((cv, idx) => {
+                        const infoVinculo = userRegistryStore.verificarVinculoCandidato({
+                          id: cv.candidato_id,
+                          nome: cv.nome,
+                        });
+                        return (
+                          <tr key={idx} className="hover:bg-slate-50 transition-colors">
+                            <td className="py-2 px-3 text-center font-mono font-bold text-slate-900">
+                              {cv.ordem_nomeacao}º
+                            </td>
+                            <td className="py-2 px-3 font-semibold text-slate-800">
+                              {cv.nome}
+                            </td>
+                            <td className="py-2 px-3 text-center">
+                              {infoVinculo.vinculado ? (
+                                <span
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300"
+                                  title={`Vinculado a: ${infoVinculo.usuario?.email || infoVinculo.usuario?.nome}`}
+                                >
+                                  <UserCheck className="w-3 h-3 text-emerald-700" />
+                                  <span>Usuário Vinculado</span>
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-500 border border-slate-200">
+                                  <span>Aguardando 1º Acesso</span>
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-2 px-3 text-center">
+                              <span
+                                className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                  cv.tipo_vaga === 'PCD'
+                                    ? 'bg-purple-100 text-purple-900 border border-purple-200'
+                                    : cv.tipo_vaga === 'PPP'
+                                    ? 'bg-amber-100 text-amber-900 border border-amber-200'
+                                    : cv.tipo_vaga === 'Indígena'
+                                    ? 'bg-emerald-100 text-emerald-900 border border-emerald-200'
+                                    : cv.tipo_vaga === 'Trans'
+                                    ? 'bg-pink-100 text-pink-900 border border-pink-200'
+                                    : 'bg-slate-100 text-slate-700'
+                                }`}
+                              >
+                                {cv.tipo_vaga === 'PPP' ? 'PPP / CN' : cv.tipo_vaga}
+                              </span>
+                            </td>
+                            <td className="py-2 px-3 text-center">
+                              <select
+                                value={cv.papel}
+                                onChange={(e) => {
+                                  const novoPapel = e.target.value as 'Titular' | 'Suplente';
+                                  setConvocados((prev) => {
+                                    const copy = [...prev];
+                                    copy[idx] = { ...copy[idx], papel: novoPapel };
+                                    return copy;
+                                  });
+                                }}
+                                className={`px-2 py-0.5 rounded text-[10px] font-bold border cursor-pointer ${
+                                  cv.papel === 'Titular'
+                                    ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                    : 'bg-cyan-50 text-cyan-800 border-cyan-200'
+                                }`}
+                              >
+                                <option value="Titular">Titular</option>
+                                <option value="Suplente">Suplente</option>
+                              </select>
+                            </td>
+                            <td className="py-2 px-3 text-center">
+                              <button
+                                type="button"
+                                onClick={() => handleRemoverConvocado(idx)}
+                                className="p-1 text-slate-400 hover:text-rose-600 rounded-md cursor-pointer transition-colors"
+                                title="Remover convocado"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 )}

@@ -1,15 +1,13 @@
-import { PerfilAuditRequest, SolicitacaoVinculacao } from '../types';
+import { PerfilAuditRequest, SolicitacaoVinculacao, AlteracaoCampoItem } from '../types';
+import { cloudSync } from './cloudSync';
 
-const AUDIT_STORAGE_KEY = 'certam_audit_requests_v5';
-const VINCULACAO_STORAGE_KEY = 'certam_vinculacao_requests_v5';
-
-const DEFAULT_AUDIT_REQUESTS: PerfilAuditRequest[] = [];
-const DEFAULT_VINCULACOES: SolicitacaoVinculacao[] = [];
+const AUDIT_STORAGE_KEY = 'certam_perfil_audit_requests_v5';
+const VINCULACOES_STORAGE_KEY = 'certam_vinculacao_requests_v5';
 
 export const auditStore = {
   getAuditRequests(): PerfilAuditRequest[] {
     try {
-      localStorage.removeItem('certam_audit_requests_v4');
+      localStorage.removeItem('certam_perfil_audit_requests_v4');
       const stored = localStorage.getItem(AUDIT_STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
@@ -18,60 +16,69 @@ export const auditStore = {
     } catch {
       // ignore
     }
-    this.salvarAuditRequests(DEFAULT_AUDIT_REQUESTS);
-    return DEFAULT_AUDIT_REQUESTS;
+    return [];
   },
 
-  salvarAuditRequests(requests: PerfilAuditRequest[]) {
+  salvarAuditRequests(list: PerfilAuditRequest[]) {
     try {
-      localStorage.setItem(AUDIT_STORAGE_KEY, JSON.stringify(requests));
-      window.dispatchEvent(new CustomEvent('certam_audit_updated', { detail: requests }));
+      const jsonStr = JSON.stringify(list);
+      localStorage.setItem(AUDIT_STORAGE_KEY, jsonStr);
+      cloudSync.pushKey(AUDIT_STORAGE_KEY, jsonStr, true);
+      window.dispatchEvent(new CustomEvent('certam_audit_updated', { detail: list }));
     } catch {
       // ignore
     }
   },
 
-  submeterSolicitacaoAlteracao(req: Omit<PerfilAuditRequest, 'id' | 'data_solicitacao' | 'status'>): PerfilAuditRequest {
-    const requests = this.getAuditRequests();
-    const novaSolicitacao: PerfilAuditRequest = {
-      ...req,
-      id: `audit-${Date.now().toString(36)}`,
+  submeterSolicitacaoAlteracao(dados: {
+    usuario_email: string;
+    usuario_nome: string;
+    cpf: string;
+    alteracoes: AlteracaoCampoItem[];
+  }): PerfilAuditRequest {
+    const list = this.getAuditRequests();
+    const nova: PerfilAuditRequest = {
+      id: `audit-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`,
+      usuario_email: dados.usuario_email,
+      usuario_nome: dados.usuario_nome,
+      cpf: dados.cpf,
       data_solicitacao: new Date().toLocaleString('pt-BR'),
       status: 'pendente',
+      alteracoes: dados.alteracoes,
     };
-    requests.unshift(novaSolicitacao);
-    this.salvarAuditRequests(requests);
-    return novaSolicitacao;
+    list.unshift(nova);
+    this.salvarAuditRequests(list);
+    return nova;
   },
 
-  aprovarSolicitacao(id: string): boolean {
-    const requests = this.getAuditRequests();
-    const item = requests.find((r) => r.id === id);
-    if (!item) return false;
+  aprovarSolicitacao(id: string): PerfilAuditRequest | null {
+    const list = this.getAuditRequests();
+    const item = list.find((r) => r.id === id);
+    if (!item) return null;
     item.status = 'aprovado';
     item.data_resposta = new Date().toLocaleString('pt-BR');
-    this.salvarAuditRequests(requests);
-    return true;
+    this.salvarAuditRequests(list);
+    return item;
   },
 
-  rejeitarSolicitacao(id: string, motivo: string): boolean {
-    const requests = this.getAuditRequests();
-    const item = requests.find((r) => r.id === id);
-    if (!item) return false;
+  rejeitarSolicitacao(id: string, motivo?: string): PerfilAuditRequest | null {
+    const list = this.getAuditRequests();
+    const item = list.find((r) => r.id === id);
+    if (!item) return null;
     item.status = 'rejeitado';
-    item.motivo_rejeicao = motivo;
+    item.motivo_rejeicao = motivo || 'Dados divergentes do cadastro oficial.';
     item.data_resposta = new Date().toLocaleString('pt-BR');
-    this.salvarAuditRequests(requests);
-    return true;
+    this.salvarAuditRequests(list);
+    return item;
   },
 
   // -------------------------------------------------------------
-  // SOLICITAÇÕES DE VINCULAÇÃO MANUAL (CASO NÃO IDENTIFICADO)
+  // SOLICITAÇÕES DE VINCULAÇÃO MANUAL (CANDIDATO NÃO IDENTIFICADO)
   // -------------------------------------------------------------
   getVinculacoes(): SolicitacaoVinculacao[] {
     try {
       localStorage.removeItem('certam_vinculacao_requests_v4');
-      const stored = localStorage.getItem(VINCULACAO_STORAGE_KEY);
+      const stored = localStorage.getItem(VINCULACOES_STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
         if (Array.isArray(parsed)) return parsed;
@@ -79,24 +86,27 @@ export const auditStore = {
     } catch {
       // ignore
     }
-    this.salvarVinculacoes(DEFAULT_VINCULACOES);
-    return DEFAULT_VINCULACOES;
+    return [];
   },
 
   salvarVinculacoes(list: SolicitacaoVinculacao[]) {
     try {
-      localStorage.setItem(VINCULACAO_STORAGE_KEY, JSON.stringify(list));
+      const jsonStr = JSON.stringify(list);
+      localStorage.setItem(VINCULACOES_STORAGE_KEY, jsonStr);
+      cloudSync.pushKey(VINCULACOES_STORAGE_KEY, jsonStr, true);
       window.dispatchEvent(new CustomEvent('certam_vinculacoes_updated', { detail: list }));
     } catch {
       // ignore
     }
   },
 
-  solicitarVinculacao(sol: Omit<SolicitacaoVinculacao, 'id' | 'data_solicitacao' | 'status'>): SolicitacaoVinculacao {
+  solicitarVinculacao(
+    dados: Omit<SolicitacaoVinculacao, 'id' | 'data_solicitacao' | 'status'>
+  ): SolicitacaoVinculacao {
     const list = this.getVinculacoes();
     const nova: SolicitacaoVinculacao = {
-      ...sol,
-      id: `vinc-${Date.now().toString(36)}`,
+      ...dados,
+      id: `vinc-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`,
       data_solicitacao: new Date().toLocaleString('pt-BR'),
       status: 'pendente',
     };
@@ -105,22 +115,25 @@ export const auditStore = {
     return nova;
   },
 
-  aprovarVinculacao(id: string): boolean {
+  aprovarVinculacao(id: string, candidatoVinculadoId?: string): SolicitacaoVinculacao | null {
     const list = this.getVinculacoes();
-    const item = list.find((v) => v.id === id);
-    if (!item) return false;
+    const item = list.find((r) => r.id === id);
+    if (!item) return null;
     item.status = 'aprovado';
+    if (candidatoVinculadoId) {
+      item.candidato_vinculado_id = candidatoVinculadoId;
+    }
     this.salvarVinculacoes(list);
-    return true;
+    return item;
   },
 
-  rejeitarVinculacao(id: string, motivo: string): boolean {
+  rejeitarVinculacao(id: string, motivo?: string): SolicitacaoVinculacao | null {
     const list = this.getVinculacoes();
-    const item = list.find((v) => v.id === id);
-    if (!item) return false;
+    const item = list.find((r) => r.id === id);
+    if (!item) return null;
     item.status = 'rejeitado';
-    item.motivo_rejeicao = motivo;
+    item.motivo_rejeicao = motivo || 'Nome ou CPF não localizados no resultado final.';
     this.salvarVinculacoes(list);
-    return true;
+    return item;
   },
 };

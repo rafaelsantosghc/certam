@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { certamStore } from '../store/certamStore';
 import { lotesStore } from '../store/lotesStore';
+import { userRegistryStore } from '../store/userRegistryStore';
 import { useAuth } from '../store/authContext';
 import { podeEditarConcurso, podeEditarCargo, podeEditarLote } from '../utils/permissions';
 import { ModalEditarConcurso } from '../components/ModalEditarConcurso';
@@ -103,6 +104,7 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
   const [modalEditarLoteAberto, setModalEditarLoteAberto] = useState(false);
   const [loteEditando, setLoteEditando] = useState<Lote | null>(null);
   const [lotesExpandidosComarcas, setLotesExpandidosComarcas] = useState<Record<string, boolean>>({});
+  const [lotesExpandidosConvocados, setLotesExpandidosConvocados] = useState<Record<string, boolean>>({});
 
   const podeEditarEsteConcurso = podeEditarConcurso(usuario, concurso.id);
   const podeEditarEsteCargo = podeEditarCargo(usuario, concurso.id, cargo.id);
@@ -262,11 +264,14 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
         c.posicao.toString() === filtroBusca.trim() ||
         (c.comarca_desejada_1 && c.comarca_desejada_1.toLowerCase().includes(filtroBusca.toLowerCase()));
 
+      const cotasDoCand = c.cotas && c.cotas.length > 0 ? c.cotas : [c.cota];
       const matchCota =
         filtroCota === 'todas' ||
         (filtroCota === 'PPP'
-          ? c.cota === 'PPP' || (c.cota as string) === 'CN'
-          : c.cota === filtroCota);
+          ? cotasDoCand.some((ct) => ct === 'PPP' || (ct as string) === 'CN') ||
+            c.cota === 'PPP' ||
+            (c.cota as string) === 'CN'
+          : cotasDoCand.includes(filtroCota as any) || c.cota === filtroCota);
       const matchStatus = filtroStatus === 'todos' || c.status === filtroStatus;
       const matchIntencao = filtroIntencao === 'todas' || c.intencao === filtroIntencao;
 
@@ -906,7 +911,12 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
       {/* =================================================================== */}
       {abaAtiva === 'cronograma' && (
         <section className="space-y-6">
-          <LinhaDoTempoConcurso concurso={concurso} />
+          <LinhaDoTempoConcurso
+            concurso={concurso}
+            cargoId={cargo.id}
+            cargoNome={cargo.nome}
+            onAtualizado={reloadData}
+          />
         </section>
       )}
 
@@ -1278,7 +1288,21 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
                                   {cand.posicao}º
                                 </td>
                                 <td className="py-2.5 px-3 font-bold text-slate-900">
-                                  <div>{cand.nome}</div>
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span>{cand.nome}</span>
+                                    {(() => {
+                                      const infoVinc = userRegistryStore.verificarVinculoCandidato(cand);
+                                      return infoVinc.vinculado ? (
+                                        <span
+                                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300"
+                                          title="Candidato já acessou e vinculou conta no portal"
+                                        >
+                                          <UserCheck className="w-2.5 h-2.5 text-emerald-700" />
+                                          <span>Vinculado</span>
+                                        </span>
+                                      ) : null;
+                                    })()}
+                                  </div>
                                   {isCandidatoAprovado && cand.cpf && (
                                     <span className="text-[10px] font-mono text-slate-400 block font-normal">
                                       CPF: {cand.cpf}
@@ -1287,21 +1311,34 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
                                 </td>
                                 <td className="py-2.5 px-2.5 text-center font-mono">
                                   {isCandidatoAprovado ? (
-                                    <span
-                                      className={`px-2 py-0.5 rounded text-[11px] font-bold ${
-                                        cand.cota === 'PCD'
-                                          ? 'bg-purple-100 text-purple-900 border border-purple-200'
-                                          : cand.cota === 'PPP' || (cand.cota as string) === 'CN'
-                                          ? 'bg-amber-100 text-amber-900 border border-amber-200'
-                                          : cand.cota === 'Indígena'
-                                          ? 'bg-emerald-100 text-emerald-900 border border-emerald-200'
-                                          : cand.cota === 'Trans'
-                                          ? 'bg-pink-100 text-pink-900 border border-pink-200'
-                                          : 'bg-slate-100 text-slate-700'
-                                      }`}
-                                    >
-                                      {cand.cota === 'PPP' || (cand.cota as string) === 'CN' ? 'PPP / CN' : cand.cota}
-                                    </span>
+                                    <div className="flex items-center justify-center gap-1 flex-wrap">
+                                      {(() => {
+                                        const listaCotas =
+                                          cand.cotas && cand.cotas.length > 0
+                                            ? cand.cotas.filter((ct, _, arr) =>
+                                                arr.length > 1 ? ct !== 'Ampla' : true
+                                              )
+                                            : [cand.cota];
+                                        return listaCotas.map((ct, idxCt) => (
+                                          <span
+                                            key={idxCt}
+                                            className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                              ct === 'PCD'
+                                                ? 'bg-purple-100 text-purple-900 border border-purple-200'
+                                                : ct === 'PPP' || (ct as string) === 'CN'
+                                                ? 'bg-amber-100 text-amber-900 border border-amber-200'
+                                                : ct === 'Indígena'
+                                                ? 'bg-emerald-100 text-emerald-900 border border-emerald-200'
+                                                : ct === 'Trans'
+                                                ? 'bg-pink-100 text-pink-900 border border-pink-200'
+                                                : 'bg-slate-100 text-slate-700'
+                                            }`}
+                                          >
+                                            {ct === 'PPP' || (ct as string) === 'CN' ? 'PPP / CN' : ct}
+                                          </span>
+                                        ));
+                                      })()}
+                                    </div>
                                   ) : (
                                     <span className="text-slate-400 text-2xs italic">Restrito</span>
                                   )}
@@ -1639,8 +1676,8 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
                      Boolean(c.comarca_definitiva))
                   ).length;
                 } else {
-                  totalConvocados = totalVagas;
-                  totalTitulares = totalVagas;
+                  totalConvocados = 0;
+                  totalTitulares = 0;
                   totalSuplentes = 0;
                   preenchidos = 0;
                 }
@@ -1648,6 +1685,7 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
                 const faltamPreencher = Math.max(0, totalConvocados - preenchidos);
                 const percentualPreenchido = totalConvocados > 0 ? Math.round((preenchidos / totalConvocados) * 100) : 0;
                 const expandido = Boolean(lotesExpandidosComarcas[lote.id]);
+                const expandidoConvocados = Boolean(lotesExpandidosConvocados[lote.id]);
 
                 const getStatusLoteLabel = (st?: string) => {
                   switch (st) {
@@ -1664,15 +1702,21 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
                   }
                 };
 
-                // Verificar se o candidato logado está contemplado neste lote
+                // Item 6: Verificar estritamente se o candidato logado está contemplado na lista configurada para este lote
                 const estaContemplado =
                   isAdmin ||
-                  (meuCandidato &&
-                    (lote.candidatos_ids?.includes(meuCandidato.id) ||
-                      (lote.convocados && lote.convocados.some(cv => cv.nome.toLowerCase() === (meuCandidato?.nome || '').toLowerCase())) ||
-                      meuCandidato.posicao <= totalConvocados ||
-                      meuCandidato.status === 'Convocado Titular' ||
-                      meuCandidato.status === 'Nomeado'));
+                  Boolean(
+                    meuCandidato &&
+                      ((lote.candidatos_ids &&
+                        (lote.candidatos_ids.includes(meuCandidato.id) ||
+                          lote.candidatos_ids.includes(meuCandidato.nome))) ||
+                        (lote.convocados &&
+                          lote.convocados.some(
+                            (cv) =>
+                              (cv.candidato_id && cv.candidato_id === meuCandidato.id) ||
+                              cv.nome.trim().toLowerCase() === (meuCandidato?.nome || '').trim().toLowerCase()
+                          )))
+                  );
 
                 return (
                   <div
@@ -1888,6 +1932,82 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
                               </span>
                             ))}
                           </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Acordeão Retrátil dos Candidatos Convocados no Lote com Indicador de Vínculo (Item 6) */}
+                    <div className="pt-1 border-t border-slate-100">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setLotesExpandidosConvocados((prev) => ({
+                            ...prev,
+                            [lote.id]: !prev[lote.id],
+                          }))
+                        }
+                        className="w-full flex items-center justify-between py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 transition-colors cursor-pointer"
+                      >
+                        <span className="flex items-center gap-1.5">
+                          <Users className="w-3.5 h-3.5 text-teal-600" />
+                          <span>
+                            Candidatos chamados neste lote ({totalConvocados} configurados)
+                          </span>
+                        </span>
+                        <span className="flex items-center gap-1 text-slate-500 text-xs">
+                          <span>{expandidoConvocados ? 'Ocultar convocados' : 'Ver candidatos e vínculos'}</span>
+                          {expandidoConvocados ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                        </span>
+                      </button>
+
+                      {expandidoConvocados && (
+                        <div className="mt-2 p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 max-h-64 overflow-y-auto">
+                          {!lote.convocados || lote.convocados.length === 0 ? (
+                            <div className="text-center py-4 text-xs text-slate-500">
+                              Nenhum candidato configurado neste lote ainda.{' '}
+                              {podeEditarEsteLote && 'Clique em "Editar Lote" acima para definir os candidatos chamados.'}
+                            </div>
+                          ) : (
+                            <div className="divide-y divide-slate-200/70">
+                              {lote.convocados.map((cv, i) => {
+                                const infoVinc = userRegistryStore.verificarVinculoCandidato({
+                                  id: cv.candidato_id,
+                                  nome: cv.nome,
+                                });
+                                return (
+                                  <div
+                                    key={i}
+                                    className="py-2 flex items-center justify-between gap-2 text-xs"
+                                  >
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <span className="font-mono font-bold text-slate-700 w-8 shrink-0">
+                                        {cv.ordem_nomeacao}º
+                                      </span>
+                                      <span className="font-semibold text-slate-900 truncate">
+                                        {cv.nome}
+                                      </span>
+                                      <span className="px-2 py-0.5 rounded bg-white border border-slate-200 text-[10px] font-mono text-slate-600">
+                                        {cv.tipo_vaga} • {cv.papel}
+                                      </span>
+                                    </div>
+                                    {infoVinc.vinculado ? (
+                                      <span
+                                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 shrink-0"
+                                        title="Usuário já se cadastrou no site e se vinculou a este candidato"
+                                      >
+                                        <UserCheck className="w-3 h-3 text-emerald-700" />
+                                        <span>Usuário Vinculado</span>
+                                      </span>
+                                    ) : (
+                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-200/70 text-slate-600 shrink-0">
+                                        <span>Sem vínculo ainda</span>
+                                      </span>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>

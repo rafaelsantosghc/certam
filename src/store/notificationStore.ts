@@ -1,4 +1,5 @@
 import { NotificacaoItem } from '../types';
+import { cloudSync } from './cloudSync';
 
 const NOTIFICATIONS_STORAGE_KEY = 'certam_notifications_events_v5';
 
@@ -16,13 +17,14 @@ export const notificationStore = {
     } catch {
       // ignore
     }
-    this.salvarNotificacoes(DEFAULT_NOTIFICATIONS);
     return DEFAULT_NOTIFICATIONS;
   },
 
   salvarNotificacoes(list: NotificacaoItem[]) {
     try {
-      localStorage.setItem(NOTIFICATIONS_STORAGE_KEY, JSON.stringify(list));
+      const jsonStr = JSON.stringify(list);
+      localStorage.setItem(NOTIFICATIONS_STORAGE_KEY, jsonStr);
+      cloudSync.pushKey(NOTIFICATIONS_STORAGE_KEY, jsonStr, true);
       window.dispatchEvent(new CustomEvent('certam_notifications_updated', { detail: list }));
     } catch {
       // ignore

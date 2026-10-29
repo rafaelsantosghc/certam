@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Usuario } from '../types';
 import { identificarCandidatoMaster, MASTER_CADASTRO_GERAL } from '../data/defaultCandidates';
 import { userRegistryStore } from './userRegistryStore';
+import { cloudSync } from './cloudSync';
 
 interface AuthContextType {
   usuario: Usuario | null;
@@ -70,10 +71,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return null;
   });
 
+  // Inicializa sincronização com o servidor para compartilhar concursos, auditorias e cadastros entre sessões/navegadores (Itens 2, 5, 18)
+  useEffect(() => {
+    cloudSync.initAutoSync();
+  }, []);
+
   useEffect(() => {
     try {
       if (usuario) {
         localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(usuario));
+        userRegistryStore.vincularOuRegistrarUsuarioLogin(usuario);
       } else {
         localStorage.removeItem(AUTH_STORAGE_KEY);
       }
@@ -229,11 +236,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const isAdminUser = ADMIN_EMAILS.some((adm) => adm.toLowerCase() === emailLimpo);
 
-    const novoCandidato: Usuario = {
+    const baseCandidato: Usuario = {
       nome: match ? match.nome : nomeLimpo,
       email: emailLimpo,
       email_contato: match?.email || emailLimpo,
       is_admin: isAdminUser,
+      tipo_usuario: isAdminUser ? 'admin' : 'candidato',
+      status_cadastro: 'ativo',
       candidato_id: match ? match.id : `cand-${Date.now().toString(36)}`,
       cpf: cpf || match?.cpf || '',
       cpf_verificado: !!match,
@@ -252,10 +261,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           ]
         : [],
     };
-    setUsuario(novoCandidato);
+
+    // Vincula automaticamente no Cadastro Geral de Usuários (Item 18)
+    const vinculado = userRegistryStore.vincularOuRegistrarUsuarioLogin(baseCandidato);
+    setUsuario(vinculado);
 
     // Se o candidato ainda não possui CPF ou data de nascimento, obriga preenchimento cadastral
-    if (!novoCandidato.cpf || !novoCandidato.data_nascimento) {
+    if (!vinculado.cpf || !vinculado.data_nascimento) {
       setTimeout(() => {
         window.dispatchEvent(new CustomEvent('certam_abrir_perfil_candidato_obrigatorio'));
       }, 350);
@@ -269,7 +281,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const atualizarDadosUsuario = (dados: Partial<Usuario>) => {
     setUsuario((prev) => {
       if (!prev) return null;
-      const atualizado = { ...prev, ...dados };
+      const atualizado: Usuario = { ...prev, ...dados, status_cadastro: 'ativo' };
       // Se alterou nome ou CPF, re-cruzar no cadastro master
       if (dados.nome || dados.cpf) {
         const match = identificarCandidatoMaster(atualizado.nome, atualizado.cpf);
@@ -278,7 +290,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           atualizado.cpf_verificado = true;
         }
       }
-      return atualizado;
+      const consolidado = userRegistryStore.vincularOuRegistrarUsuarioLogin(atualizado);
+      return consolidado;
     });
   };
 
@@ -312,7 +325,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const inscritos = prev.concursos_inscritos || [];
       const jaInscrito = inscritos.some((i) => i.concurso_id === concursoId && i.cargo_id === cargoId);
       if (jaInscrito) return prev;
-      return {
+      const atualizado: Usuario = {
         ...prev,
         concursos_inscritos: [
           ...inscritos,
@@ -323,6 +336,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           },
         ],
       };
+      userRegistryStore.salvarUsuario(atualizado);
+      return atualizado;
     });
   };
 
@@ -332,10 +347,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const inscritos = (prev.concursos_inscritos || []).filter(
         (i) => !(i.concurso_id === concursoId && i.cargo_id === cargoId)
       );
-      return {
+      const atualizado: Usuario = {
         ...prev,
         concursos_inscritos: inscritos,
       };
+      userRegistryStore.salvarUsuario(atualizado);
+      return atualizado;
     });
   };
 

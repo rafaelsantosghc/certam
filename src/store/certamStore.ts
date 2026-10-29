@@ -1,4 +1,5 @@
 import { Concurso, Cargo, CronogramaItem, DocumentoItem, QuadroVagas, ComunicadoItem, ConvocacaoHistorico } from '../types';
+import { cloudSync } from './cloudSync';
 
 const STORAGE_KEY = 'certam_concursos_cargos_v6';
 
@@ -93,6 +94,7 @@ export const certamStore = {
   salvarTodos(concursos: Concurso[]) {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(concursos));
+      cloudSync.pushKey(STORAGE_KEY, concursos);
       window.dispatchEvent(new CustomEvent('certam_concursos_updated', { detail: concursos }));
     } catch {
       // ignore
@@ -118,10 +120,25 @@ export const certamStore = {
   },
 
   // Cronograma
-  atualizarCronograma(concursoId: string, cronograma: CronogramaItem[]) {
+  atualizarCronograma(concursoId: string, cronograma: CronogramaItem[], cargoId?: string) {
     const conc = this.getConcurso(concursoId);
     if (!conc) return;
-    conc.cronograma = cronograma;
+
+    if (cargoId) {
+      // Mantém as etapas dos outros cargos e substitui apenas as deste cargoId
+      const deOutrosCargos = (conc.cronograma || []).filter(
+        (et) => et.cargo_id && et.cargo_id !== cargoId
+      );
+      const desteCargo = cronograma.map((et) => ({
+        ...et,
+        concurso_id: concursoId,
+        cargo_id: cargoId,
+      }));
+      conc.cronograma = [...deOutrosCargos, ...desteCargo];
+    } else {
+      conc.cronograma = cronograma;
+    }
+
     this.salvarConcurso(conc);
   },
 

@@ -217,6 +217,16 @@ export const PerfilCandidatoModal: React.FC<PerfilCandidatoModalProps> = ({
         return;
       }
 
+      const diffsIniciais = calcularDiffs();
+      if (!usuario.is_admin && diffsIniciais.length > 0) {
+        auditStore.submeterSolicitacaoAlteracao({
+          usuario_email: usuario.email,
+          usuario_nome: sanitizeInput(nome, 100),
+          cpf: sanitizeInput(cpf, 20),
+          alteracoes: diffsIniciais,
+        });
+      }
+
       atualizarDadosUsuario({
         nome: sanitizeInput(nome, 100),
         cpf: sanitizeInput(cpf, 20),
@@ -253,14 +263,40 @@ export const PerfilCandidatoModal: React.FC<PerfilCandidatoModalProps> = ({
       return;
     }
 
-    // Para usuários comuns: qualquer alteração de cadastro gera solicitação auditada para moderação do admin (Item 2)
-    const diffs = calcularDiffs();
+    // Para usuários comuns: qualquer submissão do formulário gera solicitação auditada para o painel admin (Item 2)
+    let diffs = calcularDiffs();
     if (diffs.length === 0) {
-      onClose();
-      return;
+      // Se o candidato clicou para submeter sem alterar campos ou está re-submetendo os dados atuais para homologação:
+      diffs = [
+        {
+          campo: 'nome',
+          campo_label: 'Nome Completo',
+          valor_antigo: usuario.nome || '(não informado)',
+          valor_novo: nome.trim() || usuario.nome,
+        },
+        {
+          campo: 'cpf',
+          campo_label: 'CPF',
+          valor_antigo: usuario.cpf || '(não informado)',
+          valor_novo: cpf.trim() || usuario.cpf || '(não informado)',
+        },
+      ];
     }
 
-    // Registrar imediatamente no auditStore para moderação administrativa
+    // Se era o primeiro cadastro sem CPF/data_nascimento, também salva os dados básicos e envia para auditoria do admin
+    if (primeiroCadastro) {
+      atualizarDadosUsuario({
+        nome: sanitizeInput(nome, 100),
+        cpf: sanitizeInput(cpf, 20),
+        data_nascimento: sanitizeInput(dataNascimento, 15),
+        whatsapp: sanitizeInput(whatsapp, 25),
+        telefone: sanitizeInput(whatsapp, 25),
+        email_contato: sanitizeInput(emailContato || usuario.email, 80),
+        outros_concursos: outrosSincronizados,
+      });
+    }
+
+    // Registrar imediatamente no auditStore para moderação administrativa (Item 2)
     auditStore.submeterSolicitacaoAlteracao({
       usuario_email: usuario.email,
       usuario_nome: nome.trim() || usuario.nome,
@@ -268,6 +304,7 @@ export const PerfilCandidatoModal: React.FC<PerfilCandidatoModalProps> = ({
       alteracoes: diffs,
     });
 
+    setTodasSolicitacoes(auditStore.getAuditRequests());
     setDiffAlteracoes(diffs);
     setSubmetidoSucesso(true);
     setTimeout(() => {
@@ -285,6 +322,7 @@ export const PerfilCandidatoModal: React.FC<PerfilCandidatoModalProps> = ({
         cpf: cpf.trim() || usuario.cpf || '',
         alteracoes: diffs,
       });
+      setTodasSolicitacoes(auditStore.getAuditRequests());
     }
 
     setModalDiffAberto(false);
