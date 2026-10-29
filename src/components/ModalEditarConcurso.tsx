@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Concurso, ConcursoStatus } from '../types';
+import { Concurso, ConcursoStatus, TipoLotacao, LotacaoItem } from '../types';
 import { certamStore } from '../store/certamStore';
-import { X, Building, Check, Sparkles, AlertCircle } from 'lucide-react';
+import { X, Building, Check, AlertCircle, MapPin, Plus, Trash2, Search, ListPlus } from 'lucide-react';
 
 interface ModalEditarConcursoProps {
   aberto: boolean;
@@ -30,6 +30,13 @@ export const ModalEditarConcurso: React.FC<ModalEditarConcursoProps> = ({
   const [esfera, setEsfera] = useState<Concurso['esfera']>('Estadual');
   const [estado, setEstado] = useState('RS');
   const [descricao, setDescricao] = useState('');
+  const [tipoLotacao, setTipoLotacao] = useState<TipoLotacao>('Lotação');
+  const [catalogoLotacoes, setCatalogoLotacoes] = useState<LotacaoItem[]>([]);
+  const [novaLotacaoNome, setNovaLotacaoNome] = useState('');
+  const [novaLotacaoRegiao, setNovaLotacaoRegiao] = useState('');
+  const [loteTextoMultiplo, setLoteTextoMultiplo] = useState('');
+  const [mostrarImportadorLote, setMostrarImportadorLote] = useState(false);
+  const [filtroLotacaoBusca, setFiltroLotacaoBusca] = useState('');
   const [erro, setErro] = useState<string | null>(null);
 
   useEffect(() => {
@@ -46,6 +53,8 @@ export const ModalEditarConcurso: React.FC<ModalEditarConcursoProps> = ({
       setEsfera(concurso.esfera || 'Estadual');
       setEstado(concurso.estado || 'RS');
       setDescricao(concurso.descricao || '');
+      setTipoLotacao(concurso.tipo_lotacao || (concurso.id.includes('tj') ? 'Comarca' : 'Lotação'));
+      setCatalogoLotacoes(concurso.catalogo_lotacoes || []);
     } else {
       setId('');
       setNome('');
@@ -59,6 +68,8 @@ export const ModalEditarConcurso: React.FC<ModalEditarConcursoProps> = ({
       setEsfera('Estadual');
       setEstado('RS');
       setDescricao('');
+      setTipoLotacao('Lotação');
+      setCatalogoLotacoes([]);
     }
     setErro(null);
   }, [concurso, aberto]);
@@ -102,11 +113,69 @@ export const ModalEditarConcurso: React.FC<ModalEditarConcursoProps> = ({
       esfera,
       estado: estado.trim().toUpperCase(),
       descricao: descricao.trim(),
+      tipo_lotacao: tipoLotacao,
+      catalogo_lotacoes: catalogoLotacoes,
     };
 
     certamStore.salvarConcurso(concursoAtualizado);
     if (onSalvo) onSalvo(concursoAtualizado);
     onClose();
+  };
+
+  const handleAdicionarLotacaoIndividual = (e: React.FormEvent) => {
+    e.preventDefault();
+    const nomeLimpo = novaLotacaoNome.trim();
+    if (!nomeLimpo) return;
+
+    // Verificar se já existe (case-insensitive)
+    const jaExiste = catalogoLotacoes.some(
+      (l) => l.nome.toLowerCase() === nomeLimpo.toLowerCase()
+    );
+    if (jaExiste) {
+      alert(`A lotação "${nomeLimpo}" já está cadastrada neste concurso.`);
+      return;
+    }
+
+    const novoItem: LotacaoItem = {
+      id: `lot-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+      nome: nomeLimpo,
+      regiao: novaLotacaoRegiao.trim() || undefined,
+      ativo: true,
+    };
+
+    setCatalogoLotacoes((prev) => [...prev, novoItem]);
+    setNovaLotacaoNome('');
+    setNovaLotacaoRegiao('');
+  };
+
+  const handleImportarMultiplasLotacoes = () => {
+    if (!loteTextoMultiplo.trim()) return;
+    const itens = loteTextoMultiplo
+      .split(/[\n,;]+/)
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+
+    const novos: LotacaoItem[] = [];
+    const nomesExistentes = new Set(catalogoLotacoes.map((l) => l.nome.toLowerCase()));
+
+    itens.forEach((nome) => {
+      if (!nomesExistentes.has(nome.toLowerCase())) {
+        nomesExistentes.add(nome.toLowerCase());
+        novos.push({
+          id: `lot-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+          nome,
+          ativo: true,
+        });
+      }
+    });
+
+    setCatalogoLotacoes((prev) => [...prev, ...novos]);
+    setLoteTextoMultiplo('');
+    setMostrarImportadorLote(false);
+  };
+
+  const handleRemoverLotacao = (idLot: string) => {
+    setCatalogoLotacoes((prev) => prev.filter((l) => l.id !== idLot));
   };
 
   return (
@@ -279,6 +348,148 @@ export const ModalEditarConcurso: React.FC<ModalEditarConcursoProps> = ({
               onChange={(e) => setDescricao(e.target.value)}
               className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:border-teal-600 outline-hidden leading-relaxed"
             />
+          </div>
+
+          {/* CONFIGURAÇÃO DE TIPO DE LOTAÇÃO & CATÁLOGO GERAL (Item 17) */}
+          <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/90 space-y-3.5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <MapPin className="w-4 h-4 text-teal-600" />
+                <label className="font-bold text-slate-800 text-xs">
+                  Subtipo Terminológico de Lotação:
+                </label>
+              </div>
+
+              <select
+                value={tipoLotacao}
+                onChange={(e) => setTipoLotacao(e.target.value as TipoLotacao)}
+                className="px-3 py-1.5 bg-white border border-slate-300 rounded-xl font-bold text-teal-800 text-xs focus:ring-teal-500 focus:border-teal-500"
+              >
+                <option value="Lotação">Lotação (Genérico Padrão)</option>
+                <option value="Comarca">Comarca (Judiciário / Tribunais)</option>
+                <option value="Região">Região (Polícias / Órgãos Regionais)</option>
+                <option value="Cidade">Cidade / Município</option>
+                <option value="Estado">Estado / UF</option>
+                <option value="Unidade">Unidade (Hospitais / IFs / Universidades)</option>
+                <option value="Setor">Setor / Departamento</option>
+              </select>
+            </div>
+
+            <p className="text-2xs text-slate-500 leading-relaxed">
+              Define como as localidades e vagas deste concurso serão tratadas nas telas de escolha, lotes e simulações.
+            </p>
+
+            {/* Gerenciamento do Catálogo de Lotações */}
+            <div className="pt-2 border-t border-slate-200 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-slate-700 text-xs flex items-center gap-1.5">
+                  <span>Catálogo de {tipoLotacao}s Pré-Cadastradas</span>
+                  <span className="px-1.5 py-0.5 rounded-full bg-teal-100 text-teal-800 font-mono text-[10px] font-bold">
+                    {catalogoLotacoes.length}
+                  </span>
+                </span>
+
+                <button
+                  type="button"
+                  onClick={() => setMostrarImportadorLote(!mostrarImportadorLote)}
+                  className="text-[11px] font-semibold text-teal-700 hover:text-teal-900 flex items-center gap-1 cursor-pointer"
+                >
+                  <ListPlus className="w-3.5 h-3.5" />
+                  <span>{mostrarImportadorLote ? 'Ocultar colagem' : 'Colar múltiplas em lote'}</span>
+                </button>
+              </div>
+
+              {mostrarImportadorLote && (
+                <div className="p-3 bg-white rounded-xl border border-teal-200 space-y-2">
+                  <label className="text-2xs text-slate-600 block">
+                    Cole nomes de {tipoLotacao}s separados por vírgula ou uma por linha:
+                  </label>
+                  <textarea
+                    rows={3}
+                    placeholder={`Ex: Porto Alegre, Caxias do Sul, Passo Fundo, Santa Maria...`}
+                    value={loteTextoMultiplo}
+                    onChange={(e) => setLoteTextoMultiplo(e.target.value)}
+                    className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs"
+                  />
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={handleImportarMultiplasLotacoes}
+                      className="px-3 py-1 bg-teal-700 hover:bg-teal-800 text-white rounded-lg text-xs font-bold cursor-pointer"
+                    >
+                      Adicionar ao Catálogo
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Adicionar Individual */}
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder={`Nova ${tipoLotacao}...`}
+                  value={novaLotacaoNome}
+                  onChange={(e) => setNovaLotacaoNome(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleAdicionarLotacaoIndividual(e);
+                    }
+                  }}
+                  className="flex-1 px-3 py-1.5 bg-white border border-slate-300 rounded-xl text-xs"
+                />
+                <button
+                  type="button"
+                  onClick={handleAdicionarLotacaoIndividual}
+                  className="px-3 py-1.5 bg-[#0C2640] hover:bg-[#135A7A] text-teal-300 rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Adicionar</span>
+                </button>
+              </div>
+
+              {/* Tag Cloud / Lista de Lotações */}
+              {catalogoLotacoes.length > 0 && (
+                <div className="space-y-1.5 pt-1">
+                  {catalogoLotacoes.length > 8 && (
+                    <div className="relative">
+                      <Search className="w-3 h-3 absolute left-2.5 top-2.5 text-slate-400" />
+                      <input
+                        type="text"
+                        placeholder={`Filtrar ${tipoLotacao}s...`}
+                        value={filtroLotacaoBusca}
+                        onChange={(e) => setFiltroLotacaoBusca(e.target.value)}
+                        className="w-full pl-7 pr-3 py-1 bg-white border border-slate-200 rounded-lg text-[11px]"
+                      />
+                    </div>
+                  )}
+
+                  <div className="max-h-36 overflow-y-auto p-2 bg-white rounded-xl border border-slate-200 flex flex-wrap gap-1.5">
+                    {catalogoLotacoes
+                      .filter((l) =>
+                        !filtroLotacaoBusca.trim() ||
+                        l.nome.toLowerCase().includes(filtroLotacaoBusca.toLowerCase())
+                      )
+                      .map((lot) => (
+                        <span
+                          key={lot.id}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-800 text-[11px] font-medium"
+                        >
+                          <span>{lot.nome}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoverLotacao(lot.id)}
+                            className="text-slate-400 hover:text-rose-600 cursor-pointer"
+                            title={`Remover ${lot.nome}`}
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </span>
+                      ))}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2.5">

@@ -17,6 +17,8 @@ interface AuthContextType {
   marcarTodasNotificacoesComoLidas: (todasIds: string[]) => void;
   inscreverConcurso: (concursoId: string, cargoId: string) => void;
   desinscreverConcurso: (concursoId: string, cargoId: string) => void;
+  acompanharConcurso: (concursoId: string) => void;
+  desacompanharConcurso: (concursoId: string) => void;
   logout: () => void;
 }
 
@@ -38,6 +40,8 @@ const AuthContext = createContext<AuthContextType>({
   marcarTodasNotificacoesComoLidas: () => {},
   inscreverConcurso: () => {},
   desinscreverConcurso: () => {},
+  acompanharConcurso: () => {},
+  desacompanharConcurso: () => {},
   logout: () => {},
 });
 
@@ -335,6 +339,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
   };
 
+  const acompanharConcurso = (concursoId: string) => {
+    setUsuario((prev) => {
+      if (!prev) return null;
+      const acompanhados = new Set(prev.concursos_acompanhados || []);
+      acompanhados.add(concursoId);
+      const atualizado: Usuario = {
+        ...prev,
+        concursos_acompanhados: Array.from(acompanhados),
+      };
+      userRegistryStore.salvarUsuario(atualizado);
+      return atualizado;
+    });
+  };
+
+  const desacompanharConcurso = (concursoId: string) => {
+    setUsuario((prev) => {
+      if (!prev) return null;
+      const acompanhados = (prev.concursos_acompanhados || []).filter((id) => id !== concursoId);
+      const atualizado: Usuario = {
+        ...prev,
+        concursos_acompanhados: acompanhados,
+      };
+      userRegistryStore.salvarUsuario(atualizado);
+      return atualizado;
+    });
+  };
+
   const logout = () => {
     setUsuario(null);
   };
@@ -355,6 +386,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         marcarTodasNotificacoesComoLidas,
         inscreverConcurso,
         desinscreverConcurso,
+        acompanharConcurso,
+        desacompanharConcurso,
         logout,
       }}
     >

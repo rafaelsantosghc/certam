@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Lote, CandidatoConvocadoLote, StatusLote, Candidato } from '../types';
 import { lotesStore } from '../store/lotesStore';
+import { certamStore } from '../store/certamStore';
 import { normalizarCota } from '../utils/ordemNomeacao';
 import {
   X,
@@ -38,6 +39,8 @@ export const ModalEditarLote: React.FC<ModalEditarLoteProps> = ({
   onSalvo,
 }) => {
   const isEdicao = !!lote;
+  const concurso = certamStore.getConcurso(concursoId);
+  const tipoLotacao = concurso?.tipo_lotacao || 'Lotação';
 
   const [abaInterna, setAbaInterna] = useState<'dados_comarcas' | 'convocados'>('dados_comarcas');
 
@@ -205,9 +208,14 @@ export const ModalEditarLote: React.FC<ModalEditarLoteProps> = ({
       });
     }
 
+    // Item 17: Sincronizar catálogo geral de lotações do concurso
+    novasComarcas.forEach((nc) => {
+      certamStore.adicionarLotacaoAoCatalogo(concursoId, nc.nome);
+    });
+
     setTextoColadoComarcas('');
     setModalImportarComarcasAberto(false);
-    setSucessoMsg(`Sucesso! ${novasComarcas.length} comarcas processadas da planilha.`);
+    setSucessoMsg(`Sucesso! ${novasComarcas.length} ${tipoLotacao.toLowerCase()}s processadas da planilha e sincronizadas com o catálogo.`);
     setErro(null);
   };
 
@@ -311,11 +319,13 @@ export const ModalEditarLote: React.FC<ModalEditarLoteProps> = ({
     if (!nomeTrim) return;
 
     if (comarcas.some((c) => c.nome.toLowerCase() === nomeTrim.toLowerCase())) {
-      setErro(`A comarca "${nomeTrim}" já foi adicionada a este lote.`);
+      setErro(`A ${tipoLotacao.toLowerCase()} "${nomeTrim}" já foi adicionada a este lote.`);
       return;
     }
 
     setComarcas((prev) => [...prev, { nome: nomeTrim, vagas: Math.max(1, Number(novaComarcaVagas) || 1) }]);
+    // Sincronizar catálogo do concurso
+    certamStore.adicionarLotacaoAoCatalogo(concursoId, nomeTrim);
     setNovaComarcaNome('');
     setNovaComarcaVagas(1);
     setErro(null);
@@ -352,9 +362,16 @@ export const ModalEditarLote: React.FC<ModalEditarLoteProps> = ({
     const candidatosIds = convocados.map((c) => c.candidato_id || c.nome);
 
     const finalTravado = Boolean(travado);
-    const finalStatus = !finalTravado && (statusLote === 'escolhas_definidas' || statusLote === 'encerrado')
-      ? 'em_escolha'
-      : statusLote;
+    let finalStatus: StatusLote = statusLote;
+    if (!finalTravado) {
+      if (statusLote === 'escolhas_definidas' || statusLote === 'encerrado') {
+        finalStatus = 'em_escolha';
+      }
+    } else {
+      if (statusLote === 'em_escolha' || statusLote === 'aberto') {
+        finalStatus = 'escolhas_definidas';
+      }
+    }
 
     const loteAtualizado: Lote = {
       id: finalId,
@@ -720,11 +737,12 @@ export const ModalEditarLote: React.FC<ModalEditarLoteProps> = ({
                   </div>
                 )}
 
-                {/* Inclusão Manual */}
+                {/* Inclusão Manual com Autocomplete do Catálogo */}
                 <div className="flex items-center gap-2 p-2.5 bg-slate-50 rounded-2xl border border-slate-200">
                   <input
                     type="text"
-                    placeholder="Nome da Comarca (ex: Porto Alegre)"
+                    list="catalogo-lotacoes-lote"
+                    placeholder={`Nome da ${tipoLotacao} (selecione ou digite nova)`}
                     value={novaComarcaNome}
                     onChange={(e) => setNovaComarcaNome(e.target.value)}
                     onKeyDown={(e) => {
@@ -735,6 +753,11 @@ export const ModalEditarLote: React.FC<ModalEditarLoteProps> = ({
                     }}
                     className="grow px-3 py-1.5 bg-white border border-slate-300 rounded-xl text-xs focus:border-teal-600 outline-hidden"
                   />
+                  <datalist id="catalogo-lotacoes-lote">
+                    {concurso?.catalogo_lotacoes?.map((item) => (
+                      <option key={item.id} value={item.nome} />
+                    ))}
+                  </datalist>
                   <div className="flex items-center gap-1 shrink-0">
                     <span className="text-2xs text-slate-400 font-bold">Vagas:</span>
                     <input

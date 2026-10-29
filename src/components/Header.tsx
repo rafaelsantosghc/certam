@@ -175,7 +175,7 @@ export const Header: React.FC<HeaderProps> = ({
               <div
                 onClick={() => setModalPerfilAberto(true)}
                 className="flex items-center gap-2.5 p-1 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer"
-                title="Clique para gerenciar seu cadastro e dados auditados"
+                title="Clique para gerenciar seu cadastro e dados"
               >
                 <div className="text-right hidden sm:block">
                   <span className="block text-xs font-bold text-slate-800 leading-tight">

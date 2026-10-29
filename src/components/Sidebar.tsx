@@ -244,6 +244,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                                 handleLinkClick('concurso', {
                                   concursoId: conc.id,
                                   cargoId: cg.id,
+                                  tab: 'dashboard',
                                 })
                               }
                               className="w-full text-left px-2.5 py-1 text-[11px] text-slate-400 hover:text-teal-200 truncate rounded-md hover:bg-white/5 transition-colors flex items-center gap-1.5 cursor-pointer"

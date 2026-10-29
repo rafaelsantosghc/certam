@@ -25,20 +25,28 @@ import {
 interface SimuladorLotesProps {
   concursoId?: string;
   cargoId?: string;
-  onNavigate: (view: string, params?: { concursoId?: string; cargoId?: string; tab?: string }) => void;
+  loteId?: string;
+  onNavigate: (view: string, params?: { concursoId?: string; cargoId?: string; tab?: string; loteId?: string }) => void;
   onVoltar?: () => void;
 }
 
 export const SimuladorLotes: React.FC<SimuladorLotesProps> = ({
   concursoId = 'tjrs_2025',
   cargoId = 'analista_judiciario',
+  loteId,
   onNavigate,
   onVoltar,
 }) => {
   const { usuario, isAdmin, loginGoogle } = useAuth();
 
   const [lotes] = useState<Lote[]>(() => lotesStore.getLotes());
-  const [loteAtivoId, setLoteAtivoId] = useState<string>(lotes[0]?.id || 'lote_1');
+  const [loteAtivoId, setLoteAtivoId] = useState<string>(() => {
+    if (loteId) {
+      const achado = lotes.find((l) => l.id === loteId);
+      if (achado) return achado.id;
+    }
+    return lotes[0]?.id || 'lote_1';
+  });
   const loteAtivo = lotes.find((l) => l.id === loteAtivoId) || lotes[0];
 
   const [abaAtiva, setAbaAtiva] = useState<'formulario' | 'dashboard' | 'geral' | 'comarcas' | 'impressao' | 'admin'>('formulario');
@@ -47,6 +55,35 @@ export const SimuladorLotes: React.FC<SimuladorLotesProps> = ({
   const [candidatos, setCandidatos] = useState<Candidato[]>(() =>
     lotesStore.getCandidatos(concursoId, cargoId)
   );
+
+  // Item 6: Restringir acesso estritamente aos candidatos convocados neste lote
+  const isContempladoNesteLote = useMemo(() => {
+    if (isAdmin) return true;
+    if (!usuario) return false;
+    if (!loteAtivo) return false;
+
+    const cpfLimpo = usuario.cpf ? usuario.cpf.replace(/\D/g, '') : '';
+    const nomeLimpo = usuario.nome ? usuario.nome.trim().toLowerCase() : '';
+
+    const cand = candidatos.find(
+      (c) =>
+        (usuario.candidato_id && c.id === usuario.candidato_id) ||
+        (cpfLimpo && c.cpf && c.cpf.replace(/\D/g, '') === cpfLimpo) ||
+        (nomeLimpo && c.nome && c.nome.trim().toLowerCase() === nomeLimpo)
+    );
+
+    if (!cand) return false;
+
+    const totalVagas = loteAtivo.comarcas?.reduce((acc, c) => acc + c.vagas, 0) || 0;
+    const totalConvocados = loteAtivo.convocados?.length || loteAtivo.candidatos_ids?.length || totalVagas;
+
+    if (loteAtivo.convocados && loteAtivo.convocados.some((cv) => cv.nome.toLowerCase() === cand.nome.toLowerCase())) return true;
+    if (loteAtivo.candidatos_ids && loteAtivo.candidatos_ids.includes(cand.id)) return true;
+    if (cand.posicao <= totalConvocados) return true;
+    if (cand.status === 'Convocado Titular' || cand.status === 'Nomeado') return true;
+
+    return false;
+  }, [usuario, isAdmin, loteAtivo, candidatos]);
 
   // Executa Simulação em Tempo Real
   const simulacao = useMemo(() => {
@@ -249,7 +286,7 @@ export const SimuladorLotes: React.FC<SimuladorLotesProps> = ({
     return false;
   }, [usuario, isAdmin, candidatos, concursoId]);
 
-  if (!isAprovadoNesteConcurso) {
+  if (!isContempladoNesteLote) {
     return (
       <div className="max-w-xl mx-auto my-12 p-8 bg-white rounded-3xl shadow-xl border border-slate-200 text-center space-y-5">
         <div className="w-16 h-16 rounded-2xl bg-amber-500/10 text-amber-600 flex items-center justify-center mx-auto">
@@ -258,14 +295,13 @@ export const SimuladorLotes: React.FC<SimuladorLotesProps> = ({
 
         <div className="space-y-2">
           <span className="px-3 py-1 rounded-lg bg-amber-100 text-amber-800 text-xs font-mono font-bold uppercase">
-            Acesso Restrito
+            Acesso Restrito ao Lote
           </span>
           <h2 className="text-xl sm:text-2xl font-bold font-serif text-slate-900">
-            Simulador Exclusivo para Candidatos Aprovados
+            {loteAtivo?.numero_lote ? `Página do Lote ${loteAtivo.numero_lote}` : loteAtivo?.nome}
           </h2>
           <p className="text-xs sm:text-sm text-slate-600 max-w-md mx-auto leading-relaxed">
-            A simulação de lotes e o formulário de manifestação de comarcas é de acesso restrito aos
-            candidatos que figuram na lista oficial de aprovados deste certame.
+            Esta página e o formulário de manifestação de lotação são exclusivos para os candidatos convocados neste lote de convocação. Seu perfil ou classificação atual não consta na lista de convocados deste lote específico.
           </p>
         </div>
 

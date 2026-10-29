@@ -112,6 +112,16 @@ export interface ConvocacaoHistorico {
   status_processamento?: 'Em Andamento' | 'Concluído' | 'Posse Efetuada';
 }
 
+export type TipoLotacao = 'Comarca' | 'Região' | 'Cidade' | 'Estado' | 'Unidade' | 'Setor' | 'Lotação';
+
+export interface LotacaoItem {
+  id: string;
+  nome: string;
+  regiao?: string;
+  vagas_total?: number;
+  ativo?: boolean;
+}
+
 export interface Concurso {
   id: string;
   nome: string;
@@ -126,6 +136,8 @@ export interface Concurso {
   estado?: string;
   descricao: string;
   cargos: Cargo[];
+  tipo_lotacao?: TipoLotacao;
+  catalogo_lotacoes?: LotacaoItem[];
   cronograma?: CronogramaItem[];
   documentos?: DocumentoItem[];
   quadro_vagas?: QuadroVagas[];
@@ -137,6 +149,7 @@ export type CotaTipo = 'Ampla' | 'PPP' | 'PCD' | 'Indígena' | 'Trans';
 
 export type StatusCandidato =
   | 'Próximo (previsão)'
+  | 'Aguardando Convocação'
   | 'Convocado titular'
   | 'Convocado suplente'
   | 'Nomeado'
@@ -158,6 +171,7 @@ export interface Candidato {
   posicao: number;
   nome: string;
   cota: CotaTipo;
+  cotas?: CotaTipo[]; // Suporte a múltiplas cotas (ex: PCD + PPP)
   nota_final: number;
   notas_disciplinas?: {
     portugues?: number;
@@ -177,9 +191,11 @@ export interface Candidato {
   escolhas_comarcas: string[];
   // Dados oficiais e vinculação de Lotes
   numero_lote_convocado?: string | number;
+  data_convocacao?: string;
   data_nomeacao?: string;
   comarca_definitiva?: string;
   tipo_vaga_convocacao?: string; // Ampla ou Cota (PPP, PCD, etc.)
+  modalidade_convocacao?: string; // Por qual lista/cota foi chamado
   papel_convocacao?: 'Titular' | 'Suplente';
   fg_cc?: {
     possui: boolean;
@@ -297,10 +313,14 @@ export interface UsuarioInscricao {
 }
 
 export interface Usuario {
+  id?: string;
   nome: string;
   email: string;
   avatar?: string;
   is_admin: boolean;
+  bloqueado?: boolean;
+  tipo_usuario?: 'admin' | 'candidato' | 'convidado';
+  status_cadastro?: 'ativo' | 'aguardando_vinculacao' | 'bloqueado';
   candidato_id?: string;
   telefone?: string;
   whatsapp?: string;
@@ -309,6 +329,7 @@ export interface Usuario {
   email_contato?: string;
   outros_concursos?: OutroConcursoAprovado[];
   concursos_inscritos?: UsuarioInscricao[];
+  concursos_acompanhados?: string[]; // IDs de concursos que o usuário marcou para acompanhar
   read_notification_ids?: string[];
   canais_silenciados?: string[];
   usuarios_bloqueados?: string[];

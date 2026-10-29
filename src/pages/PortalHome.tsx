@@ -43,6 +43,8 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
     simularEmailCandidato,
     inscreverConcurso,
     desinscreverConcurso,
+    acompanharConcurso,
+    desacompanharConcurso,
     logout,
   } = useAuth();
 
@@ -58,6 +60,15 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
   const [modalContatoAberto, setModalContatoAberto] = useState(false);
   const [motivoContato, setMotivoContato] = useState<any>('inclusao_concurso');
 
+  // Sincronizar concursos com certamStore
+  React.useEffect(() => {
+    const handleUpdate = () => {
+      setConcursos(certamStore.getConcursos());
+    };
+    window.addEventListener('certam_concursos_updated', handleUpdate);
+    return () => window.removeEventListener('certam_concursos_updated', handleUpdate);
+  }, []);
+
   // Toast feedback
   const [toastMsg, setToastMsg] = useState<string | null>(null);
 
@@ -66,28 +77,32 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
     setTimeout(() => setToastMsg(null), 3500);
   };
 
-  // Inscrições vinculadas ao candidato atual
+  // Inscrições e aprovações estritamente vinculadas ao candidato atual (Item 1)
   const inscricoesCandidato = useMemo(() => {
     if (!usuario) return [];
     const resultado: {
       concurso: Concurso;
       cargo: Cargo;
-      candidato?: Candidato;
+      candidato: Candidato;
       dataInscricao: string;
     }[] = [];
+
+    const cpfLimpo = usuario.cpf ? usuario.cpf.replace(/\D/g, '') : '';
+    const nomeLimpo = usuario.nome ? usuario.nome.trim().toLowerCase() : '';
 
     const inscricoesSet = new Set<string>();
 
     concursos.forEach((conc) => {
       conc.cargos?.forEach((cg) => {
         const cands = lotesStore.getCandidatos(conc.id, cg.id);
-        const candEncontrado = cands.find(
-          (c) =>
-            (usuario.candidato_id && c.id === usuario.candidato_id) ||
-            (usuario.email && c.email?.toLowerCase() === usuario.email.toLowerCase()) ||
-            (usuario.cpf && c.cpf && c.cpf.replace(/\D/g, '') === usuario.cpf.replace(/\D/g, '')) ||
-            (usuario.nome && c.nome.toLowerCase() === usuario.nome.toLowerCase())
-        );
+        const candEncontrado = cands.find((c) => {
+          if (usuario.candidato_id && c.id === usuario.candidato_id) return true;
+          const cCpf = c.cpf ? c.cpf.replace(/\D/g, '') : '';
+          if (cpfLimpo && cCpf && cCpf === cpfLimpo) return true;
+          const cNome = c.nome ? c.nome.trim().toLowerCase() : '';
+          if (nomeLimpo && cNome && cNome === nomeLimpo) return true;
+          return false;
+        });
 
         if (candEncontrado) {
           const key = `${conc.id}_${cg.id}`;
@@ -97,41 +112,20 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
               concurso: conc,
               cargo: cg,
               candidato: candEncontrado,
-              dataInscricao: 'Homologação Oficial',
+              dataInscricao: 'Aprovado / Homologado',
             });
           }
         }
       });
     });
 
-    if (usuario.concursos_inscritos && Array.isArray(usuario.concursos_inscritos)) {
-      usuario.concursos_inscritos.forEach((insc) => {
-        const conc = concursos.find((c) => c.id === insc.concurso_id);
-        if (conc) {
-          const cg = conc.cargos?.find((c) => c.id === insc.cargo_id);
-          if (cg) {
-            const key = `${conc.id}_${cg.id}`;
-            if (!inscricoesSet.has(key)) {
-              inscricoesSet.add(key);
-              const cands = lotesStore.getCandidatos(conc.id, cg.id);
-              const cand = cands.find(
-                (c) =>
-                  (usuario.candidato_id && c.id === usuario.candidato_id) ||
-                  (usuario.email && c.email?.toLowerCase() === usuario.email.toLowerCase())
-              );
-              resultado.push({
-                concurso: conc,
-                cargo: cg,
-                candidato: cand,
-                dataInscricao: insc.data_inscricao || 'Cadastrado no portal',
-              });
-            }
-          }
-        }
-      });
-    }
-
     return resultado;
+  }, [usuario, concursos]);
+
+  // Concursos que o candidato escolheu acompanhar (Item 1)
+  const concursosAcompanhados = useMemo(() => {
+    if (!usuario || !usuario.concursos_acompanhados) return [];
+    return concursos.filter((c) => usuario.concursos_acompanhados?.includes(c.id));
   }, [usuario, concursos]);
 
   // Filtros de Concursos: Status e Região
@@ -295,7 +289,7 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
                   className="inline-flex items-center gap-1.5 bg-[#135A7A] hover:bg-[#0C2640] text-white font-bold px-3.5 py-2 rounded-xl text-xs shadow-xs transition-colors cursor-pointer"
                 >
                   <Edit3 className="w-3.5 h-3.5 text-teal-300" />
-                  <span>Editar Meu Cadastro (Auditado)</span>
+                  <span>Editar Meu Cadastro</span>
                 </button>
 
                 <button
@@ -313,7 +307,7 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
             {!usuario.cpf && (
               <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between gap-3 text-xs text-amber-800">
                 <span>
-                  <strong>Atenção:</strong> Preencha seu CPF e data de nascimento para cruzar seus dados automaticamente com a lista de aprovados e liberar o acesso aos chats de comarcas.
+                  <strong>Atenção:</strong> Preencha seu CPF e data de nascimento para cruzar seus dados automaticamente com a lista de aprovados e liberar o acesso às suas opções.
                 </span>
                 <button
                   type="button"
@@ -328,93 +322,103 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
         )}
       </div>
 
-      {/* SEÇÃO 2: MEUS CONCURSOS VINCULADOS */}
+      {/* SEÇÃO 2: MEUS CONCURSOS EM ANDAMENTO (INSCRITO OU APROVADO) */}
       {usuario && inscricoesCandidato.length > 0 && (
         <div className="bg-white rounded-2xl border border-slate-200/90 card-shadow p-5 sm:p-6 space-y-4">
           <div className="flex items-center justify-between pb-3 border-b border-slate-100">
             <div className="flex items-center gap-2">
               <BookmarkCheck className="w-5 h-5 text-teal-600" />
               <h2 className="text-base sm:text-lg font-bold font-serif text-slate-900">
-                Meus Concursos em Acompanhamento
+                Meus Concursos em Andamento
               </h2>
-              <span className="px-2 py-0.5 rounded-full bg-teal-100 text-teal-900 text-xs font-bold font-mono">
-                {inscricoesCandidato.length}
+              <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-900 text-xs font-bold font-mono">
+                {inscricoesCandidato.length} Aprovado / Inscrito
               </span>
             </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {inscricoesCandidato.map((item) => (
-              <div
-                key={`${item.concurso.id}_${item.cargo.id}`}
-                className="p-5 rounded-2xl bg-gradient-to-br from-slate-50 to-teal-50/20 border border-teal-200/80 shadow-2xs space-y-4 flex flex-col justify-between"
-              >
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="px-2.5 py-0.5 rounded-md bg-[#07192B] text-teal-300 text-xs font-bold font-mono uppercase">
-                      {item.concurso.orgao} • {item.concurso.ano}
-                    </span>
-                    <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-100 text-emerald-800">
-                      {item.candidato?.status || 'Inscrito / Acompanhando'}
-                    </span>
-                  </div>
-
-                  <div>
-                    <h3 className="text-sm sm:text-base font-bold font-serif text-slate-900">
-                      {item.concurso.nome}
-                    </h3>
-                    <div className="flex items-center gap-1.5 text-xs text-[#135A7A] font-semibold mt-1">
-                      <Briefcase className="w-3.5 h-3.5 shrink-0" />
-                      <span>{item.cargo.nome}</span>
-                    </div>
-                  </div>
-
-                  <div className="p-3 bg-white rounded-xl border border-slate-200/80 grid grid-cols-2 gap-2 text-xs">
-                    <div>
-                      <span className="text-[10px] uppercase text-slate-400 font-bold block">
-                        Classificação
+            {inscricoesCandidato.map((item) => {
+              const tipoLot = item.concurso.tipo_lotacao || 'Lotação';
+              return (
+                <div
+                  key={`${item.concurso.id}_${item.cargo.id}`}
+                  className="p-5 rounded-2xl bg-gradient-to-br from-slate-50 to-teal-50/20 border border-teal-200/80 shadow-2xs space-y-4 flex flex-col justify-between"
+                >
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="px-2.5 py-0.5 rounded-md bg-[#07192B] text-teal-300 text-xs font-bold font-mono uppercase">
+                        {item.concurso.orgao} • {item.concurso.ano}
                       </span>
-                      <span className="font-bold text-[#135A7A] text-sm font-mono">
-                        {item.candidato ? `${item.candidato.posicao}º lugar` : 'Acompanhando'}
+                      <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-100 text-emerald-800">
+                        {item.candidato?.status || 'Aprovado'}
                       </span>
                     </div>
 
                     <div>
-                      <span className="text-[10px] uppercase text-slate-400 font-bold block">
-                        Comarca Preferencial
-                      </span>
-                      <span className="font-semibold text-slate-800 text-xs truncate block">
-                        {item.candidato?.comarca_desejada_1 || 'Pendente de escolha'}
-                      </span>
+                      <h3 className="text-sm sm:text-base font-bold font-serif text-slate-900">
+                        {item.concurso.nome}
+                      </h3>
+                      <div className="flex items-center gap-1.5 text-xs text-[#135A7A] font-semibold mt-1">
+                        <Briefcase className="w-3.5 h-3.5 shrink-0" />
+                        <span>{item.cargo.nome}</span>
+                      </div>
+                    </div>
+
+                    <div className="p-3 bg-white rounded-xl border border-slate-200/80 grid grid-cols-2 gap-2 text-xs">
+                      <div>
+                        <span className="text-[10px] uppercase text-slate-400 font-bold block">
+                          Classificação
+                        </span>
+                        <span className="font-bold text-[#135A7A] text-sm font-mono">
+                          {item.candidato ? `${item.candidato.posicao}º lugar` : 'Homologado'}
+                        </span>
+                      </div>
+
+                      <div>
+                        <span className="text-[10px] uppercase text-slate-400 font-bold block">
+                          {tipoLot} Preferencial
+                        </span>
+                        <span className="font-semibold text-slate-800 text-xs truncate block">
+                          {item.candidato?.comarca_desejada_1 || 'Pendente de escolha'}
+                        </span>
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                {/* Links Diretos */}
-                <div className="pt-3 border-t border-slate-200/60 flex items-center justify-between gap-2 flex-wrap">
-                  <button
-                    type="button"
-                    onClick={() => desinscreverConcurso(item.concurso.id, item.cargo.id)}
-                    className="text-[11px] text-slate-500 hover:text-rose-600 font-semibold cursor-pointer"
-                  >
-                    Remover
-                  </button>
+                  {/* Links Diretos */}
+                  <div className="pt-3 border-t border-slate-200/60 flex items-center justify-between gap-2 flex-wrap">
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          onNavigate('concurso', {
+                            concursoId: item.concurso.id,
+                            cargoId: item.cargo.id,
+                            tab: 'classificacao',
+                          })
+                        }
+                        className="text-xs font-semibold bg-white hover:bg-slate-100 text-slate-700 px-3 py-1.5 rounded-lg border border-slate-200 transition-colors cursor-pointer flex items-center gap-1"
+                      >
+                        <ListOrdered className="w-3.5 h-3.5 text-slate-500" />
+                        <span>Classificação</span>
+                      </button>
 
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        onNavigate('concurso', {
-                          concursoId: item.concurso.id,
-                          cargoId: item.cargo.id,
-                          tab: 'classificacao',
-                        })
-                      }
-                      className="text-xs font-semibold bg-white hover:bg-slate-100 text-slate-700 px-3 py-1.5 rounded-lg border border-slate-200 transition-colors cursor-pointer flex items-center gap-1"
-                    >
-                      <ListOrdered className="w-3.5 h-3.5 text-slate-500" />
-                      <span>Ranking</span>
-                    </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          onNavigate('concurso', {
+                            concursoId: item.concurso.id,
+                            cargoId: item.cargo.id,
+                            tab: 'lotes',
+                          })
+                        }
+                        className="text-xs font-semibold bg-white hover:bg-slate-100 text-slate-700 px-3 py-1.5 rounded-lg border border-slate-200 transition-colors cursor-pointer flex items-center gap-1"
+                      >
+                        <Layers className="w-3.5 h-3.5 text-slate-500" />
+                        <span>Lotes</span>
+                      </button>
+                    </div>
 
                     <button
                       type="button"
@@ -429,6 +433,78 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
                       <ArrowRight className="w-3.5 h-3.5" />
                     </button>
                   </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* SEÇÃO 2B: CONCURSOS QUE ESTOU ACOMPANHANDO (Item 1) */}
+      {usuario && concursosAcompanhados.length > 0 && (
+        <div className="bg-white rounded-2xl border border-slate-200/90 card-shadow p-5 sm:p-6 space-y-4">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+            <div className="flex items-center gap-2">
+              <TrendingUp className="w-5 h-5 text-teal-600" />
+              <h2 className="text-base sm:text-lg font-bold font-serif text-slate-900">
+                Concursos que estou Acompanhando
+              </h2>
+              <span className="px-2 py-0.5 rounded-full bg-teal-100 text-teal-900 text-xs font-bold font-mono">
+                {concursosAcompanhados.length} acompanhado(s)
+              </span>
+            </div>
+            <span className="text-2xs text-slate-400 hidden sm:inline">
+              Acesso rápido e notificações sobre novos andamentos
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {concursosAcompanhados.map((conc) => (
+              <div
+                key={conc.id}
+                className="p-4 rounded-xl bg-slate-50 border border-slate-200/90 hover:border-teal-500/40 transition-all flex flex-col justify-between space-y-3"
+              >
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="px-2 py-0.5 rounded bg-[#07192B] text-teal-300 text-[10px] font-bold font-mono uppercase">
+                      {conc.orgao} • {conc.ano}
+                    </span>
+                    <span className="text-[10px] font-semibold text-slate-500">
+                      {conc.status}
+                    </span>
+                  </div>
+                  <h3 className="text-sm font-bold font-serif text-slate-900 truncate" title={conc.nome}>
+                    {conc.nome}
+                  </h3>
+                  <p className="text-2xs text-slate-500 line-clamp-1">
+                    {conc.cargos?.map((c) => c.nome).join(', ')}
+                  </p>
+                </div>
+
+                <div className="pt-2 border-t border-slate-200 flex items-center justify-between gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      desacompanharConcurso(conc.id);
+                      showToast(`Você deixou de acompanhar ${conc.nome}.`);
+                    }}
+                    className="text-[11px] font-semibold text-rose-600 hover:text-rose-700 hover:underline cursor-pointer"
+                  >
+                    Deixar de acompanhar
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onNavigate('concurso_geral', {
+                        concursoId: conc.id,
+                      })
+                    }
+                    className="text-xs font-bold text-teal-700 hover:text-teal-900 flex items-center gap-1 cursor-pointer"
+                  >
+                    <span>Ver certame</span>
+                    <ArrowRight className="w-3 h-3" />
+                  </button>
                 </div>
               </div>
             ))}
@@ -681,8 +757,8 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
                 </div>
 
                 {/* Rodapé do Card do Concurso com Ações de Acesso */}
-                <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
+                <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <button
                       type="button"
                       onClick={() =>
@@ -711,6 +787,38 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
                       <Layers className="w-3.5 h-3.5 text-teal-600" />
                       <span>Lotes</span>
                     </button>
+
+                    {usuario && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (usuario.concursos_acompanhados?.includes(conc.id)) {
+                            desacompanharConcurso(conc.id);
+                            showToast(`Você deixou de acompanhar ${conc.nome}.`);
+                          } else {
+                            acompanharConcurso(conc.id);
+                            showToast(`Agora você está acompanhando ${conc.nome}!`);
+                          }
+                        }}
+                        className={`text-xs font-semibold px-2.5 py-1 rounded-lg border transition-all cursor-pointer flex items-center gap-1 ${
+                          usuario.concursos_acompanhados?.includes(conc.id)
+                            ? 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100'
+                            : 'bg-teal-50 text-teal-800 border-teal-200 hover:bg-teal-100'
+                        }`}
+                        title={
+                          usuario.concursos_acompanhados?.includes(conc.id)
+                            ? 'Clique para deixar de acompanhar este certame'
+                            : 'Acompanhar este certame para receber atualizações rápidas'
+                        }
+                      >
+                        <BookmarkCheck className="w-3.5 h-3.5" />
+                        <span>
+                          {usuario.concursos_acompanhados?.includes(conc.id)
+                            ? 'Deixar de Acompanhar'
+                            : 'Acompanhar'}
+                        </span>
+                      </button>
+                    )}
                   </div>
 
                   <button
@@ -720,7 +828,7 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
                         concursoId: conc.id,
                       })
                     }
-                    className="flex items-center gap-1.5 px-4 py-2 bg-[#07192B] hover:bg-[#0C2640] text-[#2DD4AA] font-bold text-xs rounded-xl transition-all cursor-pointer shadow-xs"
+                    className="flex items-center justify-center gap-1.5 px-4 py-2 bg-[#07192B] hover:bg-[#0C2640] text-[#2DD4AA] font-bold text-xs rounded-xl transition-all cursor-pointer shadow-xs shrink-0"
                   >
                     <span>Acessar Concurso</span>
                     <ArrowRight className="w-3.5 h-3.5" />

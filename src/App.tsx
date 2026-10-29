@@ -73,6 +73,7 @@ export const AppContent: React.FC = () => {
   const [concursoId, setConcursoId] = useState<string>(() => certamStore.getConcursos()[0]?.id || '');
   const [cargoId, setCargoId] = useState<string>(() => certamStore.getConcursos()[0]?.cargos?.[0]?.id || '');
   const [initialTab, setInitialTab] = useState<string>('dashboard');
+  const [loteId, setLoteId] = useState<string>('');
   const [sidebarMobileOpen, setSidebarMobileOpen] = useState(false);
   const [historyStack, setHistoryStack] = useState<{ view: string; params?: any }[]>([]);
 
@@ -105,11 +106,13 @@ export const AppContent: React.FC = () => {
       const urlCargo = params.get('cargo');
       const urlTab = params.get('tab');
       const urlAdmin = params.get('admin');
+      const urlLote = params.get('lote');
 
       if (urlAdmin === '1' || pathname.includes('admin')) {
         setCurrentView('admin');
       } else if (urlTab === 'lote' || pathname.includes('lote')) {
         setCurrentView('lote');
+        if (urlLote) setLoteId(urlLote);
       } else if (urlTab === 'politica' || pathname.includes('politica')) {
         setCurrentView('politica');
       } else if (urlId || pathname.includes('concurso')) {
@@ -129,24 +132,25 @@ export const AppContent: React.FC = () => {
 
   const handleNavigate = (
     view: string,
-    params?: { concursoId?: string; cargoId?: string; tab?: string }
+    params?: { concursoId?: string; cargoId?: string; tab?: string; loteId?: string }
   ) => {
     // Salvar no histórico de navegação
     setHistoryStack((prev) => [
       ...prev,
       {
         view: currentView,
-        params: { concursoId, cargoId, tab: initialTab },
+        params: { concursoId, cargoId, tab: initialTab, loteId },
       },
     ]);
 
     const cId = params?.concursoId || concursoId;
     const cgId = params?.cargoId || cargoId;
-    const t = params?.tab || initialTab;
+    const t = params?.tab !== undefined ? params.tab : (view === 'concurso' ? 'dashboard' : initialTab);
 
     if (params?.concursoId) setConcursoId(params.concursoId);
     if (params?.cargoId) setCargoId(params.cargoId);
-    if (params?.tab) setInitialTab(params.tab);
+    if (params?.loteId !== undefined) setLoteId(params.loteId);
+    setInitialTab(t);
 
     setCurrentView(view as 'portal' | 'concurso_geral' | 'concurso' | 'lote' | 'admin' | 'politica');
 
@@ -288,6 +292,7 @@ export const AppContent: React.FC = () => {
             <SimuladorLotes
               concursoId={concursoId}
               cargoId={cargoId}
+              loteId={loteId}
               onNavigate={handleNavigate}
               onVoltar={handleVoltar}
             />
@@ -323,7 +328,7 @@ export const AppContent: React.FC = () => {
               </span>
               <span className="text-teal-600 text-xs font-semibold">Portal do Concurseiro</span>
               <span className="text-slate-300">·</span>
-              <span className="italic text-slate-400">"Nunca é apenas uma prova."</span>
+              <span className="italic text-slate-400">"Nunca é só uma prova."</span>
             </div>
 
             <div className="flex flex-wrap items-center gap-4 text-xs">

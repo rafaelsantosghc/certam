@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Lote, Candidato } from '../types';
 import { lotesStore } from '../store/lotesStore';
+import { certamStore } from '../store/certamStore';
 import {
   X,
   MapPin,
@@ -33,6 +34,8 @@ export const ModalEscolhaComarcasLote: React.FC<ModalEscolhaComarcasLoteProps> =
   cargoId,
   onSalvo,
 }) => {
+  const concurso = certamStore.getConcurso(concursoId);
+  const tipoLotacao = concurso?.tipo_lotacao || 'Lotação';
   const [intencao, setIntencao] = useState<Candidato['intencao']>('Sim');
   const [escolhas, setEscolhas] = useState<string[]>([]);
   const [possuiFg, setPossuiFg] = useState(false);
@@ -156,7 +159,7 @@ export const ModalEscolhaComarcasLote: React.FC<ModalEscolhaComarcasLoteProps> =
                 </span>
               </div>
               <h3 className="font-bold text-slate-900 text-base font-serif mt-1">
-                Manifestação e Escolha de Comarcas do Lote
+                Manifestação e Escolha de {tipoLotacao}s do Lote
               </h3>
             </div>
           </div>
@@ -264,12 +267,12 @@ export const ModalEscolhaComarcasLote: React.FC<ModalEscolhaComarcasLoteProps> =
             </div>
           </div>
 
-          {/* Seção 2: Ordenação das Comarcas deste Lote */}
+          {/* Seção 2: Ordenação das Lotações deste Lote */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <div>
                 <h4 className="font-bold text-slate-900 text-xs">
-                  Ordem de Preferência de Comarcas ({comarcasOfertadas.length} comarcas disponíveis)
+                  Ordem de Preferência de {tipoLotacao}s ({comarcasOfertadas.length} {tipoLotacao.toLowerCase()}s disponíveis)
                 </h4>
                 <p className="text-2xs text-slate-500">
                   Use as setas para posicionar suas opções prioritárias no topo (1ª opção, 2ª opção, etc.).

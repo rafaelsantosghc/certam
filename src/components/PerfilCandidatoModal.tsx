@@ -210,8 +210,8 @@ export const PerfilCandidatoModal: React.FC<PerfilCandidatoModalProps> = ({
         status_aprovacao: ap.status,
       }));
 
-    // Se for o primeiro preenchimento inicial (setup inicial da conta ou obrigatório)
-    if (primeiroCadastro || obrigatorio) {
+    // Se for o primeiro preenchimento estritamente obrigatório de primeiro acesso
+    if (obrigatorio) {
       if (!nome.trim() || !cpf.trim() || !dataNascimento.trim() || !whatsapp.trim()) {
         alert('Por favor, preencha todos os campos obrigatórios (*) para concluir seu cadastro.');
         return;
@@ -234,7 +234,7 @@ export const PerfilCandidatoModal: React.FC<PerfilCandidatoModalProps> = ({
       return;
     }
 
-    // Se o usuário for Administrador, aplica as alterações diretamente sem necessidade de auto-aprovação
+    // Se o usuário for Administrador, aplica as alterações diretamente sem necessidade de moderação
     if (usuario.is_admin) {
       atualizarDadosUsuario({
         nome: sanitizeInput(nome, 100),
@@ -253,24 +253,39 @@ export const PerfilCandidatoModal: React.FC<PerfilCandidatoModalProps> = ({
       return;
     }
 
-    // Se já havia dados gravados para um candidato, calcula diff e submete para auditoria
+    // Para usuários comuns: qualquer alteração de cadastro gera solicitação auditada para moderação do admin (Item 2)
     const diffs = calcularDiffs();
     if (diffs.length === 0) {
       onClose();
       return;
     }
 
+    // Registrar imediatamente no auditStore para moderação administrativa
+    auditStore.submeterSolicitacaoAlteracao({
+      usuario_email: usuario.email,
+      usuario_nome: nome.trim() || usuario.nome,
+      cpf: cpf.trim() || usuario.cpf || '',
+      alteracoes: diffs,
+    });
+
     setDiffAlteracoes(diffs);
-    setModalDiffAberto(true);
+    setSubmetidoSucesso(true);
+    setTimeout(() => {
+      setSubmetidoSucesso(false);
+      onClose();
+    }, 2500);
   };
 
   const handleConfirmarSubmissaoAdmin = () => {
-    auditStore.submeterSolicitacaoAlteracao({
-      usuario_email: usuario.email,
-      usuario_nome: usuario.nome,
-      cpf: usuario.cpf || cpf,
-      alteracoes: diffAlteracoes,
-    });
+    const diffs = diffAlteracoes.length > 0 ? diffAlteracoes : calcularDiffs();
+    if (diffs.length > 0) {
+      auditStore.submeterSolicitacaoAlteracao({
+        usuario_email: usuario.email,
+        usuario_nome: nome.trim() || usuario.nome,
+        cpf: cpf.trim() || usuario.cpf || '',
+        alteracoes: diffs,
+      });
+    }
 
     setModalDiffAberto(false);
     setSubmetidoSucesso(true);

@@ -1,167 +1,173 @@
-# CERTAM - Portal do Concurseiro: Arquitetura & Expansão Funcional
+# Plano de Implementação — Sistema Certam (18 Melhorias Integradas)
 
-Plataforma escalável de acompanhamento, classificação, preferências de lotação e interação entre concurseiros, iniciando com os concursos do Rio Grande do Sul (TJRS e MPRS) e estruturada para abrangência nacional.
+Plano detalhado para a implementação das 18 solicitações do usuário em uma única atualização coesa, otimizando consumo de recursos e garantindo integridade arquitetural do sistema.
 
 ---
 
-## Revisão do Usuário & Decisões Críticas
+## Decisões Confirmadas com o Usuário
 
 > [!IMPORTANT]
-> As decisões de produto a seguir foram confirmadas na Fase 1 e orientam a implementação integral do sistema:
-
-- **Concursos Iniciais de Validação**:
-  - **TJRS**: Cargos: *Analista Judiciário - Área Judiciária*, *Analista Judiciário - Área Administrativa* e *Técnico Judiciário - Área Administrativo-Judiciária*.
-  - **MPRS**: Cargos: *Analista do Ministério Público* e *Técnico do Ministério Público*.
-- **Mecanismo de Notificações**:
-  - Notificações internas no portal (ícone de sininho com contador de não-lidas em tempo real).
-  - Arquitetura otimizada por concurso/cargo com tabela de leitura por usuário (`notification_reads`), evitando a duplicação desnecessária de milhares de registros no banco/store.
-- **Regra de Acesso aos Chats e Homologação**:
-  - **Cadastro Geral de Candidatos (Master List)**: O portal armazena as listas oficiais de classificação. Ao fazer login e preencher CPF e Nome Completo, o sistema realiza a vinculação unívoca no cadastro geral.
-  - **Critério de Liberação**: Concursos não homologados possuem chats abertos a todos. Concursos homologados restringem o chat aos candidatos aprovados identificados por CPF vinculado ou Nome Completo.
-  - **Recurso Manual**: Candidato não identificado automaticamente conta com botão imediato para solicitar verificação ao administrador, com deferimento em 1 clique no painel administrativo.
+> **Decisões Alinhadas:**
+> 1. **Execução Unificada**: Todas as 18 melhorias serão implementadas em uma única grande entrega coordenada e verificada por compilação completa.
+> 2. **Cadastro Geral e Importação de Candidatos**: Candidatos importados por planilha serão inseridos no Cadastro Geral como **perfis vinculáveis** (armazenando CPF e nome completo), prontos para reivindicação quando o candidato realizar seu cadastro/login.
+> 3. **Substituição de Comarca por Lotação**: O termo principal do sistema passa a ser **Lotação**, acompanhado de uma nova configuração no cadastro/edição do concurso permitindo ao administrador especificar o subtipo institucional (*Comarca*, *Região*, *Cidade*, *Estado*, *Unidade* ou *Setor*), além de uma lista mestra de lotações do concurso.
 
 ---
 
-## 1. Visão Geral & Proposta de Valor
-
-- **O que faz**: O CERTAM centraliza a vida do concurseiro aprovado ou em disputa, oferecendo cronograma oficial em linha do tempo, listas de classificação completas com proteção de dados, simuladores de escolha de comarcas por lote convocatório, quantitativo de cargos vagos/ocupados, comunicados oficiais (como monitoramento de PLs de cargos comissionados vs. efetivos) e canais de comunicação com controle de acesso dinâmico.
-- **Público-Alvo**: Concurseiros, candidatos aprovados aguardando nomeação, comissões de aprovados e administradores de certames.
-- **Valor Principal**: Transparência, organização colaborativa para nomeações e fim da dispersão de informações em grupos fragmentados de WhatsApp/Telegram.
-
----
-
-## 2. Experiência do Usuário & Design Visual
-
-### Fluxos Principais
-1. **Descoberta & Home**:
-   - Listagem dos concursos ativos, encerrados e previstos.
-   - Filtros por esfera (Estadual, Municipal, Federal), status e busca por texto.
-2. **Página do Concurso (`/concurso?id=...`)**:
-   - Cabeçalho institucional com órgão, edital, ano e status (ex: *Homologado*, *Convocando*, *Em Andamento*).
-   - Abas temáticas:
-     1. **Linha do Tempo (Cronograma Oficial)**: Etapas concluídas, atual e futuras com datas e editais vinculados.
-     2. **Cargos & Vagas**: Lista dos cargos com número de vagas imediatas, CR, nível de escolaridade e link individual de cada cargo.
-     3. **Quadro de Vagas**: Vacâncias oficiais vs. cargos ocupados e projeções de convocações.
-     4. **Documentos Oficiais**: Editais, retificações, comunicados e decisões judiciais para download direto.
-     5. **Comunicados & Mobilização**: Notícias e avisos oficiais (ex: projetos de lei, audiências públicas, atos de gestão).
-3. **Página do Cargo (`/concurso?id=...&cargo=...`)**:
-   - Lista de Classificação Oficial: Visualização pública restrita (Posição e Nome).
-   - Visualização para Aprovados Autenticados: Notas por disciplina, intenção de posse, cota e preferências de comarca.
-   - Chat do Cargo: Aberto antes da homologação; restrito aos aprovados após homologação.
-   - Acesso aos Lotes Convocatórios deste cargo.
-4. **Página do Lote Convocatório (`/lote?id=...&cargo=...&lote=...`)**:
-   - Simulador interativo de alocação de comarcas restrito aos convocados do lote.
-   - Chat exclusivo do lote convocatório.
-5. **Perfil do Candidato & Auditoria de Alterações**:
-   - Dados: Nome Completo, CPF, Data de Nascimento, WhatsApp, E-mail de Contato (com botão para manter e-mail de login), seleção múltipla de outros concursos/cargos onde foi aprovado.
-   - Caso o concurso do candidato não conste na lista, formulário direto para solicitar inclusão ao admin.
-   - Ao editar dados já salvos, o sistema gera uma **Solicitação de Alteração** com diff ("Antes" vs. "Depois") enviada para a fila de moderação do administrador.
-6. **Mensagens Privadas (1 a 1)**:
-   - Conversas diretas entre candidatos aprovados para troca de contatos e dúvidas sobre comarcas, com opção de silenciar conversas e bloquear usuários.
-7. **Canal "Fale com o Administrador"**:
-   - Modal/Página com formulário segmentado por categoria (*Inclusão de Concurso*, *Erro de Classificação*, *Dúvida*, *Sugestão*, *Outro*).
-
-### Identidade Visual & Design System CERTAM
-- **Paleta de Cores**:
-  - `Azul Nobre Marítimo`: `#07192B` (fundos institucionais e cabeçalhos).
-  - `Menta Vibrante`: `#2DD4AA` (destaques, status ativo e chamadas de ação).
-  - `Azul Petróleo / Teal`: `#135A7A` (bordas ativas, acentos secundários e navegação).
-  - `Neutros de Alta Densidade`: Fundo suave `#F8FAFC`, cartões `#FFFFFF`, texto primário `#0F172A` e secundário `#475569`.
-- **Tipografia**:
-  - Títulos e cabeçalhos institucionais com porte serifado sóbrio (`font-serif`, `Merriweather` / `Playfair Display`).
-  - Interface, controles e formulários em tipografia limpa sans-serif (`font-sans`, `Plus Jakarta Sans` / `Outfit`).
-  - Classificações, notas, datas e CPFs com algarismos tabulares e monoespaçados (`font-mono`, `tabular-nums`).
-- **Disciplina Anti-Slop (Zero-Pills)**:
-  - Eliminação de pílulas estáticas repetitivas para metadados; uso de texto inline limpo com separadores sutis (`·` ou `/`).
-  - Botões de filtro em controles segmentados funcionais com contraste WCAG AA.
-
----
-
-## 3. Decisões Técnicas de Produto & Trade-Offs
-
-- **Decisão 1: Otimização de Notificações em Escala (Single-Broadcast + Read-Ledger)**:
-  - *Abordagem*: Cada notificação de concurso/cargo é registrada uma única vez (`NotificationEvent`). O usuário apenas registra IDs lidos em seu perfil (`read_notification_ids`).
-  - *Vantagem*: Evita a geração de 50.000 linhas de notificação quando 5.000 candidatos do TJRS recebem um comunicado de convocação.
-- **Decisão 2: Auditoria de Modificações no Perfil**:
-  - *Abordagem*: Alterações em campos sensíveis (Nome, CPF, Classificações) entram em estado `pendente_aprovacao`. O admin visualiza o comparativo lado a lado e pode aprovar ou rejeitar com justificativa.
-  - *Vantagem*: Impede fraudes de identidade, falsificação de notas ou usurpação de colocações de outros candidatos.
-- **Decisão 3: Verificação Híbrida de Aprovados**:
-  - *Abordagem*: Cruzamento determinístico de CPF e Nome com a base oficial de inscritos, com fluxo de fallback amigável caso haja variação de acentuação ou ausência de CPF na listagem oficial publicada pelo tribunal.
-
----
-
-## 4. Arquitetura Técnica & Diagrama de Componentes
+## 1. Visão Geral das 18 Melhorias
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                            CERTAM PORTAL (React SPA)                        │
-├─────────────────────────────────────────────────────────────────────────────┤
-│  ROTEAMENTO VIA QUERY PARAMS / PERMALINKS:                                  │
-│  • /                 -> Portal Home (Catálogo com Filtros)                  │
-│  • /concurso?id=...  -> Concurso Dashboard (Linha do Tempo, Vagas, Docs)  │
-│  • /concurso?...&cargo=... -> Cargo View (Classificação, Chat, Lotes)       │
-│  • /lote?...         -> Simulador de Comarcas do Lote Convocatório          │
-│  • /admin            -> Painel Administrativo com Fila de Moderação         │
-└───────────────┬─────────────────────────────────────────────────────────────┘
-                │
-    ┌───────────┴─────────────────────────────────────────┐
-    ▼                                                     ▼
-┌───────────────────────────────┐     ┌───────────────────────────────────────┐
-│     STORES & CONTEXTOS        │     │         MÓDULOS & COMPONENTES         │
-├───────────────────────────────┤     ├───────────────────────────────────────┤
-│ • authContext.tsx             │     │ • Navbar & NotificationBell           │
-│   (Sessão, Perfil, Master ID) │     │ • ConcursoLinhaDoTempo (Etapas)       │
-│ • certamStore.ts              │     │ • ConcursoQuadroVagas (Vacâncias)     │
-│   (Concursos TJRS/MPRS, Docs) │     │ • ConcursoDocumentos & Comunicados    │
-│ • lotesStore.ts               │     │ • CargoClassificacaoTable (Público/   │
-│   (Lotes, Comarcas, Respostas)│     │   Aprovado com proteção de CPF)       │
-│ • chatStore.ts & dmStore.ts   │     │ • ChatIntegrado (Público vs Restrito) │
-│   (Canais Cargo e 1-a-1)      │     │ • MensagensPrivadasDrawer             │
-│ • auditStore.ts               │     │ • PerfilModal com Submissão ao Admin  │
-│   (Fila de Alterações/Diffs)  │     │ • AdminAprovacoes & Fila de Contato   │
-│ • contactStore.ts             │     │ • SimuladorLotes (Alocação Dinâmica)  │
-└───────────────────────────────┘     └───────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────────────┐
+│                          SISTEMA CERTAM — ATUALIZAÇÃO 18 ITENS                  │
+├───────────────────┬──────────────────────────┬─────────────────────────────────┤
+│ A. Acesso & Perfil│ B. Concursos & Lotações  │ C. Listas, Cotas & Lotes        │
+│ • "Meus Concursos"│ • Config. Lotação        │ • Múltiplas Cotas (PCD+PPP etc.)│
+│   filtrado real   │   (Comarca/Região/etc.)  │ • Status sem previsão ajustado  │
+│ • "Acompanhados"  │ • Catálogo de Lotações   │ • Lotação Definitiva vs Escolhas│
+│ • Painel Admin    │ • Visibilidade pública   │ • Página exclusiva do Lote      │
+│   Geral de Users  │ • Linha do tempo inversa │ • Paginação topo/base + seletor │
+│ • Slogan e botões │   + Edição Admin         │ • Importador com mapeamento     │
+└───────────────────┴──────────────────────────┴─────────────────────────────────┘
 ```
-
-### Novos Modelos de Dados (`src/types/index.ts`)
-1. **`CronogramaEtapa`**: `id`, `concurso_id`, `cargo_id?`, `titulo`, `data_prevista`, `data_realizada?`, `status` (*pendente*, *em_andamento*, *concluida*), `link_edital?`.
-2. **`QuadroVagas`**: `concurso_id`, `cargo_id`, `vagas_ocupadas`, `vagas_reais`, `cargos_criados`, `previsao_nomeacao_ano`.
-3. **`DocumentoConcurso`**: `id`, `concurso_id`, `titulo`, `tipo` (*Edital*, *Retificacao*, *Decisao*, *Resultado*), `data_publicacao`, `url_ou_conteudo`.
-4. **`ComunicadoConcurso`**: `id`, `concurso_id`, `titulo`, `resumo`, `texto_completo`, `autor`, `data`, `importante`.
-5. **`PerfilAuditRequest`**: `id`, `usuario_email`, `candidato_cpf`, `data_solicitacao`, `status` (*pendente*, *aprovado*, *rejeitado*), `alteracoes: { campo, valor_antigo, valor_novo }[]`.
-6. **`SolicitacaoVinculacao`**: `id`, `usuario_email`, `nome_completo`, `cpf`, `concurso_id`, `cargo_id`, `posicao_declarada`, `status`.
-7. **`MensagemContatoAdmin`**: `id`, `usuario_email`, `nome`, `motivo`, `concurso_nome?`, `cargo_nome?`, `classificacao?`, `mensagem`, `data`, `status` (*aberto*, *respondido*, *arquivado*).
-8. **`MensagemPrivada` & `BloqueioUsuario`**: `remetente_email`, `destinatario_email`, `texto`, `data_hora`, `lida`.
 
 ---
 
-## 5. Roteiro de Execução Passo a Passo
+## 2. Detalhamento por Área de Atuação
 
-1. **Expansão de Tipos & Modelos (`src/types/index.ts`)**:
-   - Adicionar tipagens de Cronograma, Quadro de Vagas, Documentos, Comunicados, Auditoria de Perfil, Mensagens Privadas e Contato do Admin.
-2. **Estruturação de Dados com TJRS e MPRS (`src/store/certamStore.ts` & `src/data/`)**:
-   - Cadastrar o **TJRS** com os três cargos solicitados (*Analista Judiciário - Área Judiciária*, *Analista Judiciário - Área Administrativa* e *Técnico Judiciário - Área Administrativo-Judiciária*).
-   - Cadastrar o **MPRS** com os dois cargos solicitados (*Analista do Ministério Público* e *Técnico do Ministério Público*).
-   - Inserir cronogramas reais, quadros de vagas e candidatos na Master List de classificação para teste dos cruzamentos.
-3. **Mecanismo de Verificação & Master List**:
-   - Atualizar a autenticação para cruzar Nome Completo e CPF com a Master List dos cargos.
-   - Implementar o botão "Não fui identificado automaticamente? Solicitar validação ao Administrador".
-4. **Gating de Chat (Público vs. Homologado)**:
-   - Chat aberto a todos enquanto o status do concurso for diferente de `Homologado`.
-   - Bloqueio inteligente pós-homologação: somente candidatos vinculados e validados têm permissão de envio e leitura das preferências.
-5. **Painel do Concurso & Cargo com Novas Abas**:
-   - Timeline oficial com visualização cronológica interativa.
-   - Tabela de documentos com links de download.
-   - Quadro de vagas ocupadas vs. cargos vagos reais com cálculo de reposição.
-   - Mural de comunicados oficiais e mobilização dos aprovados.
-6. **Auditoria de Perfil no Painel do Candidato e Admin**:
-   - Modal de edição que exibe diff e submete ao admin em vez de salvar diretamente.
-   - Aba no painel admin para aprovação em 1 clique das alterações de perfil.
-7. **Central de Mensagens Privadas (1-a-1) & Bloqueios**:
-   - Drawer de mensagens diretas entre candidatos aprovados com bloqueio/silenciamento.
-8. **Central de Notificações Internas Otimizada**:
-   - Sininho no topo com contador de não-lidas baseado em `read_notification_ids`.
-9. **Formulário de Contato com o Administrador**:
-   - Formulário com motivos configurados + caixa de entrada para despacho no Admin.
-10. **Validação & Compilação**:
-    - Verificação via `lint_applet` e `compile_applet`.
+### A. Gestão de Candidato, Acesso & Painel Administrativo Geral (Itens 1, 2, 4, 5, 7, 18)
+
+1. **Item 1 — Concursos em Andamento vs Concursos Acompanhados**:
+   - Ajustar a lógica de "Meus Concursos em Andamento": só exibir concursos onde o candidato logado possui inscrição/aprovação ativa (cruzando CPF ou nome com a lista de candidatos).
+   - Criar a nova seção **"Concursos que estou acompanhando"** na tela inicial do candidato.
+   - Adicionar botões **"Acompanhar Concurso"** e **"Deixar de Acompanhar"** com status e sininho de notificação no cabeçalho do concurso, persistindo no perfil do usuário (`usuario.concursos_acompanhados: string[]`).
+
+2. **Item 2 — Auditoria e Solicitações de Cadastro Chegando ao Painel Admin**:
+   - Diagnosticar o fluxo de solicitação de vinculação/alteração (`solicitacoesVinculacaoStore` e `certamStore.getSolicitacoes()`).
+   - Garantir que as solicitações de alteração de cadastro emitidas pelo usuário comum sejam gravadas no armazenamento compartilhado com status `pendente` e renderizadas com contador de pendências no painel de administração e na gaveta de moderação.
+
+3. **Item 4 — Ícone de Feedback de Erro na Escolha de Comarca/Lotação**:
+   - Substituir o ícone de sucesso (Check) pelo ícone correto de erro (`AlertCircle` ou `XCircle` vermelho) nos toasts e modais quando um candidato não autorizado tenta manifestar preferência.
+
+4. **Item 5 — Visibilidade Pública dos Concursos Criados pelo Admin**:
+   - Assegurar que os concursos criados ou alterados no `certamStore` sejam salvos no `localStorage` sob chave unificada de dados públicos, garantindo que qualquer usuário (logado como candidato ou visitante) visualize os novos concursos e seus cargos.
+
+5. **Item 7 — Slogan e Ajuste Textual**:
+   - Atualizar o slogan no cabeçalho/hero para: **"Nunca é só uma prova."**
+   - No botão de edição de cadastro, remover o sufixo `(auditado)` para ficar apenas **"Editar Cadastro"** ou **"Editar Perfil"**.
+
+6. **Item 18 — Painel Central de Cadastro de Usuários & Integração com Planilhas**:
+   - Criar visualização de **Gestão Geral de Cadastros** no painel administrativo:
+     - Listagem de todos os usuários cadastrados e perfis vinculáveis.
+     - Ações: Editar dados, Bloquear/Desbloquear acesso, Alterar papel (Admin/Candidato/Convidado), Excluir usuário.
+   - Integração com a importação: ao importar lista de aprovados de uma planilha, verificar automaticamente por CPF ou Nome completo se o candidato já existe; caso não exista, criar registro prévio no cadastro geral com status `"Aguardando Vinculação"`.
+
+---
+
+### B. Concurso, Linha do Tempo & Sistema Dinâmico de Lotações (Itens 3, 10, 14, 16, 17)
+
+1. **Item 3 — Linha do Tempo Invertida e Edição pelo Administrador**:
+   - Inverter a ordenação de `cronograma`: eventos mais recentes no topo, mais antigos abaixo.
+   - Adicionar botão **"Editar Cronograma / Linha do Tempo"** visível apenas para administradores, permitindo adicionar novos eventos, editar datas, títulos e status.
+
+2. **Item 10 — Redirecionamento Correto do Menu Lateral**:
+   - Ao clicar em um cargo no menu lateral esquerdo, garantir navegação direta para a aba de **Visão Geral do Cargo** (`abaAtiva = 'dashboard'`) em vez de abrir documentos oficiais.
+
+3. **Item 14 — Cabeçalho Fixo/Compacto nas Páginas Principais**:
+   - Implementar cabeçalho com classe `sticky top-0 z-30` no dashboard do concurso/cargo:
+   - Quando o usuário rolar a página para baixo, o cabeçalho se torna compacto, condensando ações secundárias em dropdown para preservar área útil de leitura.
+
+4. **Item 16 — Separação: Lotação Definitiva vs Preferências do Candidato**:
+   - Na tabela de classificação:
+     - Coluna **"Lotação Definitiva"**: exibe estritamente a lotação atribuída após a consolidação oficial do lote (`comarca_definitiva` ou `comarca_escolhida`).
+     - Coluna **"Preferências do Candidato"**: exibe as opções declaradas pelo candidato antes da convocação (`escolhas_comarcas`).
+
+5. **Item 17 — Substituição Global de "Comarca" por "Lotação" e Configuração de Subtipo**:
+   - No modelo do Concurso, adicionar campo `tipo_lotacao: 'Comarca' | 'Região' | 'Cidade' | 'Estado' | 'Unidade' | 'Setor' | 'Lotação'` (com padrão 'Lotação' ou 'Comarca' conforme o órgão).
+   - Adicionar gerenciador de **Catálogo de Lotações** no concurso, permitindo cadastrar e listar todas as lotações oficiais do órgão.
+   - Nos lotes, permitir selecionar das lotações cadastradas ou digitar nova (inserindo-a automaticamente no catálogo do concurso).
+   - Atualizar rótulos, filtros e tabelas para utilizar o termo dinâmico ou `"Lotação"`.
+
+---
+
+### C. Classificação, Cotas Múltiplas, Lotes e Importador (Itens 6, 8, 9, 11, 12, 13, 15)
+
+1. **Item 6 — Acesso Restrito à Página Exclusiva do Lote**:
+   - Remover botão de simulador genérico da barra superior da aba de lotes.
+   - Substituir pelo botão **"Acessar Página do Lote"** dentro de cada card de lote.
+   - Restringir o acesso: apenas candidatos contemplados naquele lote (titulares ou suplentes convocados) ou administradores têm permissão para acessar a tela de escolha; para os demais aprovados ou não participantes, exibir bloqueio claro de acesso.
+
+2. **Item 8 — Reconhecimento de Candidatos em Múltiplas Cotas (ex: PCD + PPP)**:
+   - Evoluir o tipo de cota para suportar múltiplas marcações (`cotas: CotaTipo[]` além de `cota: CotaTipo`), reconhecendo candidatos elegíveis simultaneamente à Ampla Concorrência, PPP/Negros e PCD/Indígena/Trans.
+   - Atualizar o importador de classificação para aceitar valores combinados na coluna de cota (ex: `"PPP, PCD"`, `"Negro / PCD"`, `"PCD + Cota Racial"`).
+
+3. **Item 9 — Simulação e Registro da Ordem de Nomeação com Múltiplas Cotas**:
+   - No algoritmo de ordem de convocação (`calcularOrdemNomeacao`):
+     - Um candidato com múltiplas cotas concorre na lista da Ampla e nas listas de cada uma de suas cotas reservadas.
+     - Quando o candidato for convocado pela Ampla, ele libera a cota para o próximo cotista; se convocado pela cota, é baixado também na lista de ampla.
+     - Registrar no histórico por qual modalidade (Ampla ou tipo de cota) a convocação ocorreu.
+
+4. **Item 11 — Correção do Status "Próximo (previsão)" em Cargos sem Previsão de Lote**:
+   - Se o cargo não possui vagas previstas para o próximo lote (`vagas_previstas_proximo_lote === 0` ou sem data de previsão cadastrada), o status dos candidatos não convocados deve ser exibido como **"Aguardando Convocação"** em vez de "Próximo (previsão)".
+
+5. **Item 12 — Reset de Paginação ao Trocar de Cargo**:
+   - No `ConcursoCargoDashboard`, ao alternar de cargo via seletor ou abas, resetar o estado `paginaAtual` para `1`.
+
+6. **Item 13 — Paginação no Topo e Base + Seletor de Itens por Página**:
+   - Replicar os controles de paginação (anterior, números de página, próximo) tanto no topo quanto no rodapé das tabelas de classificação e de ordem de nomeação.
+   - Adicionar dropdown de quantidade de itens por página: `25`, `50`, `100` ou `Todos`.
+
+7. **Item 15 — Importador Interativo de Planilhas com Mapeamento e Edição Manual**:
+   - No importador de candidatos/lotes via planilha/colagem:
+     - Etapa 1: Leitura e pré-visualização das colunas detectadas.
+     - Etapa 2: Mapeamento interativo por seletores de coluna (definindo explicitamente qual coluna é *Ordem*, *Nome*, *Cotas*, *Data de Convocação*, *Data de Nomeação*, *Papel Titular/Suplente* e *Lotação*).
+     - Etapa 3: Grid editável com células interativas para ajustes rápidos antes de confirmar a importação definitiva.
+
+---
+
+## 3. Arquitetura e Fluxo de Dados
+
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│                        ARQUITETURA DE DADOS                            │
+└────────────────────────────────────┬───────────────────────────────────┘
+                                     │
+           ┌─────────────────────────┴────────────────────────┐
+           ▼                                                  ▼
+┌─────────────────────────────┐                    ┌─────────────────────┐
+│       certamStore           │                    │     lotesStore      │
+├─────────────────────────────┤                    ├─────────────────────┤
+│ • Concursos, Cargos         │                    │ • Lotes de Lotações │
+│ • tipo_lotacao              │                    │ • Convocados        │
+│ • catalogo_lotacoes[]       │                    │ • Escolhas & Trava  │
+│ • cronograma[] (ordenado)   │                    │ • data_convocacao   │
+│ • usuarios[] / cadastros[]  │                    │ • data_nomeacao     │
+│ • solicitacoesVinculacao[]  │                    │ • data_audiencia    │
+└──────────┬──────────────────┘                    └──────────┬──────────┘
+           │                                                  │
+           └─────────────────────────┬────────────────────────┘
+                                     ▼
+                   ┌───────────────────────────────────┐
+                   │    ConcursoCargoDashboard.tsx     │
+                   │ • Header Sticky Compacto          │
+                   │ • Visão Geral, Classificação,     │
+                   │   Nomeação e Lotes Restritos      │
+                   │ • Paginação Topo + Base + Seletor │
+                   └───────────────────────────────────┘
+```
+
+---
+
+## 4. Plano de Verificação e Testes
+
+1. **Testes de Acesso e Permissões**:
+   - Entrar como usuário comum: TJRS não deve aparecer em "Meus Concursos" se não estiver inscrito/aprovado; testar botão "Acompanhar Concurso" e verificar aparição na nova seção "Concursos Acompanhados".
+   - Testar envio de solicitação de alteração de cadastro e verificar chegada imediata no painel admin.
+2. **Testes de Lotação e Concursos**:
+   - Modificar configuração do concurso para tipo de lotação (ex: "Setor" ou "Comarca") e validar propagação nos títulos e badges.
+   - Conferir ordenação invertida da Linha do Tempo e edição de eventos pelo administrador.
+3. **Testes de Cotas Múltiplas e Ordem de Nomeação**:
+   - Cadastrar candidato com cotas PCD + PPP; verificar sua presença em ambas as listas de reserva e na Ampla; testar convocação e conferir registro da modalidade.
+4. **Testes de Importador Interativo**:
+   - Importar planilha com colunas invertidas; usar o mapeador de colunas para definir data de convocação vs data de nomeação; editar valores inline e confirmar importação.
+5. **Verificação de Compilação**:
+   - Executar `lint_applet` e `compile_applet` garantindo zero erros de tipos ou compilação.

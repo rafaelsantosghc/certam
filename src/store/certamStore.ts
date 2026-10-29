@@ -124,4 +124,36 @@ export const certamStore = {
     conc.cronograma = cronograma;
     this.salvarConcurso(conc);
   },
+
+  // Catálogo de Lotações do Concurso
+  adicionarLotacaoAoCatalogo(concursoId: string, nomeLotacao: string, regiao?: string): boolean {
+    const conc = this.getConcurso(concursoId);
+    if (!conc) return false;
+    const nomeTrim = nomeLotacao.trim();
+    if (!nomeTrim) return false;
+
+    conc.catalogo_lotacoes = conc.catalogo_lotacoes || [];
+    const existe = conc.catalogo_lotacoes.some(
+      (l) => l.nome.toLowerCase() === nomeTrim.toLowerCase()
+    );
+    if (existe) return false;
+
+    conc.catalogo_lotacoes.push({
+      id: `lot-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`,
+      nome: nomeTrim,
+      regiao,
+      vagas_total: 0,
+    });
+    conc.catalogo_lotacoes.sort((a, b) => a.nome.localeCompare(b.nome));
+    this.salvarConcurso(conc);
+    return true;
+  },
+
+  removerLotacaoDoCatalogo(concursoId: string, lotacaoId: string): boolean {
+    const conc = this.getConcurso(concursoId);
+    if (!conc || !conc.catalogo_lotacoes) return false;
+    conc.catalogo_lotacoes = conc.catalogo_lotacoes.filter((l) => l.id !== lotacaoId);
+    this.salvarConcurso(conc);
+    return true;
+  },
 };

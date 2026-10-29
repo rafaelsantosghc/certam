@@ -40,7 +40,7 @@ export const PrivacyPolicy: React.FC<PrivacyPolicyProps> = ({ onBack }) => {
         <section className="space-y-2">
           <h2 className="text-base font-bold font-serif text-[#0e4a5b]">1. Sobre a CERTAM</h2>
           <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
-            A <strong>CERTAM – Portal do Concurseiro</strong> (<em>"Nunca é apenas uma prova."</em>) é uma plataforma independente voltada a apoiar candidatos em concursos públicos de todo o país. O módulo de <strong>Escolha de Comarcas do TJRS</strong> foi desenvolvido para auxiliar os aprovados a organizar suas preferências e simular a lotação de forma transparente e colaborativa. <strong>A CERTAM não é um canal oficial do TJRS</strong> e suas ferramentas não substituem os procedimentos, editais ou convocações oficiais dos órgãos públicos realizadores.
+            A <strong>CERTAM – Portal do Concurseiro</strong> (<em>"Nunca é só uma prova."</em>) é uma plataforma independente voltada a apoiar candidatos em concursos públicos de todo o país. O módulo de <strong>Escolha de Comarcas do TJRS</strong> foi desenvolvido para auxiliar os aprovados a organizar suas preferências e simular a lotação de forma transparente e colaborativa. <strong>A CERTAM não é um canal oficial do TJRS</strong> e suas ferramentas não substituem os procedimentos, editais ou convocações oficiais dos órgãos públicos realizadores.
           </p>
           <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
             Esta política explica quais dados pessoais são coletados, para que são usados e quais são os seus direitos, em conformidade com a Lei Geral de Proteção de Dados Pessoais (Lei nº 13.709/2018 – LGPD).

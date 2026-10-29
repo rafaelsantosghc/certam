@@ -75,6 +75,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [abaAdmin, setAbaAdmin] = useState<
     | 'concursos'
     | 'lotes'
+    | 'cadastros'
     | 'auditoria'
     | 'validacoes'
     | 'contatos'
@@ -92,6 +93,26 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [loteConcursoAlvoId, setLoteConcursoAlvoId] = useState<string>('');
   const [loteCargoAlvoId, setLoteCargoAlvoId] = useState<string>('');
   const [busca, setBusca] = useState('');
+
+  // -------------------------------------------------------------
+  // CADASTRO GERAL DE USUÁRIOS (Item 18)
+  // -------------------------------------------------------------
+  const [usuariosGerais, setUsuariosGerais] = useState<any[]>(() =>
+    userRegistryStore.getAllUsers()
+  );
+  const [buscaUsuario, setBuscaUsuario] = useState('');
+  const [filtroStatusUsuario, setFiltroStatusUsuario] = useState<string>('todos');
+  const [filtroRoleUsuario, setFiltroRoleUsuario] = useState<string>('todos');
+  const [modalEditarUsuarioAberto, setModalEditarUsuarioAberto] = useState(false);
+  const [usuarioEditando, setUsuarioEditando] = useState<any | null>(null);
+  const [modalNovoUsuarioAberto, setModalNovoUsuarioAberto] = useState(false);
+  const [userFormNome, setUserFormNome] = useState('');
+  const [userFormCpf, setUserFormCpf] = useState('');
+  const [userFormEmail, setUserFormEmail] = useState('');
+  const [userFormTelefone, setUserFormTelefone] = useState('');
+  const [userFormRole, setUserFormRole] = useState<'admin' | 'candidato'>('candidato');
+  const [userFormStatus, setUserFormStatus] = useState<'ativo' | 'aguardando_primeiro_acesso'>('ativo');
+  const [userFormBloqueado, setUserFormBloqueado] = useState(false);
 
   // -------------------------------------------------------------
   // DADOS AUDITORIA, VINCULAÇÕES, CONTATOS & NOTIFICAÇÕES
@@ -114,6 +135,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     const handleVinc = () => setVinculacoes(auditStore.getVinculacoes());
     const handleCont = () => setContatos(contactStore.getMensagens());
     const handleNotif = () => setNotificacoes(notificationStore.getNotificacoes());
+    const handleUsers = () => setUsuariosGerais(userRegistryStore.getAllUsers());
 
     const handleStorage = () => {
       setAuditRequests(auditStore.getAuditRequests());
@@ -121,12 +143,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       setContatos(contactStore.getMensagens());
       setNotificacoes(notificationStore.getNotificacoes());
       setConcursos(certamStore.getConcursos());
+      setUsuariosGerais(userRegistryStore.getAllUsers());
     };
 
     window.addEventListener('certam_audit_updated', handleAudit);
     window.addEventListener('certam_vinculacoes_updated', handleVinc);
     window.addEventListener('certam_contact_updated', handleCont);
     window.addEventListener('certam_notifications_updated', handleNotif);
+    window.addEventListener('certam_users_updated', handleUsers);
     window.addEventListener('storage', handleStorage);
 
     return () => {
@@ -134,6 +158,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       window.removeEventListener('certam_vinculacoes_updated', handleVinc);
       window.removeEventListener('certam_contact_updated', handleCont);
       window.removeEventListener('certam_notifications_updated', handleNotif);
+      window.removeEventListener('certam_users_updated', handleUsers);
       window.removeEventListener('storage', handleStorage);
     };
   }, []);
@@ -223,10 +248,39 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [motivoJustificativaVinc, setMotivoJustificativaVinc] = useState('');
   const [erroMotivoVinc, setErroMotivoVinc] = useState(false);
 
-  // Importador Planilhas
+  // -------------------------------------------------------------
+  // IMPORTADOR DE PLANILHAS INTERATIVO (Itens 8, 15, 18)
+  // -------------------------------------------------------------
   const [importConcursoId, setImportConcursoId] = useState<string>(concursos[0]?.id || '');
   const [importCargoId, setImportCargoId] = useState<string>(concursos[0]?.cargos?.[0]?.id || '');
   const [previewPlanilha, setPreviewPlanilha] = useState<Partial<Candidato>[]>([]);
+  const [colunasPlanilha, setColunasPlanilha] = useState<string[]>([]);
+  const [linhasBrutasPlanilha, setLinhasBrutasPlanilha] = useState<any[]>([]);
+  const [mapeamentoColunas, setMapeamentoColunas] = useState<{
+    posicao: string;
+    nome: string;
+    cpf: string;
+    nota_final: string;
+    cota: string;
+    data_convocacao: string;
+    data_nomeacao: string;
+    lotacao_definitiva: string;
+    papel: string;
+    email: string;
+    whatsapp: string;
+  }>({
+    posicao: '',
+    nome: '',
+    cpf: '',
+    nota_final: '',
+    cota: '',
+    data_convocacao: '',
+    data_nomeacao: '',
+    lotacao_definitiva: '',
+    papel: '',
+    email: '',
+    whatsapp: '',
+  });
   const [nomeArquivo, setNomeArquivo] = useState('');
   const [erroImportacao, setErroImportacao] = useState<string | null>(null);
   const [importando, setImportando] = useState(false);
@@ -237,6 +291,93 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     if (conc && conc.cargos && conc.cargos.length > 0) {
       setImportCargoId(conc.cargos[0].id);
     }
+  };
+
+  const detectarMelhorColuna = (cols: string[], termos: string[]) => {
+    for (const c of cols) {
+      const cNorm = c.toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      for (const t of termos) {
+        if (cNorm === t || cNorm.includes(t)) {
+          return c;
+        }
+      }
+    }
+    return '';
+  };
+
+  const aplicarMapeamento = (
+    mapa: typeof mapeamentoColunas,
+    rows: any[] = linhasBrutasPlanilha,
+    targetConcId: string = importConcursoId,
+    targetCargoId: string = importCargoId
+  ) => {
+    if (!rows || rows.length === 0) return;
+
+    const parsed: Partial<Candidato>[] = rows.map((row, idx) => {
+      const getVal = (colName: string) =>
+        colName && row[colName] !== undefined ? String(row[colName]).trim() : '';
+
+      const rawPos = getVal(mapa.posicao);
+      const posicao = parseInt(rawPos.replace(/\D/g, ''), 10) || idx + 1;
+      const nome = getVal(mapa.nome) || `Candidato ${idx + 1}`;
+      const cpf = getVal(mapa.cpf) || undefined;
+      const rawNota = getVal(mapa.nota_final);
+      const nota = rawNota ? parseFloat(rawNota.replace(',', '.')) || 0 : 0;
+      const rawCota = getVal(mapa.cota) || 'Ampla';
+      const dataConvocacao = getVal(mapa.data_convocacao) || undefined;
+      const dataNomeacao = getVal(mapa.data_nomeacao) || undefined;
+      const lotacaoDefinitiva = getVal(mapa.lotacao_definitiva) || undefined;
+      const rawPapel = getVal(mapa.papel).toLowerCase();
+      const papel = rawPapel.includes('suplente') ? 'Suplente' : 'Titular';
+      const email = getVal(mapa.email).toLowerCase() || undefined;
+      const whatsapp = getVal(mapa.whatsapp) || undefined;
+
+      // Item 8: Suporte a múltiplas cotas
+      const cotaNorm = normalizarCota(rawCota);
+      const cotasIdentificadas: Candidato['cota'][] = [];
+      const lower = rawCota.toLowerCase();
+      if (lower.includes('pcd') || lower.includes('defic')) cotasIdentificadas.push('PCD');
+      if (
+        lower.includes('ppp') ||
+        lower.includes('negro') ||
+        lower.includes('pardo') ||
+        lower.includes('cn')
+      )
+        cotasIdentificadas.push('PPP');
+      if (lower.includes('indig')) cotasIdentificadas.push('Indígena');
+      if (lower.includes('trans')) cotasIdentificadas.push('Trans');
+      if (cotasIdentificadas.length === 0) cotasIdentificadas.push('Ampla');
+
+      let statusCalc: Candidato['status'] = 'Aguardando Convocação';
+      if (dataNomeacao) {
+        statusCalc = 'Nomeado';
+      } else if (dataConvocacao) {
+        statusCalc = papel === 'Suplente' ? 'Convocado suplente' : 'Convocado titular';
+      }
+
+      return {
+        id: `cand-${targetConcId}-${targetCargoId}-${posicao}-${Date.now().toString(36)}-${idx}`,
+        concurso_id: targetConcId,
+        cargo_id: targetCargoId,
+        posicao,
+        nome,
+        cpf,
+        nota_final: nota,
+        cota: cotaNorm,
+        cotas: cotasIdentificadas,
+        data_convocacao: dataConvocacao,
+        data_nomeacao: dataNomeacao,
+        comarca_definitiva: lotacaoDefinitiva,
+        status: statusCalc,
+        intencao: 'Sim',
+        email,
+        whatsapp,
+        escolhas_comarcas: lotacaoDefinitiva ? [lotacaoDefinitiva] : [],
+      };
+    });
+
+    parsed.sort((a, b) => (a.posicao || 0) - (b.posicao || 0));
+    setPreviewPlanilha(parsed);
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -263,56 +404,32 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         if (!data || data.length === 0) {
           setErroImportacao('A planilha está vazia ou não contém linhas de dados.');
           setPreviewPlanilha([]);
+          setColunasPlanilha([]);
+          setLinhasBrutasPlanilha([]);
           return;
         }
 
-        const parsed: Partial<Candidato>[] = data.map((row, idx) => {
-          const getVal = (keys: string[]) => {
-            for (const k of Object.keys(row)) {
-              const kNorm = k.toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-              for (const target of keys) {
-                if (kNorm === target || kNorm.includes(target)) {
-                  return row[k];
-                }
-              }
-            }
-            return undefined;
-          };
+        const cols = Object.keys(data[0] || {});
+        setColunasPlanilha(cols);
+        setLinhasBrutasPlanilha(data);
 
-          const rawPos = getVal(['classificacao', 'classif', 'posicao', 'ordem', 'colocacao', 'pos', 'num']);
-          const posicao = parseInt(String(rawPos || idx + 1).replace(/\D/g, ''), 10) || idx + 1;
-          const nome = String(getVal(['nome', 'candidato', 'nome completo']) || `Candidato ${idx + 1}`).trim();
-          const rawCpf = getVal(['cpf', 'documento']);
-          const cpf = rawCpf ? String(rawCpf).trim() : undefined;
-          const rawNota = getVal(['nota', 'pontos', 'pontuacao', 'total', 'resultado', 'final']);
-          const nota = rawNota !== undefined && rawNota !== '' ? parseFloat(String(rawNota).replace(',', '.')) || 0 : 0;
-          const rawCota = String(getVal(['cota', 'modalidade', 'vaga', 'tipo vaga']) || 'Ampla').trim();
-          const rawEmail = getVal(['email', 'e-mail', 'correio']);
-          const email = rawEmail ? String(rawEmail).trim().toLowerCase() : undefined;
-          const rawTelefone = getVal(['telefone', 'celular', 'whatsapp', 'fone']);
-          const whatsapp = rawTelefone ? String(rawTelefone).trim() : undefined;
+        // Auto-detecção inteligente de colunas
+        const novoMapa = {
+          posicao: detectarMelhorColuna(cols, ['classificacao', 'classif', 'posicao', 'ordem', 'colocacao', 'pos', 'num']),
+          nome: detectarMelhorColuna(cols, ['nome', 'candidato', 'nome completo', 'interessado']),
+          cpf: detectarMelhorColuna(cols, ['cpf', 'documento', 'doc']),
+          nota_final: detectarMelhorColuna(cols, ['nota', 'pontos', 'pontuacao', 'total', 'resultado', 'final']),
+          cota: detectarMelhorColuna(cols, ['cota', 'modalidade', 'vaga', 'tipo vaga', 'reserva']),
+          data_convocacao: detectarMelhorColuna(cols, ['convocacao', 'data convocacao', 'convocado', 'data de convocacao', 'edital convocacao']),
+          data_nomeacao: detectarMelhorColuna(cols, ['nomeacao', 'data nomeacao', 'nomeado', 'data de nomeacao', 'posse', 'doe']),
+          lotacao_definitiva: detectarMelhorColuna(cols, ['lotacao', 'comarca', 'unidade', 'regiao', 'setor', 'destino']),
+          papel: detectarMelhorColuna(cols, ['papel', 'titular', 'suplente', 'tipo convocacao']),
+          email: detectarMelhorColuna(cols, ['email', 'e-mail', 'correio']),
+          whatsapp: detectarMelhorColuna(cols, ['telefone', 'celular', 'whatsapp', 'fone']),
+        };
 
-          const cota: Candidato['cota'] = normalizarCota(rawCota);
-
-          return {
-            id: `cand-${importConcursoId}-${importCargoId}-${posicao}-${Date.now().toString(36)}-${idx}`,
-            concurso_id: importConcursoId,
-            cargo_id: importCargoId,
-            posicao,
-            nome,
-            cpf,
-            nota_final: nota,
-            cota,
-            status: 'Aguardando',
-            intencao: 'Sim',
-            email,
-            whatsapp,
-            escolhas_comarcas: [],
-          };
-        });
-
-        parsed.sort((a, b) => (a.posicao || 0) - (b.posicao || 0));
-        setPreviewPlanilha(parsed);
+        setMapeamentoColunas(novoMapa);
+        aplicarMapeamento(novoMapa, data, importConcursoId, importCargoId);
       } catch (err) {
         console.error('Erro ao ler planilha:', err);
         setErroImportacao('Erro ao processar o arquivo. Verifique se é um arquivo Excel (.xlsx, .xls) ou CSV válido.');
@@ -322,6 +439,43 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       setErroImportacao('Falha ao ler o arquivo no navegador. Tente novamente.');
     };
     reader.readAsArrayBuffer(file);
+  };
+
+  const handleAtualizarMapeamentoColuna = (campo: keyof typeof mapeamentoColunas, coluna: string) => {
+    const atualizado = { ...mapeamentoColunas, [campo]: coluna };
+    setMapeamentoColunas(atualizado);
+    aplicarMapeamento(atualizado, linhasBrutasPlanilha, importConcursoId, importCargoId);
+  };
+
+  const handleEditarCelulaPreview = (index: number, campo: keyof Candidato, valor: any) => {
+    setPreviewPlanilha((prev) => {
+      const copy = [...prev];
+      if (copy[index]) {
+        copy[index] = { ...copy[index], [campo]: valor };
+      }
+      return copy;
+    });
+  };
+
+  const handleRemoverLinhaPreview = (index: number) => {
+    setPreviewPlanilha((prev) => prev.filter((_, idx) => idx !== index));
+  };
+
+  const handleAdicionarLinhaManualPreview = () => {
+    const novaLinha: Partial<Candidato> = {
+      id: `cand-${importConcursoId}-${importCargoId}-${previewPlanilha.length + 1}-${Date.now().toString(36)}`,
+      concurso_id: importConcursoId,
+      cargo_id: importCargoId,
+      posicao: previewPlanilha.length + 1,
+      nome: `Novo Candidato ${previewPlanilha.length + 1}`,
+      cota: 'Ampla',
+      cotas: ['Ampla'],
+      nota_final: 80,
+      status: 'Aguardando Convocação',
+      intencao: 'Sim',
+      escolhas_comarcas: [],
+    };
+    setPreviewPlanilha((prev) => [...prev, novaLinha]);
   };
 
   const handleConfirmarImportacao = () => {
@@ -337,17 +491,36 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       cpf: p.cpf,
       nota_final: p.nota_final ?? 0,
       cota: p.cota || 'Ampla',
-      status: p.status || 'Aguardando',
+      cotas: p.cotas && p.cotas.length > 0 ? p.cotas : [p.cota || 'Ampla'],
+      data_convocacao: p.data_convocacao,
+      data_nomeacao: p.data_nomeacao,
+      comarca_definitiva: p.comarca_definitiva,
+      status: p.status || 'Aguardando Convocação',
       intencao: p.intencao || 'Sim',
       email: p.email,
       whatsapp: p.whatsapp,
-      escolhas_comarcas: p.escolhas_comarcas || [],
+      escolhas_comarcas: p.escolhas_comarcas || (p.comarca_definitiva ? [p.comarca_definitiva] : []),
     }));
 
+    // 1. Salvar lista de classificação do cargo
     lotesStore.salvarCandidatos(importConcursoId, importCargoId, candidatosCompletos);
+
+    // 2. Sincronizar todos os candidatos com o Cadastro Geral de Usuários (Item 18)
+    candidatosCompletos.forEach((cand) => {
+      userRegistryStore.cadastrarOuSincronizarCandidatoImportado(cand, importConcursoId, importCargoId);
+
+      // Se informou lotação definitiva, adiciona ao catálogo do concurso
+      if (cand.comarca_definitiva) {
+        certamStore.adicionarLotacaoAoCatalogo(importConcursoId, cand.comarca_definitiva);
+      }
+    });
+
     setImportando(false);
-    showToast(`${candidatosCompletos.length} candidatos importados com sucesso para o cargo!`);
+    showToast(
+      `${candidatosCompletos.length} candidatos importados para o cargo e sincronizados com o Cadastro Geral!`
+    );
     setPreviewPlanilha([]);
+    setLinhasBrutasPlanilha([]);
     setNomeArquivo('');
   };
 
@@ -677,6 +850,114 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     showToast('Notificação interna disparada para todos os candidatos no portal!');
   };
 
+  // -------------------------------------------------------------
+  // HANDLERS DO CADASTRO GERAL DE USUÁRIOS (Item 18)
+  // -------------------------------------------------------------
+  const handleAbrirEditarUsuario = (u: any) => {
+    setUsuarioEditando(u);
+    setUserFormNome(u.nome || '');
+    setUserFormCpf(u.cpf || '');
+    setUserFormEmail(u.email || '');
+    setUserFormTelefone(u.telefone || u.whatsapp || '');
+    setUserFormRole(u.role || 'candidato');
+    setUserFormStatus(u.status_cadastro || 'ativo');
+    setUserFormBloqueado(Boolean(u.bloqueado));
+    setModalEditarUsuarioAberto(true);
+  };
+
+  const handleSalvarEdicaoUsuario = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!usuarioEditando) return;
+    const atualizado = {
+      ...usuarioEditando,
+      nome: userFormNome.trim(),
+      cpf: userFormCpf.trim() || undefined,
+      email: userFormEmail.trim(),
+      telefone: userFormTelefone.trim() || undefined,
+      whatsapp: userFormTelefone.trim() || undefined,
+      role: userFormRole,
+      status_cadastro: userFormStatus,
+      bloqueado: userFormBloqueado,
+    };
+    userRegistryStore.salvarUsuario(atualizado);
+    setUsuariosGerais(userRegistryStore.getAllUsers());
+    setModalEditarUsuarioAberto(false);
+    setUsuarioEditando(null);
+    showToast(`Cadastro de ${atualizado.nome} atualizado com sucesso!`);
+  };
+
+  const handleToggleBloquearUsuario = (id: string) => {
+    const atual = userRegistryStore.getUserById(id) || userRegistryStore.getUserByEmail(id);
+    if (!atual) return;
+    userRegistryStore.bloquearUsuario(id, !atual.bloqueado);
+    setUsuariosGerais(userRegistryStore.getAllUsers());
+    showToast(atual.bloqueado ? `Usuário ${atual.nome} desbloqueado!` : `Usuário ${atual.nome} bloqueado no sistema!`);
+  };
+
+  const handleExcluirUsuario = (id: string, nome: string) => {
+    if (window.confirm(`Tem certeza que deseja excluir o cadastro de "${nome}"? Esta ação removerá o usuário do sistema.`)) {
+      userRegistryStore.removerUsuario(id);
+      setUsuariosGerais(userRegistryStore.getAllUsers());
+      showToast(`Cadastro de "${nome}" excluído com sucesso.`);
+    }
+  };
+
+  const handleAbrirNovoUsuario = () => {
+    setUserFormNome('');
+    setUserFormCpf('');
+    setUserFormEmail('');
+    setUserFormTelefone('');
+    setUserFormRole('candidato');
+    setUserFormStatus('ativo');
+    setUserFormBloqueado(false);
+    setModalNovoUsuarioAberto(true);
+  };
+
+  const handleSalvarNovoUsuario = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!userFormNome.trim() || !userFormEmail.trim()) {
+      alert('Nome e E-mail são campos obrigatórios.');
+      return;
+    }
+    userRegistryStore.salvarUsuario({
+      id: `user-${Date.now().toString(36)}`,
+      nome: userFormNome.trim(),
+      email: userFormEmail.trim(),
+      cpf: userFormCpf.trim() || undefined,
+      telefone: userFormTelefone.trim() || undefined,
+      whatsapp: userFormTelefone.trim() || undefined,
+      is_admin: userFormRole === 'admin',
+      tipo_usuario: userFormRole,
+      status_cadastro: userFormStatus === 'aguardando_primeiro_acesso' ? 'aguardando_vinculacao' : 'ativo',
+      bloqueado: userFormBloqueado,
+    });
+    setUsuariosGerais(userRegistryStore.getAllUsers());
+    setModalNovoUsuarioAberto(false);
+    showToast(`Usuário ${userFormNome.trim()} cadastrado com sucesso!`);
+  };
+
+  const usuariosGeraisFiltrados = useMemo(() => {
+    return usuariosGerais.filter((u) => {
+      const matchBusca =
+        !buscaUsuario.trim() ||
+        (u.nome && u.nome.toLowerCase().includes(buscaUsuario.toLowerCase())) ||
+        (u.email && u.email.toLowerCase().includes(buscaUsuario.toLowerCase())) ||
+        (u.cpf && u.cpf.replace(/\D/g, '').includes(buscaUsuario.replace(/\D/g, ''))) ||
+        (u.telefone && u.telefone.includes(buscaUsuario.trim()));
+
+      const matchStatus =
+        filtroStatusUsuario === 'todos' ||
+        (filtroStatusUsuario === 'bloqueado' && u.bloqueado) ||
+        (filtroStatusUsuario === 'ativo' && !u.bloqueado && u.status_cadastro === 'ativo') ||
+        (filtroStatusUsuario === 'aguardando' && u.status_cadastro === 'aguardando_primeiro_acesso');
+
+      const matchRole =
+        filtroRoleUsuario === 'todos' || u.role === filtroRoleUsuario;
+
+      return matchBusca && matchStatus && matchRole;
+    });
+  }, [usuariosGerais, buscaUsuario, filtroStatusUsuario, filtroRoleUsuario]);
+
   return (
     <div className="space-y-6 max-w-[1880px] w-full mx-auto">
       {/* Toast flutuante */}
@@ -699,7 +980,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               Gestão Centralizada de Certames & Moderação
             </h1>
             <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-              Audite solicitações de alteração de perfil com visualização lado a lado, valide candidatos não identificados automaticamente, cadastre novos concursos vigentes e responda dúvidas dos concurseiros.
+              Gerencie concursos, lotes de convocação, catálogo de lotações, cadastro geral unificado de concurseiros, pedidos de auditoria cadastral e importação inteligente de listas de classificação.
             </p>
           </div>
 
@@ -708,6 +989,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             <div className="bg-[#0C2640] border border-teal-500/20 rounded-xl p-3 text-center min-w-[90px]">
               <span className="text-[10px] uppercase font-mono font-bold text-teal-400 block">Concursos</span>
               <div className="text-xl font-bold text-white mt-0.5">{metricas.totalConcursos}</div>
+            </div>
+            <div className="bg-[#0C2640] border border-teal-500/20 rounded-xl p-3 text-center min-w-[90px]">
+              <span className="text-[10px] uppercase font-mono font-bold text-emerald-400 block">Usuários</span>
+              <div className="text-xl font-bold text-emerald-300 mt-0.5">{usuariosGerais.length}</div>
             </div>
             <div className="bg-[#0C2640] border border-teal-500/20 rounded-xl p-3 text-center min-w-[90px]">
               <span className="text-[10px] uppercase font-mono font-bold text-amber-400 block">Auditorias</span>
@@ -752,6 +1037,22 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           >
             <Layers className="w-4 h-4" />
             <span>Lotes de Convocação</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setAbaAdmin('cadastros')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap relative ${
+              abaAdmin === 'cadastros'
+                ? 'bg-[#0C2640] text-[#2DD4AA]'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            <Users className="w-4 h-4" />
+            <span>Cadastros Gerais</span>
+            <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-200 text-slate-800 font-bold font-mono">
+              {usuariosGerais.length}
+            </span>
           </button>
 
           <button
@@ -1258,6 +1559,325 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     </div>
                   );
                 })}
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* ============================================================== */}
+      {/* ABA CADASTROS GERAIS DE USUÁRIOS & IMPORTADOS (Item 18)        */}
+      {/* ============================================================== */}
+      {abaAdmin === 'cadastros' && (
+        <section className="space-y-6">
+          <div className="bg-white rounded-2xl p-6 sm:p-8 border border-slate-200 card-shadow flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <span className="px-2.5 py-0.5 rounded-md bg-teal-50 text-teal-800 font-mono text-[10px] font-bold uppercase border border-teal-200">
+                Base Unificada de Concurseiros
+              </span>
+              <h2 className="text-xl font-bold font-serif text-slate-900 mt-1.5">
+                Cadastro Geral de Usuários ({usuariosGerais.length} registros)
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5 max-w-2xl">
+                Visualize e gerencie todos os usuários cadastrados no portal e todos os candidatos importados via planilha (vinculáveis automaticamente por CPF ou nome completo no primeiro acesso).
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleAbrirNovoUsuario}
+              className="px-4 py-2.5 bg-[#07192B] hover:bg-[#0C2640] text-[#2DD4AA] font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-1.5 shrink-0"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Novo Cadastro Manual</span>
+            </button>
+          </div>
+
+          {/* Filtros de Busca e Status */}
+          <div className="bg-white rounded-2xl p-4 border border-slate-200 card-shadow grid grid-cols-1 sm:grid-cols-4 gap-3">
+            <div className="sm:col-span-2 relative">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Buscar por nome completo, CPF, e-mail ou telefone..."
+                value={buscaUsuario}
+                onChange={(e) => setBuscaUsuario(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs focus:border-teal-600 outline-hidden"
+              />
+            </div>
+
+            <div>
+              <select
+                value={filtroStatusUsuario}
+                onChange={(e) => setFiltroStatusUsuario(e.target.value)}
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium"
+              >
+                <option value="todos">Todos os Status ({usuariosGerais.length})</option>
+                <option value="ativo">Ativos no Portal</option>
+                <option value="aguardando">Aguardando 1º Acesso (Importados)</option>
+                <option value="bloqueado">Acesso Bloqueado</option>
+              </select>
+            </div>
+
+            <div>
+              <select
+                value={filtroRoleUsuario}
+                onChange={(e) => setFiltroRoleUsuario(e.target.value)}
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium"
+              >
+                <option value="todos">Todos os Perfis</option>
+                <option value="candidato">Candidatos Comuns</option>
+                <option value="admin">Administradores</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Tabela de Cadastros Gerais */}
+          <div className="bg-white rounded-2xl border border-slate-200 card-shadow overflow-hidden">
+            <div className="overflow-x-auto max-h-[600px]">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-[#07192B] text-white text-[11px] uppercase tracking-wider sticky top-0 z-10">
+                  <tr>
+                    <th className="py-3 px-4">Nome Completo</th>
+                    <th className="py-3 px-3">CPF</th>
+                    <th className="py-3 px-3">E-mail / Contato</th>
+                    <th className="py-3 px-3">Concurso / Cargo Vinculado</th>
+                    <th className="py-3 px-3 text-center">Perfil</th>
+                    <th className="py-3 px-3 text-center">Situação Cadastral</th>
+                    <th className="py-3 px-4 text-right">Ações</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {usuariosGeraisFiltrados.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="py-10 text-center text-slate-400">
+                        Nenhum usuário encontrado para os filtros aplicados.
+                      </td>
+                    </tr>
+                  ) : (
+                    usuariosGeraisFiltrados.map((u) => (
+                      <tr key={u.id} className={`hover:bg-slate-50/80 transition-colors ${u.bloqueado ? 'bg-rose-50/30' : ''}`}>
+                        <td className="py-3 px-4">
+                          <div className="font-bold text-slate-900">{u.nome}</div>
+                          <span className="text-[10px] font-mono text-slate-400">ID: {u.id}</span>
+                        </td>
+                        <td className="py-3 px-3 font-mono text-slate-700">
+                          {u.cpf || <span className="text-slate-400 italic">Não informado</span>}
+                        </td>
+                        <td className="py-3 px-3">
+                          <div className="font-mono text-slate-700">{u.email || '—'}</div>
+                          {(u.telefone || u.whatsapp) && (
+                            <span className="text-[10px] text-slate-500 font-mono block">
+                              Tel: {u.telefone || u.whatsapp}
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-3 px-3">
+                          {u.orgao || u.cargo_nome ? (
+                            <div>
+                              <span className="font-semibold text-teal-800 block">{u.orgao || u.concurso_id}</span>
+                              <span className="text-[11px] text-slate-500">{u.cargo_nome || u.cargo_id}</span>
+                            </div>
+                          ) : (
+                            <span className="text-slate-400 italic text-[11px]">Cadastro Geral Portal</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-3 text-center">
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase font-mono ${
+                              u.role === 'admin'
+                                ? 'bg-purple-100 text-purple-900 border border-purple-300'
+                                : 'bg-slate-100 text-slate-700 border border-slate-200'
+                            }`}
+                          >
+                            {u.role === 'admin' ? 'Admin' : 'Candidato'}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 text-center">
+                          {u.bloqueado ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-300">
+                              <Lock className="w-3 h-3" />
+                              <span>Bloqueado</span>
+                            </span>
+                          ) : u.status_cadastro === 'aguardando_primeiro_acesso' ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                              <span>Aguardando 1º Acesso</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                              <CheckCircle2 className="w-3 h-3" />
+                              <span>Ativo</span>
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 text-right">
+                          <div className="inline-flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => handleAbrirEditarUsuario(u)}
+                              className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-bold text-[11px] transition-colors cursor-pointer flex items-center gap-1 border border-slate-200"
+                              title="Editar cadastro"
+                            >
+                              <Pencil className="w-3 h-3" />
+                              <span>Editar</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleToggleBloquearUsuario(u.id)}
+                              className={`px-2.5 py-1 rounded-lg font-bold text-[11px] transition-colors cursor-pointer flex items-center gap-1 border ${
+                                u.bloqueado
+                                  ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-200'
+                                  : 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-200'
+                              }`}
+                              title={u.bloqueado ? 'Desbloquear acesso' : 'Bloquear acesso'}
+                            >
+                              <Lock className="w-3 h-3" />
+                              <span>{u.bloqueado ? 'Desbloquear' : 'Bloquear'}</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleExcluirUsuario(u.id, u.nome)}
+                              className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                              title="Excluir cadastro"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Modal de Edição / Novo Usuário */}
+          {(modalEditarUsuarioAberto || modalNovoUsuarioAberto) && (
+            <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
+              <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                  <h3 className="font-bold text-slate-900 text-base font-serif">
+                    {modalEditarUsuarioAberto ? `Editar Cadastro: ${usuarioEditando?.nome}` : 'Novo Cadastro de Usuário'}
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setModalEditarUsuarioAberto(false);
+                      setModalNovoUsuarioAberto(false);
+                      setUsuarioEditando(null);
+                    }}
+                    className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                <form
+                  onSubmit={modalEditarUsuarioAberto ? handleSalvarEdicaoUsuario : handleSalvarNovoUsuario}
+                  className="space-y-3 text-xs"
+                >
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Nome Completo:</label>
+                    <input
+                      type="text"
+                      value={userFormNome}
+                      onChange={(e) => setUserFormNome(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-semibold"
+                      required
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">CPF:</label>
+                      <input
+                        type="text"
+                        placeholder="000.000.000-00"
+                        value={userFormCpf}
+                        onChange={(e) => setUserFormCpf(e.target.value)}
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">Telefone / WhatsApp:</label>
+                      <input
+                        type="text"
+                        placeholder="(00) 00000-0000"
+                        value={userFormTelefone}
+                        onChange={(e) => setUserFormTelefone(e.target.value)}
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">E-mail de Acesso / Vinculação:</label>
+                    <input
+                      type="email"
+                      value={userFormEmail}
+                      onChange={(e) => setUserFormEmail(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-mono"
+                      required
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">Perfil de Acesso:</label>
+                      <select
+                        value={userFormRole}
+                        onChange={(e) => setUserFormRole(e.target.value as any)}
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-semibold"
+                      >
+                        <option value="candidato">Candidato</option>
+                        <option value="admin">Administrador</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">Status de Vinculação:</label>
+                      <select
+                        value={userFormStatus}
+                        onChange={(e) => setUserFormStatus(e.target.value as any)}
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-semibold"
+                      >
+                        <option value="ativo">Ativo (Vinculado)</option>
+                        <option value="aguardando_primeiro_acesso">Aguardando 1º Acesso</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="pt-1">
+                    <label className="flex items-center gap-2 cursor-pointer select-none p-2.5 rounded-xl bg-rose-50/60 border border-rose-200">
+                      <input
+                        type="checkbox"
+                        checked={userFormBloqueado}
+                        onChange={(e) => setUserFormBloqueado(e.target.checked)}
+                        className="rounded border-rose-300 text-rose-600 w-4 h-4 cursor-pointer"
+                      />
+                      <span className="font-bold text-rose-900">Bloquear acesso deste usuário ao portal</span>
+                    </label>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setModalEditarUsuarioAberto(false);
+                        setModalNovoUsuarioAberto(false);
+                        setUsuarioEditando(null);
+                      }}
+                      className="px-4 py-2 rounded-xl border border-slate-300 text-slate-700 font-semibold hover:bg-slate-50 cursor-pointer"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-5 py-2 rounded-xl bg-[#07192B] hover:bg-[#0C2640] text-[#2DD4AA] font-bold cursor-pointer"
+                    >
+                      Salvar Cadastro
+                    </button>
+                  </div>
+                </form>
+              </div>
             </div>
           )}
         </section>
@@ -1847,82 +2467,229 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               </div>
             )}
 
-            {/* PREVIEW E BOTÃO DE IMPORTAR */}
+            {/* MAPEAMENTO DE COLUNAS E PREVIEW EDITÁVEL (Item 15) */}
             {previewPlanilha.length > 0 && (
-              <div className="space-y-4 pt-4 border-t border-slate-200">
+              <div className="space-y-5 pt-4 border-t border-slate-200">
+                {/* Painel de Mapeamento de Colunas da Planilha */}
+                {colunasPlanilha.length > 0 && (
+                  <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 sm:p-5 space-y-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div>
+                        <h4 className="font-bold text-xs text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                          <Layers className="w-3.5 h-3.5 text-teal-600" />
+                          <span>Mapeamento Interativo de Colunas da Planilha</span>
+                        </h4>
+                        <p className="text-[11px] text-slate-500 mt-0.5">
+                          Defina qual coluna do seu arquivo corresponde a cada campo oficial do sistema (ex: separe Data de Convocação de Data de Nomeação).
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 text-xs">
+                      {[
+                        { key: 'posicao', label: 'Posição / Classif.' },
+                        { key: 'nome', label: 'Nome do Candidato' },
+                        { key: 'cpf', label: 'CPF' },
+                        { key: 'nota_final', label: 'Nota Final' },
+                        { key: 'cota', label: 'Cota(s) (PCD/PPP/Ampla)' },
+                        { key: 'data_convocacao', label: 'Data de Convocação' },
+                        { key: 'data_nomeacao', label: 'Data de Nomeação' },
+                        { key: 'lotacao_definitiva', label: 'Lotação Definitiva' },
+                        { key: 'papel', label: 'Papel (Titular/Suplente)' },
+                        { key: 'email', label: 'E-mail' },
+                      ].map((item) => (
+                        <div key={item.key} className="bg-white p-2.5 rounded-xl border border-slate-200">
+                          <label className="block font-bold text-slate-700 text-[11px] mb-1 truncate">
+                            {item.label}:
+                          </label>
+                          <select
+                            value={(mapeamentoColunas as any)[item.key] || ''}
+                            onChange={(e) =>
+                              handleAtualizarMapeamentoColuna(
+                                item.key as keyof typeof mapeamentoColunas,
+                                e.target.value
+                              )
+                            }
+                            className="w-full px-2 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-[11px] font-medium focus:border-teal-600 outline-hidden"
+                          >
+                            <option value="">-- Ignorar / Não mapear --</option>
+                            {colunasPlanilha.map((col) => (
+                              <option key={col} value={col}>
+                                {col}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div>
                     <h3 className="font-bold text-sm text-slate-900 flex items-center gap-2">
                       <FileSpreadsheet className="w-4 h-4 text-teal-600" />
-                      <span>Prévia dos Dados Identificados ({previewPlanilha.length} candidatos)</span>
+                      <span>Tabela Editável antes da Importação ({previewPlanilha.length} candidatos)</span>
                     </h3>
                     <p className="text-2xs text-slate-500">
-                      Confira os primeiros registros mapeados antes de consolidar a importação na lista oficial do cargo.
+                      Clique diretamente em qualquer campo abaixo para fazer ajustes rápidos antes de consolidar a importação.
                     </p>
                   </div>
 
-                  <button
-                    type="button"
-                    disabled={importando}
-                    onClick={handleConfirmarImportacao}
-                    className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md cursor-pointer transition-all flex items-center justify-center gap-2 whitespace-nowrap disabled:opacity-50"
-                  >
-                    <CheckCircle2 className="w-4 h-4" />
-                    <span>
-                      {importando
-                        ? 'Importando...'
-                        : `Confirmar Importação de ${previewPlanilha.length} Candidatos`}
-                    </span>
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleAdicionarLinhaManualPreview}
+                      className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs rounded-xl border border-slate-300 cursor-pointer flex items-center gap-1"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Adicionar Linha</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={importando}
+                      onClick={handleConfirmarImportacao}
+                      className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md cursor-pointer transition-all flex items-center justify-center gap-2 whitespace-nowrap disabled:opacity-50"
+                    >
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>
+                        {importando
+                          ? 'Importando...'
+                          : `Confirmar Importação (${previewPlanilha.length})`}
+                      </span>
+                    </button>
+                  </div>
                 </div>
 
-                {/* Tabela de Prévia dos Candidatos */}
-                <div className="border border-slate-200 rounded-xl overflow-x-auto max-h-72">
+                {/* Tabela Editável de Prévia dos Candidatos */}
+                <div className="border border-slate-200 rounded-xl overflow-x-auto max-h-[480px]">
                   <table className="w-full text-left text-xs">
-                    <thead className="bg-[#07192B] text-white text-[11px] uppercase tracking-wider sticky top-0">
+                    <thead className="bg-[#07192B] text-white text-[11px] uppercase tracking-wider sticky top-0 z-10">
                       <tr>
-                        <th className="py-2.5 px-3">Posição</th>
-                        <th className="py-2.5 px-3">Nome</th>
-                        <th className="py-2.5 px-3">CPF</th>
-                        <th className="py-2.5 px-3">Nota</th>
-                        <th className="py-2.5 px-3">Cota</th>
-                        <th className="py-2.5 px-3">E-mail</th>
+                        <th className="py-2.5 px-2 w-16">Pos.</th>
+                        <th className="py-2.5 px-2 min-w-[200px]">Nome Completo</th>
+                        <th className="py-2.5 px-2 w-32">CPF</th>
+                        <th className="py-2.5 px-2 w-20">Nota</th>
+                        <th className="py-2.5 px-2 w-36">Cota Principal</th>
+                        <th className="py-2.5 px-2 w-40">Múltiplas Cotas (Ex: PCD,PPP)</th>
+                        <th className="py-2.5 px-2 w-32">Data Convocação</th>
+                        <th className="py-2.5 px-2 w-32">Data Nomeação</th>
+                        <th className="py-2.5 px-2 w-36">Lotação Definitiva</th>
+                        <th className="py-2.5 px-2 w-10 text-center">Ação</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 bg-white">
-                      {previewPlanilha.slice(0, 10).map((cand, idx) => (
-                        <tr key={idx} className="hover:bg-slate-50">
-                          <td className="py-2 px-3 font-mono font-bold text-slate-900">
-                            {cand.posicao}º
+                      {previewPlanilha.slice(0, 100).map((cand, idx) => (
+                        <tr key={cand.id || idx} className="hover:bg-slate-50">
+                          <td className="py-1.5 px-2">
+                            <input
+                              type="number"
+                              value={cand.posicao || idx + 1}
+                              onChange={(e) =>
+                                handleEditarCelulaPreview(idx, 'posicao', parseInt(e.target.value, 10) || 1)
+                              }
+                              className="w-14 px-1.5 py-1 bg-slate-50 border border-slate-200 rounded font-mono font-bold text-slate-900 text-xs"
+                            />
                           </td>
-                          <td className="py-2 px-3 font-semibold text-slate-800">
-                            {cand.nome}
+                          <td className="py-1.5 px-2">
+                            <input
+                              type="text"
+                              value={cand.nome || ''}
+                              onChange={(e) => handleEditarCelulaPreview(idx, 'nome', e.target.value)}
+                              className="w-full px-2 py-1 bg-slate-50 border border-slate-200 rounded font-semibold text-slate-800 text-xs"
+                            />
                           </td>
-                          <td className="py-2 px-3 font-mono text-slate-500 text-[11px]">
-                            {cand.cpf || '—'}
+                          <td className="py-1.5 px-2">
+                            <input
+                              type="text"
+                              placeholder="CPF"
+                              value={cand.cpf || ''}
+                              onChange={(e) => handleEditarCelulaPreview(idx, 'cpf', e.target.value)}
+                              className="w-28 px-2 py-1 bg-slate-50 border border-slate-200 rounded font-mono text-slate-600 text-[11px]"
+                            />
                           </td>
-                          <td className="py-2 px-3 font-mono font-bold text-teal-700">
-                            {cand.nota_final !== undefined ? cand.nota_final : '—'}
+                          <td className="py-1.5 px-2">
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={cand.nota_final ?? 0}
+                              onChange={(e) =>
+                                handleEditarCelulaPreview(idx, 'nota_final', parseFloat(e.target.value) || 0)
+                              }
+                              className="w-18 px-1.5 py-1 bg-slate-50 border border-slate-200 rounded font-mono font-bold text-teal-700 text-xs"
+                            />
                           </td>
-                          <td className="py-2 px-3 text-[11px]">
-                            <span
-                              className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                                cand.cota === 'PCD'
-                                  ? 'bg-purple-100 text-purple-900 border border-purple-200'
-                                  : cand.cota === 'PPP'
-                                  ? 'bg-amber-100 text-amber-900 border border-amber-200'
-                                  : cand.cota === 'Indígena'
-                                  ? 'bg-emerald-100 text-emerald-900 border border-emerald-200'
-                                  : cand.cota === 'Trans'
-                                  ? 'bg-pink-100 text-pink-900 border border-pink-200'
-                                  : 'bg-slate-100 text-slate-700'
-                              }`}
+                          <td className="py-1.5 px-2">
+                            <select
+                              value={cand.cota || 'Ampla'}
+                              onChange={(e) => handleEditarCelulaPreview(idx, 'cota', e.target.value as any)}
+                              className="w-full px-1.5 py-1 bg-slate-50 border border-slate-200 rounded text-[11px] font-bold"
                             >
-                              {cand.cota === 'PPP' ? 'PPP / CN' : cand.cota}
-                            </span>
+                              <option value="Ampla">Ampla</option>
+                              <option value="PPP">PPP / CN</option>
+                              <option value="PCD">PCD</option>
+                              <option value="Indígena">Indígena</option>
+                              <option value="Trans">Trans</option>
+                            </select>
                           </td>
-                          <td className="py-2 px-3 text-[11px] text-slate-500 font-mono">
-                            {cand.email || '—'}
+                          <td className="py-1.5 px-2">
+                            <input
+                              type="text"
+                              placeholder="Ampla, PCD, PPP"
+                              value={(cand.cotas || [cand.cota || 'Ampla']).join(', ')}
+                              onChange={(e) => {
+                                const arr = e.target.value
+                                  .split(',')
+                                  .map((s) => normalizarCota(s.trim()))
+                                  .filter(Boolean);
+                                handleEditarCelulaPreview(idx, 'cotas', arr.length > 0 ? arr : ['Ampla']);
+                              }}
+                              className="w-36 px-2 py-1 bg-slate-50 border border-slate-200 rounded font-mono text-[11px] text-slate-700"
+                            />
+                          </td>
+                          <td className="py-1.5 px-2">
+                            <input
+                              type="text"
+                              placeholder="dd/mm/aaaa"
+                              value={cand.data_convocacao || ''}
+                              onChange={(e) =>
+                                handleEditarCelulaPreview(idx, 'data_convocacao', e.target.value)
+                              }
+                              className="w-28 px-2 py-1 bg-slate-50 border border-slate-200 rounded font-mono text-[11px] text-slate-700"
+                            />
+                          </td>
+                          <td className="py-1.5 px-2">
+                            <input
+                              type="text"
+                              placeholder="dd/mm/aaaa"
+                              value={cand.data_nomeacao || ''}
+                              onChange={(e) =>
+                                handleEditarCelulaPreview(idx, 'data_nomeacao', e.target.value)
+                              }
+                              className="w-28 px-2 py-1 bg-slate-50 border border-slate-200 rounded font-mono text-[11px] text-slate-700"
+                            />
+                          </td>
+                          <td className="py-1.5 px-2">
+                            <input
+                              type="text"
+                              placeholder="Lotação oficial"
+                              value={cand.comarca_definitiva || ''}
+                              onChange={(e) =>
+                                handleEditarCelulaPreview(idx, 'comarca_definitiva', e.target.value)
+                              }
+                              className="w-32 px-2 py-1 bg-slate-50 border border-slate-200 rounded text-[11px] text-slate-700"
+                            />
+                          </td>
+                          <td className="py-1.5 px-2 text-center">
+                            <button
+                              type="button"
+                              onClick={() => handleRemoverLinhaPreview(idx)}
+                              className="p-1 text-rose-500 hover:bg-rose-50 rounded cursor-pointer"
+                              title="Remover linha"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
                           </td>
                         </tr>
                       ))}
@@ -1930,9 +2697,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   </table>
                 </div>
 
-                {previewPlanilha.length > 10 && (
+                {previewPlanilha.length > 100 && (
                   <p className="text-2xs text-slate-400 italic text-center">
-                    Exibindo os primeiros 10 registros de um total de {previewPlanilha.length} candidatos da planilha.
+                    Exibindo os primeiros 100 registros editáveis de um total de {previewPlanilha.length} candidatos da planilha. Todos os {previewPlanilha.length} serão importados ao confirmar.
                   </p>
                 )}
               </div>

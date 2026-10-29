@@ -1,6 +1,6 @@
 {
-  "summary":  "Plano de implementação da nova arquitetura e das 12 funcionalidades centrais do portal CERTAM (Portal do Concurseiro), incluindo o cadastro inicial de TJRS e MPRS, sistema de verificação e cruzamento de CPF/Nome, controle de acesso a chats públicos e homologados, central de notificações otimizada, formulários de auditoria de perfil e contato administrativo.",
-  "updatedAt":  "2026-10-26T12:28:03.901518020Z",
+  "summary":  "Plano de implementação completo para as 18 melhorias do sistema Certam: gestão de concursos e lotações, fluxo de cotas múltiplas, cadastro geral de usuários, importador interativo de planilhas e polimentos de usabilidade.",
+  "updatedAt":  "2026-10-29T13:03:45.495697246Z",
   "requestFeedback":  true,
   "userFacing":  true
 }

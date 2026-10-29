@@ -1,4 +1,4 @@
-import { Candidato, Lote, ConfigCotas } from '../types';
+import { Candidato, Lote, ConfigCotas, CotaTipo } from '../types';
 
 export interface ItemOrdemNomeacao {
   ordem: number;
@@ -6,14 +6,18 @@ export interface ItemOrdemNomeacao {
   nome: string;
   posicaoOriginal: number;
   cotaCandidato: string;
+  cotasCandidato?: CotaTipo[];
   vagaAtribuida: 'Ampla' | 'PPP' | 'PCD' | 'Indígena' | 'Trans';
+  modalidadeChamada?: string;
   garantido: boolean; // true se já chamado em lote oficial do órgão
   loteNumero?: string | number;
+  dataConvocacao?: string;
   dataNomeacao?: string;
   comarcaDefinitiva?: string;
   papel?: 'Titular' | 'Suplente';
   status:
     | 'Próximo (previsão)'
+    | 'Aguardando Convocação'
     | 'Convocado titular'
     | 'Convocado suplente'
     | 'Nomeado'
@@ -39,41 +43,61 @@ export function normalizarNome(nome: string): string {
  * - 'Ampla': Ampla Concorrência (AC, Geral, etc.)
  */
 export function normalizarCota(raw: string | undefined | null): 'Ampla' | 'PPP' | 'PCD' | 'Indígena' | 'Trans' {
-  if (!raw) return 'Ampla';
+  const cotas = normalizarCotasMultiplas(raw);
+  return cotas[0] || 'Ampla';
+}
+
+/**
+ * Identifica quando um candidato figura em mais de uma cota (ex: PCD + PPP / Negros)
+ */
+export function normalizarCotasMultiplas(raw: any): ('Ampla' | 'PPP' | 'PCD' | 'Indígena' | 'Trans')[] {
+  if (!raw) return ['Ampla'];
+  if (Array.isArray(raw)) {
+    const cotas: ('Ampla' | 'PPP' | 'PCD' | 'Indígena' | 'Trans')[] = [];
+    for (const item of raw) {
+      const c = normalizarCota(item);
+      if (!cotas.includes(c)) cotas.push(c);
+    }
+    return cotas.length > 0 ? cotas : ['Ampla'];
+  }
+
   const str = raw.toString().trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const cotasEncontradas: ('Ampla' | 'PPP' | 'PCD' | 'Indígena' | 'Trans')[] = [];
 
-  // 1. Trans (Pessoas Trans, Travesti, Transexuais, etc.)
-  if (str.includes('trans') || str.includes('travesti')) {
-    return 'Trans';
-  }
-
-  // 2. Indígenas (Povos Indígenas, Indígena, etc.)
-  if (str.includes('indig') || str.includes('indio') || str.includes('povos ind')) {
-    return 'Indígena';
-  }
-
-  // 3. PCD (Pessoas com Deficiência, PPD, Deficiente)
+  // PCD
   if (str.includes('pcd') || str.includes('defic') || str.includes('ppd') || str.includes('especial')) {
-    return 'PCD';
+    cotasEncontradas.push('PCD');
   }
 
-  // 4. PPP / CN / Negros / Pretos / Pardos
-  // Aceita "CN", "PPP", "PN", "Negro", "Preto", "Pardo", "Afro", "Candidato Negro", "Cota CN"
+  // PPP / CN / Negros
   if (
-    str === 'cn' ||
-    str === 'ppp' ||
-    str === 'pn' ||
-    /\b(cn|ppp|pn)\b/.test(str) ||
+    str.includes('cn') ||
+    str.includes('ppp') ||
+    str.includes('pn') ||
     str.includes('negro') ||
     str.includes('preto') ||
     str.includes('pardo') ||
     str.includes('afro') ||
     str.includes('racial')
   ) {
-    return 'PPP';
+    cotasEncontradas.push('PPP');
   }
 
-  return 'Ampla';
+  // Indígena
+  if (str.includes('indig') || str.includes('indio') || str.includes('povos ind')) {
+    cotasEncontradas.push('Indígena');
+  }
+
+  // Trans
+  if (str.includes('trans') || str.includes('travesti')) {
+    cotasEncontradas.push('Trans');
+  }
+
+  if (cotasEncontradas.length === 0) {
+    return ['Ampla'];
+  }
+
+  return cotasEncontradas;
 }
 
 /**
@@ -259,12 +283,18 @@ export function calcularOrdemNomeacao(
     return (b.nota_final || 0) - (a.nota_final || 0);
   });
 
-  // Criar filas por cota para os candidatos ativos
+  // Helper para obter todas as cotas do candidato
+  const getCotasCand = (c: Candidato): ('Ampla' | 'PPP' | 'PCD' | 'Indígena' | 'Trans')[] => {
+    if (c.cotas && c.cotas.length > 0) return c.cotas;
+    return normalizarCotasMultiplas(c.cota);
+  };
+
+  // Criar filas por cota para os candidatos ativos (um candidato com múltiplas cotas entra em ambas as filas e na ampla)
   const filaAmpla = [...candidatosAtivos];
-  const filaPcd = candidatosAtivos.filter((c) => normalizarCota(c.cota) === 'PCD');
-  const filaPpp = candidatosAtivos.filter((c) => normalizarCota(c.cota) === 'PPP');
-  const filaIndigena = candidatosAtivos.filter((c) => normalizarCota(c.cota) === 'Indígena');
-  const filaTrans = candidatosAtivos.filter((c) => normalizarCota(c.cota) === 'Trans');
+  const filaPcd = candidatosAtivos.filter((c) => getCotasCand(c).includes('PCD'));
+  const filaPpp = candidatosAtivos.filter((c) => getCotasCand(c).includes('PPP'));
+  const filaIndigena = candidatosAtivos.filter((c) => getCotasCand(c).includes('Indígena'));
+  const filaTrans = candidatosAtivos.filter((c) => getCotasCand(c).includes('Trans'));
 
   const pcdPerc = Math.max(0, Math.min(100, configCotas.pcd ?? 10));
   const pppPerc = Math.max(0, Math.min(100, configCotas.ppp ?? 20));
@@ -304,7 +334,8 @@ export function calcularOrdemNomeacao(
     return (pos - offset) % passo === 0;
   };
 
-  let vagasPrevistasRestantes = vagasProximoLote > 0 ? vagasProximoLote : 5;
+  // Apenas considera vagas se explicitamente cadastradas (> 0). Caso contrário, não projeta "Próximo (previsão)"
+  let vagasPrevistasRestantes = vagasProximoLote > 0 ? vagasProximoLote : 0;
 
   const removerDeFilasCotas = (candId: string) => {
     const idxAmpla = filaAmpla.findIndex((c) => c.id === candId);
@@ -361,24 +392,30 @@ export function calcularOrdemNomeacao(
 
     if (!candidatoSelecionado) break;
 
-    // Determina status de previsão
-    let statusPrevisao: ItemOrdemNomeacao['status'] = 'Próximo (previsão)';
-    if (vagasPrevistasRestantes > 0) {
+    // Determina status de previsão: apenas 'Próximo (previsão)' se houver lote previsto cadastrado
+    let statusPrevisao: ItemOrdemNomeacao['status'] = 'Aguardando Convocação';
+    if (vagasProximoLote > 0 && vagasPrevistasRestantes > 0) {
       statusPrevisao = 'Próximo (previsão)';
       vagasPrevistasRestantes--;
     } else {
-      statusPrevisao = 'Próximo (previsão)';
+      statusPrevisao = 'Aguardando Convocação';
     }
+
+    const cotasDoCandidato = getCotasCand(candidatoSelecionado);
+    const cotaFormatada = cotasDoCandidato.length > 1 ? cotasDoCandidato.join(' + ') : (cotasDoCandidato[0] || 'Ampla');
 
     resultado.push({
       ordem: ordemAtual,
       candidatoId: candidatoSelecionado.id,
       nome: candidatoSelecionado.nome,
       posicaoOriginal: candidatoSelecionado.posicao,
-      cotaCandidato: candidatoSelecionado.cota || 'Ampla',
+      cotaCandidato: cotaFormatada,
+      cotasCandidato: cotasDoCandidato,
       vagaAtribuida: vagaTipo,
+      modalidadeChamada: vagaTipo === 'Ampla' ? 'Ampla Concorrência' : `Cota ${vagaTipo}`,
       garantido: false, // Mera previsão especulativa
       loteNumero: undefined,
+      dataConvocacao: undefined,
       dataNomeacao: undefined,
       comarcaDefinitiva: candidatoSelecionado.comarca_definitiva || undefined,
       status: statusPrevisao,
