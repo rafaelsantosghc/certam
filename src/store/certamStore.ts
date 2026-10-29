@@ -8,13 +8,7 @@ export const DEFAULT_CONCURSOS: Concurso[] = [];
 export const certamStore = {
   getConcursos(): Concurso[] {
     try {
-      localStorage.removeItem('certam_concursos_cargos_v1');
-      localStorage.removeItem('certam_concursos_cargos_v2');
-      localStorage.removeItem('certam_concursos_cargos_v3');
-      localStorage.removeItem('certam_concursos_cargos_v4');
-      localStorage.removeItem('certam_concursos_cargos_v5');
-
-      const stored = localStorage.getItem(STORAGE_KEY);
+      const stored = cloudSync.getItem(STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
         if (Array.isArray(parsed)) {
@@ -41,7 +35,7 @@ export const certamStore = {
 
   salvarConcurso(concurso: Concurso, forceReplace = false): boolean {
     if (!concurso || !concurso.id) return false;
-    const list = this.getConcursos();
+    const list = [...this.getConcursos()];
     const index = list.findIndex((c) => c.id === concurso.id);
     if (!Array.isArray(concurso.cargos) || concurso.cargos.length === 0) {
       concurso.cargos = [
@@ -91,12 +85,9 @@ export const certamStore = {
   },
 
   salvarTodos(concursos: Concurso[], forceReplace = false) {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(concursos));
-      cloudSync.pushKey(STORAGE_KEY, concursos, forceReplace);
+    cloudSync.setItem(STORAGE_KEY, concursos, forceReplace);
+    if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('certam_concursos_updated', { detail: concursos }));
-    } catch {
-      // ignore
     }
   },
 

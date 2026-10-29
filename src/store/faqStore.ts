@@ -20,13 +20,7 @@ export const faqStore = {
   getFaqs(concursoId?: string, cargoId?: string): FaqItem[] {
     let items: FaqItem[] = [];
     try {
-      localStorage.removeItem('certam_faq_items_v1');
-      localStorage.removeItem('certam_faq_items_v2');
-      localStorage.removeItem('certam_faq_items_v3');
-      localStorage.removeItem('certam_faq_items_v4');
-      localStorage.removeItem('certam_faq_items_v5');
-
-      const stored = localStorage.getItem(FAQ_STORAGE_KEY);
+      const stored = cloudSync.getItem(FAQ_STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
         if (Array.isArray(parsed)) {
@@ -53,13 +47,9 @@ export const faqStore = {
   },
 
   salvarTodos(faqs: FaqItem[]) {
-    try {
-      const jsonStr = JSON.stringify(faqs);
-      localStorage.setItem(FAQ_STORAGE_KEY, jsonStr);
-      cloudSync.pushKey(FAQ_STORAGE_KEY, jsonStr, true);
+    cloudSync.setItem(FAQ_STORAGE_KEY, faqs, true);
+    if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('certam_faqs_updated', { detail: faqs }));
-    } catch {
-      // ignore
     }
   },
 

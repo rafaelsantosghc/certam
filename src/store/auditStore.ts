@@ -7,8 +7,8 @@ const VINCULACOES_STORAGE_KEY = 'certam_vinculacao_requests_v5';
 export const auditStore = {
   getAuditRequests(): PerfilAuditRequest[] {
     try {
-      localStorage.removeItem('certam_perfil_audit_requests_v4');
-      const stored = localStorage.getItem(AUDIT_STORAGE_KEY);
+      const stored =
+        cloudSync.getItem(AUDIT_STORAGE_KEY) || cloudSync.getItem('certam_audit_requests_v5');
       if (stored) {
         const parsed = JSON.parse(stored);
         if (Array.isArray(parsed)) return parsed;
@@ -20,13 +20,9 @@ export const auditStore = {
   },
 
   salvarAuditRequests(list: PerfilAuditRequest[], forceReplace = false) {
-    try {
-      const jsonStr = JSON.stringify(list);
-      localStorage.setItem(AUDIT_STORAGE_KEY, jsonStr);
-      cloudSync.pushKey(AUDIT_STORAGE_KEY, jsonStr, forceReplace);
+    cloudSync.setItem(AUDIT_STORAGE_KEY, list, forceReplace);
+    if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('certam_audit_updated', { detail: list }));
-    } catch {
-      // ignore
     }
   },
 
@@ -36,7 +32,7 @@ export const auditStore = {
     cpf: string;
     alteracoes: AlteracaoCampoItem[];
   }): PerfilAuditRequest {
-    const list = this.getAuditRequests();
+    const list = [...this.getAuditRequests()];
     const nova: PerfilAuditRequest = {
       id: `audit-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`,
       usuario_email: dados.usuario_email,
@@ -52,7 +48,7 @@ export const auditStore = {
   },
 
   aprovarSolicitacao(id: string): PerfilAuditRequest | null {
-    const list = this.getAuditRequests();
+    const list = [...this.getAuditRequests()];
     const item = list.find((r) => r.id === id);
     if (!item) return null;
     item.status = 'aprovado';
@@ -62,7 +58,7 @@ export const auditStore = {
   },
 
   rejeitarSolicitacao(id: string, motivo?: string): PerfilAuditRequest | null {
-    const list = this.getAuditRequests();
+    const list = [...this.getAuditRequests()];
     const item = list.find((r) => r.id === id);
     if (!item) return null;
     item.status = 'rejeitado';
@@ -77,8 +73,7 @@ export const auditStore = {
   // -------------------------------------------------------------
   getVinculacoes(): SolicitacaoVinculacao[] {
     try {
-      localStorage.removeItem('certam_vinculacao_requests_v4');
-      const stored = localStorage.getItem(VINCULACOES_STORAGE_KEY);
+      const stored = cloudSync.getItem(VINCULACOES_STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
         if (Array.isArray(parsed)) return parsed;
@@ -90,13 +85,9 @@ export const auditStore = {
   },
 
   salvarVinculacoes(list: SolicitacaoVinculacao[], forceReplace = false) {
-    try {
-      const jsonStr = JSON.stringify(list);
-      localStorage.setItem(VINCULACOES_STORAGE_KEY, jsonStr);
-      cloudSync.pushKey(VINCULACOES_STORAGE_KEY, jsonStr, forceReplace);
+    cloudSync.setItem(VINCULACOES_STORAGE_KEY, list, forceReplace);
+    if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('certam_vinculacoes_updated', { detail: list }));
-    } catch {
-      // ignore
     }
   },
 

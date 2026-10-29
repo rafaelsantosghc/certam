@@ -1,4 +1,5 @@
 import { ChatMensagem, CanalChatId } from '../types';
+import { cloudSync } from './cloudSync';
 
 const CHAT_KEY = 'certam_chat_messages_v5';
 
@@ -8,8 +9,7 @@ export const chatStore = {
   getMensagens(concursoId: string, cargoId: string, canalId: CanalChatId = 'geral'): ChatMensagem[] {
     const key = `${CHAT_KEY}_${concursoId}_${cargoId}_${canalId}`;
     try {
-      localStorage.removeItem(`certam_chat_messages_v4_${concursoId}_${cargoId}_${canalId}`);
-      const s = localStorage.getItem(key);
+      const s = cloudSync.getItem(key);
       if (s) {
         const p = JSON.parse(s);
         if (Array.isArray(p)) return p;
@@ -18,22 +18,18 @@ export const chatStore = {
       // ignore
     }
     const defaultKey = `${concursoId}_${cargoId}_${canalId}`;
-    const initial = INITIAL_MESSAGES[defaultKey] || [];
-    this.salvarMensagens(concursoId, cargoId, canalId, initial);
-    return initial;
+    return INITIAL_MESSAGES[defaultKey] || [];
   },
 
   salvarMensagens(concursoId: string, cargoId: string, canalId: CanalChatId, msgs: ChatMensagem[]) {
     const key = `${CHAT_KEY}_${concursoId}_${cargoId}_${canalId}`;
-    try {
-      localStorage.setItem(key, JSON.stringify(msgs));
+    cloudSync.setItem(key, msgs, false);
+    if (typeof window !== 'undefined') {
       window.dispatchEvent(
         new CustomEvent('certam_chat_updated', {
           detail: { concursoId, cargoId, canalId, msgs },
         })
       );
-    } catch {
-      // ignore
     }
   },
 

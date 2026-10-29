@@ -34,12 +34,7 @@ export interface SimulacaoResultado {
 export const lotesStore = {
   getLotes(): Lote[] {
     try {
-      localStorage.removeItem('certam_lotes_data_v1');
-      localStorage.removeItem('certam_lotes_data_v2');
-      localStorage.removeItem('certam_lotes_data_v3');
-      localStorage.removeItem('certam_lotes_data_v4');
-      localStorage.removeItem('certam_lotes_data_v5');
-      const s = localStorage.getItem(LOTES_KEY);
+      const s = cloudSync.getItem(LOTES_KEY);
       if (s) {
         const p = JSON.parse(s);
         if (Array.isArray(p)) return p;
@@ -47,26 +42,20 @@ export const lotesStore = {
     } catch {
       // ignore
     }
-    const defaultLotes: Lote[] = [];
-    return defaultLotes;
+    return [];
   },
 
   salvarLotes(lotes: Lote[], forceReplace = false) {
-    try {
-      const jsonStr = JSON.stringify(lotes);
-      localStorage.setItem(LOTES_KEY, jsonStr);
-      cloudSync.pushKey(LOTES_KEY, jsonStr, forceReplace);
+    cloudSync.setItem(LOTES_KEY, lotes, forceReplace);
+    if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('certam_lotes_updated', { detail: lotes }));
-    } catch {
-      // ignore
     }
   },
 
   getCandidatos(concursoId: string, cargoId: string): Candidato[] {
     const key = `${CANDIDATOS_KEY}_${concursoId}_${cargoId}`;
     try {
-      localStorage.removeItem(`certam_candidatos_data_v4_${concursoId}_${cargoId}`);
-      const s = localStorage.getItem(key);
+      const s = cloudSync.getItem(key);
       if (s) {
         const p = JSON.parse(s);
         if (Array.isArray(p)) return p;
@@ -80,18 +69,14 @@ export const lotesStore = {
 
   salvarCandidatos(concursoId: string, cargoId: string, candidatos: Candidato[], forceReplace = true) {
     const key = `${CANDIDATOS_KEY}_${concursoId}_${cargoId}`;
-    try {
-      const jsonStr = JSON.stringify(candidatos);
-      localStorage.setItem(key, jsonStr);
-      cloudSync.pushKey(key, jsonStr, forceReplace);
+    cloudSync.setItem(key, candidatos, forceReplace);
+    if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('certam_candidatos_updated', { detail: candidatos }));
-    } catch {
-      // ignore
     }
   },
 
   salvarCandidato(concursoId: string, cargoId: string, candidato: Candidato) {
-    const list = this.getCandidatos(concursoId, cargoId);
+    const list = [...this.getCandidatos(concursoId, cargoId)];
     const index = list.findIndex(
       (c) => c.id === candidato.id || (candidato.email && c.email === candidato.email)
     );

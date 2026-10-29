@@ -1,4 +1,5 @@
 import { MensagemPrivada, BloqueioUsuario } from '../types';
+import { cloudSync } from './cloudSync';
 
 const DM_STORAGE_KEY = 'certam_dm_messages_v5';
 const BLOCK_STORAGE_KEY = 'certam_blocked_users_v5';
@@ -16,8 +17,7 @@ export interface ContatoConversa {
 export const dmStore = {
   getMensagens(): MensagemPrivada[] {
     try {
-      localStorage.removeItem('certam_dm_messages_v4');
-      const stored = localStorage.getItem(DM_STORAGE_KEY);
+      const stored = cloudSync.getItem(DM_STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
         if (Array.isArray(parsed)) return parsed;
@@ -25,16 +25,13 @@ export const dmStore = {
     } catch {
       // ignore
     }
-    this.salvarMensagens(DEFAULT_DMS);
     return DEFAULT_DMS;
   },
 
   salvarMensagens(list: MensagemPrivada[]) {
-    try {
-      localStorage.setItem(DM_STORAGE_KEY, JSON.stringify(list));
+    cloudSync.setItem(DM_STORAGE_KEY, list, false);
+    if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('certam_dm_updated', { detail: list }));
-    } catch {
-      // ignore
     }
   },
 

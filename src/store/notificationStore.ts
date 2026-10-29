@@ -8,8 +8,7 @@ export const DEFAULT_NOTIFICATIONS: NotificacaoItem[] = [];
 export const notificationStore = {
   getNotificacoes(): NotificacaoItem[] {
     try {
-      localStorage.removeItem('certam_notifications_events_v4');
-      const stored = localStorage.getItem(NOTIFICATIONS_STORAGE_KEY);
+      const stored = cloudSync.getItem(NOTIFICATIONS_STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
         if (Array.isArray(parsed)) return parsed;
@@ -21,18 +20,14 @@ export const notificationStore = {
   },
 
   salvarNotificacoes(list: NotificacaoItem[], forceReplace = false) {
-    try {
-      const jsonStr = JSON.stringify(list);
-      localStorage.setItem(NOTIFICATIONS_STORAGE_KEY, jsonStr);
-      cloudSync.pushKey(NOTIFICATIONS_STORAGE_KEY, jsonStr, forceReplace);
+    cloudSync.setItem(NOTIFICATIONS_STORAGE_KEY, list, forceReplace);
+    if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('certam_notifications_updated', { detail: list }));
-    } catch {
-      // ignore
     }
   },
 
   enviarNotificacao(notif: Omit<NotificacaoItem, 'id' | 'data_hora'>): NotificacaoItem {
-    const list = this.getNotificacoes();
+    const list = [...this.getNotificacoes()];
     const nova: NotificacaoItem = {
       ...notif,
       id: `notif-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`,

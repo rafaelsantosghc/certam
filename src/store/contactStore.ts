@@ -18,8 +18,7 @@ const DEFAULT_CONTATOS: MensagemContatoAdmin[] = [];
 export const contactStore = {
   getMensagens(): MensagemContatoAdmin[] {
     try {
-      localStorage.removeItem('certam_contact_messages_v4');
-      const stored = localStorage.getItem(CONTACT_STORAGE_KEY);
+      const stored = cloudSync.getItem(CONTACT_STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
         if (Array.isArray(parsed)) return parsed;
@@ -31,21 +30,17 @@ export const contactStore = {
   },
 
   salvarMensagens(list: MensagemContatoAdmin[], forceReplace = false) {
-    try {
-      const jsonStr = JSON.stringify(list);
-      localStorage.setItem(CONTACT_STORAGE_KEY, jsonStr);
-      cloudSync.pushKey(CONTACT_STORAGE_KEY, jsonStr, forceReplace);
+    cloudSync.setItem(CONTACT_STORAGE_KEY, list, forceReplace);
+    if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('certam_contact_updated', { detail: list }));
-    } catch {
-      // ignore
     }
   },
 
   enviarMensagem(dados: Omit<MensagemContatoAdmin, 'id' | 'data_envio' | 'status' | 'motivo_label'>): MensagemContatoAdmin {
-    const list = this.getMensagens();
+    const list = [...this.getMensagens()];
     const nova: MensagemContatoAdmin = {
       ...dados,
-      id: `ct-${Date.now().toString(36)}`,
+      id: `ct-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`,
       motivo_label: MOTIVOS_LABELS[dados.motivo] || 'Outro Assunto',
       data_envio: new Date().toLocaleString('pt-BR'),
       status: 'aberto',

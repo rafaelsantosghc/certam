@@ -62,11 +62,21 @@ export const PerfilCandidatoModal: React.FC<PerfilCandidatoModalProps> = ({
       setEmailContato(usuario.email_contato || usuario.email || '');
       setOutrosConcursos(usuario.outros_concursos || []);
 
-      // Se for a primeira vez que preenche dados (sem CPF ou sem data de nascimento gravada)
-      const isSemDados = !usuario.cpf && !usuario.data_nascimento;
+      // Se for o modal obrigatório de primeiro acesso ou ainda não tiver CPF cadastrado
+      const isSemDados = Boolean(obrigatorio) || (!usuario.cpf && !usuario.data_nascimento);
       setPrimeiroCadastro(isSemDados);
+      setTodasSolicitacoes(auditStore.getAuditRequests());
     }
-  }, [aberto, usuario?.email]);
+  }, [
+    aberto,
+    obrigatorio,
+    usuario?.email,
+    usuario?.cpf,
+    usuario?.data_nascimento,
+    usuario?.nome,
+    usuario?.whatsapp,
+    usuario?.email_contato,
+  ]);
 
   // Histórico da última solicitação de auditoria deste candidato
   const [todasSolicitacoes, setTodasSolicitacoes] = useState(() => auditStore.getAuditRequests());

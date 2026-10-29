@@ -71,10 +71,10 @@ export const ConcursoGeralView: React.FC<ConcursoGeralViewProps> = ({
     if (atualizado) setConcurso(atualizado);
   };
 
-  const podeEditarEsteConcurso = podeEditarConcurso(usuario, concurso.id);
+  const podeEditarEsteConcurso = concurso ? podeEditarConcurso(usuario, concurso.id) : false;
 
   const cargosAtivos = useMemo(() => {
-    return concurso.cargos?.filter((c) => c.ativo) || [];
+    return concurso?.cargos?.filter((c) => c.ativo) || [];
   }, [concurso]);
 
   const totalVagasImediatas = useMemo(() => {
@@ -87,6 +87,21 @@ export const ConcursoGeralView: React.FC<ConcursoGeralViewProps> = ({
       0
     );
   }, [cargosAtivos]);
+
+  if (!concurso) {
+    return (
+      <div className="max-w-xl mx-auto my-12 p-6 bg-white rounded-2xl border border-slate-200 text-center space-y-3">
+        <p className="text-sm font-semibold text-slate-700">Carregando dados do concurso...</p>
+        <button
+          type="button"
+          onClick={onVoltar}
+          className="px-4 py-2 rounded-xl bg-[#07192B] text-[#2DD4AA] text-xs font-bold cursor-pointer"
+        >
+          Voltar ao Portal
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-[1880px] mx-auto space-y-6">

@@ -85,23 +85,24 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
 
   const [cargo, setCargo] = useState<Cargo>(() => {
     const c = certamStore.getConcurso(concursoId) || certamStore.getConcursos()[0];
-    return certamStore.getCargo(c.id, cargoId) || c.cargos[0];
+    return (c ? certamStore.getCargo(c.id, cargoId) || c.cargos?.[0] : undefined) as Cargo;
   });
 
-  const tipoLotacao = concurso.tipo_lotacao || 'Lotação';
+  const tipoLotacao = concurso?.tipo_lotacao || 'Lotação';
 
   const [lotes, setLotes] = useState<Lote[]>(() => lotesStore.getLotes());
 
   useEffect(() => {
     const syncData = () => {
       const c = certamStore.getConcurso(concursoId) || certamStore.getConcursos()[0];
-      const cg = certamStore.getCargo(c.id, cargoId) || c.cargos[0];
+      if (!c) return;
+      const cg = certamStore.getCargo(c.id, cargoId) || c.cargos?.[0];
       setConcurso(c);
-      setCargo(cg);
-      setLotes(lotesStore.getLotes());
       if (cg) {
+        setCargo(cg);
         setCandidatos(lotesStore.getCandidatos(c.id, cg.id));
       }
+      setLotes(lotesStore.getLotes());
     };
     syncData();
     window.addEventListener('storage', syncData);

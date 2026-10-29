@@ -8,39 +8,73 @@ import path from 'node:path';
 const TMP_SYNC_DB_FILE = path.join(os.tmpdir(), 'certam_sync_db.json');
 const CACHE_SYNC_DB_FILE = path.join(process.cwd(), 'node_modules', '.cache', 'certam_sync_db.json');
 
-function getSyncDbFilePath(): string {
+interface SyncDbFileFormat {
+  entries: Record<string, string>;
+  versions: Record<string, number>;
+}
+
+function readDbFile(filePath: string): SyncDbFileFormat | null {
+  try {
+    if (fs.existsSync(filePath)) {
+      const raw = fs.readFileSync(filePath, 'utf-8');
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') {
+        if (parsed.entries && typeof parsed.entries === 'object') {
+          return {
+            entries: parsed.entries,
+            versions: parsed.versions && typeof parsed.versions === 'object' ? parsed.versions : {},
+          };
+        }
+        // Formato legado (mapa plano de chave -> valor)
+        const entries: Record<string, string> = {};
+        const versions: Record<string, number> = {};
+        for (const [k, v] of Object.entries(parsed)) {
+          if (k === '_test_ping' || typeof v !== 'string') continue;
+          if (v === '[]' || v === '{}') continue;
+          entries[k] = v;
+          versions[k] = Date.now();
+        }
+        return { entries, versions };
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+function loadSyncDb(): SyncDbFileFormat {
+  const fromCache = readDbFile(CACHE_SYNC_DB_FILE);
+  const fromTmp = readDbFile(TMP_SYNC_DB_FILE);
+
+  const entries: Record<string, string> = {
+    ...(fromTmp?.entries || {}),
+    ...(fromCache?.entries || {}),
+  };
+  const versions: Record<string, number> = {
+    ...(fromTmp?.versions || {}),
+    ...(fromCache?.versions || {}),
+  };
+
+  delete entries['_test_ping'];
+  delete versions['_test_ping'];
+
+  return { entries, versions };
+}
+
+function saveSyncDb(db: SyncDbFileFormat) {
+  const serialized = JSON.stringify(db);
   try {
     const dir = path.dirname(CACHE_SYNC_DB_FILE);
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
-    if (!fs.existsSync(CACHE_SYNC_DB_FILE) && fs.existsSync(TMP_SYNC_DB_FILE)) {
-      fs.copyFileSync(TMP_SYNC_DB_FILE, CACHE_SYNC_DB_FILE);
-    }
-    return CACHE_SYNC_DB_FILE;
-  } catch {
-    return TMP_SYNC_DB_FILE;
-  }
-}
-
-function loadSyncDb(): Record<string, string> {
-  try {
-    const filePath = getSyncDbFilePath();
-    if (fs.existsSync(filePath)) {
-      const raw = fs.readFileSync(filePath, 'utf-8');
-      const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed === 'object') return parsed;
-    }
+    fs.writeFileSync(CACHE_SYNC_DB_FILE, serialized, 'utf-8');
   } catch {
     // ignore
   }
-  return {};
-}
-
-function saveSyncDb(db: Record<string, string>) {
   try {
-    const filePath = getSyncDbFilePath();
-    fs.writeFileSync(filePath, JSON.stringify(db), 'utf-8');
+    fs.writeFileSync(TMP_SYNC_DB_FILE, serialized, 'utf-8');
   } catch {
     // ignore
   }
@@ -126,29 +160,34 @@ function mergeSyncValues(
 function certamSyncPlugin(): Plugin {
   const attachMiddleware = (middlewares: any) => {
     middlewares.use('/api/sync', (req: any, res: any, next: any) => {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
       if (req.method === 'GET') {
         const db = loadSyncDb();
-        res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify({ entries: db }));
+        res.setHeader('Content-Type', 'application/json; charset=utf-8');
+        res.end(JSON.stringify({ entries: db.entries, versions: db.versions }));
         return;
       }
       if (req.method === 'POST') {
-        let body = '';
+        const chunks: Buffer[] = [];
         req.on('data', (chunk: any) => {
-          body += chunk;
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
         });
         req.on('end', () => {
           try {
+            const body = Buffer.concat(chunks).toString('utf-8');
             const payload = JSON.parse(body || '{}');
             const incoming = payload?.entries || {};
             const forceReplace = Boolean(payload?.forceReplace);
             const db = loadSyncDb();
             let modified = false;
+            const now = Date.now();
             for (const [k, v] of Object.entries(incoming)) {
+              if (k === '_test_ping') continue;
               if (typeof v === 'string') {
-                const nextVal = mergeSyncValues(db[k], v, forceReplace);
-                if (db[k] !== nextVal) {
-                  db[k] = nextVal;
+                const nextVal = mergeSyncValues(db.entries[k], v, forceReplace);
+                if (db.entries[k] !== nextVal || !db.versions[k]) {
+                  db.entries[k] = nextVal;
+                  db.versions[k] = now;
                   modified = true;
                 }
               }
@@ -156,8 +195,8 @@ function certamSyncPlugin(): Plugin {
             if (modified) {
               saveSyncDb(db);
             }
-            res.setHeader('Content-Type', 'application/json');
-            res.end(JSON.stringify({ ok: true }));
+            res.setHeader('Content-Type', 'application/json; charset=utf-8');
+            res.end(JSON.stringify({ ok: true, versions: db.versions }));
           } catch {
             res.statusCode = 400;
             res.end(JSON.stringify({ ok: false }));

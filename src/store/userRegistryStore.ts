@@ -51,8 +51,7 @@ function rebuildActiveLookupCache(reg: Record<string, Usuario>) {
 export const userRegistryStore = {
   getRegistry(): Record<string, Usuario> {
     try {
-      localStorage.removeItem('certam_users_registry_v1');
-      const stored = localStorage.getItem(REGISTRY_STORAGE_KEY);
+      const stored = cloudSync.getItem(REGISTRY_STORAGE_KEY);
       if (stored && stored === cachedRawStr && cachedRegistry) {
         return cachedRegistry;
       }
@@ -132,10 +131,11 @@ export const userRegistryStore = {
       cachedRegistry = registry;
       cachedRawStr = jsonStr;
       rebuildActiveLookupCache(registry);
-      localStorage.setItem(REGISTRY_STORAGE_KEY, jsonStr);
-      cloudSync.pushKey(REGISTRY_STORAGE_KEY, jsonStr, false);
-      window.dispatchEvent(new CustomEvent('certam_registry_updated', { detail: registry }));
-      window.dispatchEvent(new CustomEvent('certam_users_updated', { detail: registry }));
+      cloudSync.setItem(REGISTRY_STORAGE_KEY, jsonStr, false);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('certam_registry_updated', { detail: registry }));
+        window.dispatchEvent(new CustomEvent('certam_users_updated', { detail: registry }));
+      }
     } catch {
       // ignore
     }
