@@ -51,11 +51,11 @@ export const lotesStore = {
     return defaultLotes;
   },
 
-  salvarLotes(lotes: Lote[]) {
+  salvarLotes(lotes: Lote[], forceReplace = false) {
     try {
       const jsonStr = JSON.stringify(lotes);
       localStorage.setItem(LOTES_KEY, jsonStr);
-      cloudSync.pushKey(LOTES_KEY, jsonStr, true);
+      cloudSync.pushKey(LOTES_KEY, jsonStr, forceReplace);
       window.dispatchEvent(new CustomEvent('certam_lotes_updated', { detail: lotes }));
     } catch {
       // ignore
@@ -78,12 +78,12 @@ export const lotesStore = {
     return [];
   },
 
-  salvarCandidatos(concursoId: string, cargoId: string, candidatos: Candidato[]) {
+  salvarCandidatos(concursoId: string, cargoId: string, candidatos: Candidato[], forceReplace = true) {
     const key = `${CANDIDATOS_KEY}_${concursoId}_${cargoId}`;
     try {
       const jsonStr = JSON.stringify(candidatos);
       localStorage.setItem(key, jsonStr);
-      cloudSync.pushKey(key, jsonStr, true);
+      cloudSync.pushKey(key, jsonStr, forceReplace);
       window.dispatchEvent(new CustomEvent('certam_candidatos_updated', { detail: candidatos }));
     } catch {
       // ignore
@@ -100,7 +100,7 @@ export const lotesStore = {
     } else {
       list.push(candidato);
     }
-    this.salvarCandidatos(concursoId, cargoId, list);
+    this.salvarCandidatos(concursoId, cargoId, list, false);
   },
 
   getLote(loteId: string): Lote | null {
@@ -111,7 +111,7 @@ export const lotesStore = {
   criarLote(lote: Lote) {
     const lotes = this.getLotes();
     lotes.push(lote);
-    this.salvarLotes(lotes);
+    this.salvarLotes(lotes, false);
   },
 
   atualizarLote(lote: Lote) {
@@ -119,13 +119,13 @@ export const lotesStore = {
     const idx = lotes.findIndex((l) => l.id === lote.id);
     if (idx >= 0) {
       lotes[idx] = lote;
-      this.salvarLotes(lotes);
+      this.salvarLotes(lotes, false);
     }
   },
 
   removerLote(loteId: string) {
     const lotes = this.getLotes().filter((l) => l.id !== loteId);
-    this.salvarLotes(lotes);
+    this.salvarLotes(lotes, true);
   },
 
   executarSimulacao(

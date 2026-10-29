@@ -30,11 +30,11 @@ export const contactStore = {
     return DEFAULT_CONTATOS;
   },
 
-  salvarMensagens(list: MensagemContatoAdmin[]) {
+  salvarMensagens(list: MensagemContatoAdmin[], forceReplace = false) {
     try {
       const jsonStr = JSON.stringify(list);
       localStorage.setItem(CONTACT_STORAGE_KEY, jsonStr);
-      cloudSync.pushKey(CONTACT_STORAGE_KEY, jsonStr, true);
+      cloudSync.pushKey(CONTACT_STORAGE_KEY, jsonStr, forceReplace);
       window.dispatchEvent(new CustomEvent('certam_contact_updated', { detail: list }));
     } catch {
       // ignore
@@ -51,7 +51,7 @@ export const contactStore = {
       status: 'aberto',
     };
     list.unshift(nova);
-    this.salvarMensagens(list);
+    this.salvarMensagens(list, false);
     return nova;
   },
 
@@ -62,7 +62,7 @@ export const contactStore = {
     item.status = 'respondido';
     item.resposta_admin = resposta;
     item.data_resposta = new Date().toLocaleString('pt-BR');
-    this.salvarMensagens(list);
+    this.salvarMensagens(list, false);
     return true;
   },
 
@@ -71,13 +71,13 @@ export const contactStore = {
     const item = list.find((m) => m.id === id);
     if (!item) return false;
     item.status = 'arquivado';
-    this.salvarMensagens(list);
+    this.salvarMensagens(list, false);
     return true;
   },
 
   removerMensagem(id: string): boolean {
     const list = this.getMensagens().filter((m) => m.id !== id);
-    this.salvarMensagens(list);
+    this.salvarMensagens(list, true);
     return true;
   },
 };

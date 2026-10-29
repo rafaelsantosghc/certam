@@ -54,7 +54,7 @@ export const PerfilCandidatoModal: React.FC<PerfilCandidatoModalProps> = ({
   const [primeiroCadastro, setPrimeiroCadastro] = useState(false);
 
   useEffect(() => {
-    if (usuario) {
+    if (aberto && usuario) {
       setNome(usuario.nome || '');
       setCpf(usuario.cpf || '');
       setDataNascimento(usuario.data_nascimento || '');
@@ -66,7 +66,7 @@ export const PerfilCandidatoModal: React.FC<PerfilCandidatoModalProps> = ({
       const isSemDados = !usuario.cpf && !usuario.data_nascimento;
       setPrimeiroCadastro(isSemDados);
     }
-  }, [usuario, aberto]);
+  }, [aberto, usuario?.email]);
 
   // Histórico da última solicitação de auditoria deste candidato
   const [todasSolicitacoes, setTodasSolicitacoes] = useState(() => auditStore.getAuditRequests());
@@ -78,10 +78,12 @@ export const PerfilCandidatoModal: React.FC<PerfilCandidatoModalProps> = ({
     window.addEventListener('certam_audit_updated', handleAuditUpdate);
     window.addEventListener('certam_audit_rejected', handleAuditUpdate);
     window.addEventListener('certam_audit_approved', handleAuditUpdate);
+    window.addEventListener('storage', handleAuditUpdate);
     return () => {
       window.removeEventListener('certam_audit_updated', handleAuditUpdate);
       window.removeEventListener('certam_audit_rejected', handleAuditUpdate);
       window.removeEventListener('certam_audit_approved', handleAuditUpdate);
+      window.removeEventListener('storage', handleAuditUpdate);
     };
   }, []);
 
@@ -195,8 +197,6 @@ export const PerfilCandidatoModal: React.FC<PerfilCandidatoModalProps> = ({
   const handleSubmeterOuSalvar = (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Apenas aprovações externas declaradas precisam ser persistidas no array outros_concursos,
-    // pois os concursos cadastrados no portal são identificados de forma nativa e automática.
     const outrosSincronizados: OutroConcursoAprovado[] = aprovacoesIdentificadas
       .filter((ap) => ap.origem === 'declarado')
       .map((ap) => ({
@@ -211,20 +211,9 @@ export const PerfilCandidatoModal: React.FC<PerfilCandidatoModalProps> = ({
       }));
 
     // Se for o primeiro preenchimento estritamente obrigatório de primeiro acesso
-    if (obrigatorio) {
+    if (obrigatorio && primeiroCadastro) {
       if (!nome.trim() || !cpf.trim() || !dataNascimento.trim() || !whatsapp.trim()) {
-        alert('Por favor, preencha todos os campos obrigatórios (*) para concluir seu cadastro.');
         return;
-      }
-
-      const diffsIniciais = calcularDiffs();
-      if (!usuario.is_admin && diffsIniciais.length > 0) {
-        auditStore.submeterSolicitacaoAlteracao({
-          usuario_email: usuario.email,
-          usuario_nome: sanitizeInput(nome, 100),
-          cpf: sanitizeInput(cpf, 20),
-          alteracoes: diffsIniciais,
-        });
       }
 
       atualizarDadosUsuario({
@@ -244,29 +233,9 @@ export const PerfilCandidatoModal: React.FC<PerfilCandidatoModalProps> = ({
       return;
     }
 
-    // Se o usuário for Administrador, aplica as alterações diretamente sem necessidade de moderação
-    if (usuario.is_admin) {
-      atualizarDadosUsuario({
-        nome: sanitizeInput(nome, 100),
-        cpf: sanitizeInput(cpf, 20),
-        data_nascimento: sanitizeInput(dataNascimento, 15),
-        whatsapp: sanitizeInput(whatsapp, 25),
-        telefone: sanitizeInput(whatsapp, 25),
-        email_contato: sanitizeInput(emailContato || usuario.email, 80),
-        outros_concursos: outrosSincronizados,
-      });
-      setSubmetidoSucesso(true);
-      setTimeout(() => {
-        setSubmetidoSucesso(false);
-        onClose();
-      }, 1500);
-      return;
-    }
-
-    // Para usuários comuns: qualquer submissão do formulário gera solicitação auditada para o painel admin (Item 2)
+    // Qualquer solicitação de alteração de dados cadastrais gera registro na fila de Auditoria do Painel Admin (Item 2)
     let diffs = calcularDiffs();
     if (diffs.length === 0) {
-      // Se o candidato clicou para submeter sem alterar campos ou está re-submetendo os dados atuais para homologação:
       diffs = [
         {
           campo: 'nome',
@@ -283,7 +252,7 @@ export const PerfilCandidatoModal: React.FC<PerfilCandidatoModalProps> = ({
       ];
     }
 
-    // Se era o primeiro cadastro sem CPF/data_nascimento, também salva os dados básicos e envia para auditoria do admin
+    // Se ainda não tinha CPF ou data de nascimento salvos, salva a base inicial mas mantém a solicitação na auditoria
     if (primeiroCadastro) {
       atualizarDadosUsuario({
         nome: sanitizeInput(nome, 100),
@@ -298,19 +267,20 @@ export const PerfilCandidatoModal: React.FC<PerfilCandidatoModalProps> = ({
 
     // Registrar imediatamente no auditStore para moderação administrativa (Item 2)
     auditStore.submeterSolicitacaoAlteracao({
-      usuario_email: usuario.email,
-      usuario_nome: nome.trim() || usuario.nome,
-      cpf: cpf.trim() || usuario.cpf || '',
+      usuario_email: usuario.email || emailContato.trim() || 'candidato@certam',
+      usuario_nome: sanitizeInput(nome.trim() || usuario.nome || 'Candidato', 100),
+      cpf: sanitizeInput(cpf.trim() || usuario.cpf || '', 20),
       alteracoes: diffs,
     });
 
     setTodasSolicitacoes(auditStore.getAuditRequests());
     setDiffAlteracoes(diffs);
+    setPrimeiroCadastro(false);
     setSubmetidoSucesso(true);
     setTimeout(() => {
       setSubmetidoSucesso(false);
       onClose();
-    }, 2500);
+    }, 2200);
   };
 
   const handleConfirmarSubmissaoAdmin = () => {

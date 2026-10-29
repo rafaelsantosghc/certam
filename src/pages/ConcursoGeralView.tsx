@@ -43,8 +43,17 @@ export const ConcursoGeralView: React.FC<ConcursoGeralViewProps> = ({
   });
 
   useEffect(() => {
-    const atual = certamStore.getConcurso(concursoId) || certamStore.getConcursos()[0];
-    if (atual) setConcurso(atual);
+    const sync = () => {
+      const atual = certamStore.getConcurso(concursoId) || certamStore.getConcursos()[0];
+      if (atual) setConcurso(atual);
+    };
+    sync();
+    window.addEventListener('storage', sync);
+    window.addEventListener('certam_concursos_updated', sync);
+    return () => {
+      window.removeEventListener('storage', sync);
+      window.removeEventListener('certam_concursos_updated', sync);
+    };
   }, [concursoId]);
 
   const [modalEditarConcursoAberto, setModalEditarConcursoAberto] = useState(false);

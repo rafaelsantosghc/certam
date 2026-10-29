@@ -97,6 +97,29 @@ export const AppContent: React.FC = () => {
     }
   }, [usuario]);
 
+  useEffect(() => {
+    const handleConcursosSync = () => {
+      const lista = certamStore.getConcursos();
+      if (lista.length > 0) {
+        setConcursoId((prev) => {
+          if (prev && lista.some((c) => c.id === prev)) return prev;
+          return lista[0].id;
+        });
+        setCargoId((prev) => {
+          const conc = lista.find((c) => c.id === concursoId) || lista[0];
+          if (prev && conc?.cargos?.some((cg) => cg.id === prev)) return prev;
+          return conc?.cargos?.[0]?.id || '';
+        });
+      }
+    };
+    window.addEventListener('certam_concursos_updated', handleConcursosSync);
+    window.addEventListener('storage', handleConcursosSync);
+    return () => {
+      window.removeEventListener('certam_concursos_updated', handleConcursosSync);
+      window.removeEventListener('storage', handleConcursosSync);
+    };
+  }, [concursoId]);
+
   // Read URL query params and path on initial mount
   useEffect(() => {
     try {
@@ -111,8 +134,10 @@ export const AppContent: React.FC = () => {
       if (urlAdmin === '1' || pathname.includes('admin')) {
         setCurrentView('admin');
       } else if (urlTab === 'lote' || pathname.includes('lote')) {
-        setCurrentView('lote');
+        if (urlId) setConcursoId(urlId);
+        if (urlCargo) setCargoId(urlCargo);
         if (urlLote) setLoteId(urlLote);
+        setCurrentView('lote');
       } else if (urlTab === 'politica' || pathname.includes('politica')) {
         setCurrentView('politica');
       } else if (urlId || pathname.includes('concurso')) {
@@ -145,6 +170,7 @@ export const AppContent: React.FC = () => {
 
     const cId = params?.concursoId || concursoId;
     const cgId = params?.cargoId || cargoId;
+    const lId = params?.loteId !== undefined ? params.loteId : loteId;
     const t = params?.tab !== undefined ? params.tab : (view === 'concurso' ? 'dashboard' : initialTab);
 
     if (params?.concursoId) setConcursoId(params.concursoId);
@@ -161,6 +187,7 @@ export const AppContent: React.FC = () => {
       url.searchParams.delete('cargo');
       url.searchParams.delete('tab');
       url.searchParams.delete('admin');
+      url.searchParams.delete('lote');
 
       if (view === 'concurso_geral') {
         url.searchParams.set('id', cId);
@@ -172,6 +199,7 @@ export const AppContent: React.FC = () => {
         url.searchParams.set('tab', 'lote');
         if (cId) url.searchParams.set('id', cId);
         if (cgId) url.searchParams.set('cargo', cgId);
+        if (lId) url.searchParams.set('lote', lId);
       } else if (view === 'admin') {
         url.searchParams.set('admin', '1');
       } else if (view === 'politica') {

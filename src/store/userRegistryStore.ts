@@ -21,11 +21,41 @@ const isFakeEmail = (email?: string): boolean => {
   return lower === '' || lower.endsWith('@portalcertam.com.br') || lower.startsWith('cand-pre-');
 };
 
+let cachedRawStr: string | null = null;
+let cachedRegistry: Record<string, Usuario> | null = null;
+let cachedActiveById: Map<string, Usuario> | null = null;
+let cachedActiveByCpf: Map<string, Usuario> | null = null;
+let cachedActiveByNome: Map<string, Usuario> | null = null;
+
+function rebuildActiveLookupCache(reg: Record<string, Usuario>) {
+  const byId = new Map<string, Usuario>();
+  const byCpf = new Map<string, Usuario>();
+  const byNome = new Map<string, Usuario>();
+
+  for (const u of Object.values(reg)) {
+    const isAtivoComEmail = u.status_cadastro === 'ativo' && !isFakeEmail(u.email);
+    if (!isAtivoComEmail) continue;
+    if (u.id) byId.set(u.id, u);
+    if (u.candidato_id) byId.set(u.candidato_id, u);
+    const cpfLimpo = u.cpf ? limparCpf(u.cpf) : '';
+    if (cpfLimpo.length >= 9) byCpf.set(cpfLimpo, u);
+    const nomeNorm = u.nome ? normalizarTexto(u.nome) : '';
+    if (nomeNorm.length >= 4) byNome.set(nomeNorm, u);
+  }
+
+  cachedActiveById = byId;
+  cachedActiveByCpf = byCpf;
+  cachedActiveByNome = byNome;
+}
+
 export const userRegistryStore = {
   getRegistry(): Record<string, Usuario> {
     try {
       localStorage.removeItem('certam_users_registry_v1');
       const stored = localStorage.getItem(REGISTRY_STORAGE_KEY);
+      if (stored && stored === cachedRawStr && cachedRegistry) {
+        return cachedRegistry;
+      }
       if (stored) {
         const parsed = JSON.parse(stored);
         if (parsed && typeof parsed === 'object') {
@@ -65,6 +95,10 @@ export const userRegistryStore = {
             sanitized[dictKey] = userCopy;
           }
 
+          cachedRegistry = sanitized;
+          cachedRawStr = stored;
+          rebuildActiveLookupCache(sanitized);
+
           if (needsMigration) {
             this.salvarRegistry(sanitized);
           }
@@ -75,6 +109,9 @@ export const userRegistryStore = {
     } catch {
       // ignore
     }
+    cachedRegistry = {};
+    cachedRawStr = null;
+    rebuildActiveLookupCache({});
     return {};
   },
 
@@ -92,8 +129,11 @@ export const userRegistryStore = {
   salvarRegistry(registry: Record<string, Usuario>) {
     try {
       const jsonStr = JSON.stringify(registry);
+      cachedRegistry = registry;
+      cachedRawStr = jsonStr;
+      rebuildActiveLookupCache(registry);
       localStorage.setItem(REGISTRY_STORAGE_KEY, jsonStr);
-      cloudSync.pushKey(REGISTRY_STORAGE_KEY, jsonStr, true);
+      cloudSync.pushKey(REGISTRY_STORAGE_KEY, jsonStr, false);
       window.dispatchEvent(new CustomEvent('certam_registry_updated', { detail: registry }));
       window.dispatchEvent(new CustomEvent('certam_users_updated', { detail: registry }));
     } catch {
@@ -104,9 +144,9 @@ export const userRegistryStore = {
   getUserByEmail(email: string): Usuario | null {
     if (!email || isFakeEmail(email)) return null;
     const emailNorm = email.toLowerCase().trim();
-    const all = this.getAllUsers();
+    const reg = this.getRegistry();
     return (
-      all.find(
+      Object.values(reg).find(
         (u) =>
           (u.email && u.email.toLowerCase().trim() === emailNorm) ||
           (u.email_contato && u.email_contato.toLowerCase().trim() === emailNorm)
@@ -149,7 +189,7 @@ export const userRegistryStore = {
 
   salvarUsuario(usuario: Usuario): Usuario {
     if (!usuario) throw new Error('Usuário inválido');
-    const reg = this.getRegistry();
+    const reg = { ...this.getRegistry() };
 
     const existingKey =
       (usuario.id && this.findRegistryKey(usuario.id)) ||
@@ -182,7 +222,7 @@ export const userRegistryStore = {
 
   atualizarCamposUsuario(chave: string, campos: Partial<Usuario>): Usuario | null {
     if (!chave) return null;
-    const reg = this.getRegistry();
+    const reg = { ...this.getRegistry() };
     const targetKey = this.findRegistryKey(chave);
     if (!targetKey || !reg[targetKey]) return null;
 
@@ -224,7 +264,7 @@ export const userRegistryStore = {
   },
 
   removerUsuario(chave: string): boolean {
-    const reg = this.getRegistry();
+    const reg = { ...this.getRegistry() };
     const targetKey = this.findRegistryKey(chave);
     if (!targetKey || !reg[targetKey]) return false;
     delete reg[targetKey];
@@ -237,7 +277,7 @@ export const userRegistryStore = {
    * vinculando-o automaticamente a um candidato importado (por CPF ou Nome Completo) se existir.
    */
   vincularOuRegistrarUsuarioLogin(usuario: Usuario): Usuario {
-    const reg = this.getRegistry();
+    const reg = { ...this.getRegistry() };
     const entries = Object.entries(reg);
 
     const emailReal =
@@ -357,7 +397,7 @@ export const userRegistryStore = {
   },
 
   /**
-   * Verifica se um candidato (da lista de classificação ou lote) já possui um usuário real
+   * Verifica em O(1) se um candidato (da lista de classificação ou lote) já possui um usuário real
    * cadastrado no site e vinculado a ele (Item 6 & Item 18).
    */
   verificarVinculoCandidato(cand: {
@@ -367,26 +407,135 @@ export const userRegistryStore = {
     nome?: string;
     email?: string;
   }): { vinculado: boolean; usuario?: Usuario } {
-    const all = this.getAllUsers();
-    const cpfLimpo = cand.cpf ? limparCpf(cand.cpf) : '';
-    const nomeNorm = cand.nome ? normalizarTexto(cand.nome) : '';
+    this.getRegistry();
     const candId = cand.candidato_id || cand.id || '';
+    if (candId && cachedActiveById?.has(candId)) {
+      return { vinculado: true, usuario: cachedActiveById.get(candId) };
+    }
+    const cpfLimpo = cand.cpf ? limparCpf(cand.cpf) : '';
+    if (cpfLimpo.length >= 9 && cachedActiveByCpf?.has(cpfLimpo)) {
+      return { vinculado: true, usuario: cachedActiveByCpf.get(cpfLimpo) };
+    }
+    const nomeNorm = cand.nome ? normalizarTexto(cand.nome) : '';
+    if (nomeNorm.length >= 4 && cachedActiveByNome?.has(nomeNorm)) {
+      return { vinculado: true, usuario: cachedActiveByNome.get(nomeNorm) };
+    }
+    return { vinculado: false };
+  },
 
-    const match = all.find((u) => {
-      // Precisa ter feito o primeiro acesso (status_cadastro === 'ativo' e possuir e-mail real)
-      const isAtivoComEmail = u.status_cadastro === 'ativo' && !isFakeEmail(u.email);
-      if (!isAtivoComEmail) return false;
+  /**
+   * Importação em lote de alta performance (Item 8): processa todos os candidatos em memória
+   * com busca O(1) via Map e salva no localStorage / cloudSync apenas uma única vez ao final.
+   */
+  cadastrarOuSincronizarCandidatosEmLote(
+    candidatos: Partial<Candidato>[],
+    concursoId?: string,
+    cargoId?: string,
+    orgaoNome?: string,
+    cargoNome?: string
+  ): { novos: number; atualizados: number } {
+    if (!candidatos || candidatos.length === 0) return { novos: 0, atualizados: 0 };
 
-      if (candId && (u.candidato_id === candId || u.id === candId)) return true;
-      if (cpfLimpo.length >= 9 && u.cpf && limparCpf(u.cpf) === cpfLimpo) return true;
-      if (nomeNorm.length >= 4 && u.nome && normalizarTexto(u.nome) === nomeNorm) return true;
-      if (cand.email && !isFakeEmail(cand.email) && u.email.toLowerCase() === cand.email.toLowerCase()) {
-        return true;
+    const reg = { ...this.getRegistry() };
+    const mapByCpf = new Map<string, string>();
+    const mapByNome = new Map<string, string>();
+
+    for (const [k, u] of Object.entries(reg)) {
+      const c = u.cpf ? limparCpf(u.cpf) : '';
+      if (c.length >= 7) mapByCpf.set(c, k);
+      const n = u.nome ? normalizarTexto(u.nome) : '';
+      if (n.length >= 3) mapByNome.set(n, k);
+    }
+
+    const hojeStr = new Date().toLocaleDateString('pt-BR');
+    let novos = 0;
+    let atualizados = 0;
+
+    candidatos.forEach((cand, idx) => {
+      const cpfLimpo = cand.cpf ? limparCpf(cand.cpf) : '';
+      const nomeNorm = cand.nome ? normalizarTexto(cand.nome) : '';
+      const realEmail =
+        cand.email && !isFakeEmail(cand.email) ? cand.email.toLowerCase().trim() : '';
+
+      let matchKey = cpfLimpo.length >= 7 ? mapByCpf.get(cpfLimpo) : undefined;
+      if (!matchKey && nomeNorm.length >= 3) {
+        matchKey = mapByNome.get(nomeNorm);
       }
-      return false;
+
+      if (matchKey && reg[matchKey]) {
+        const match = reg[matchKey];
+        const inscricoes = [...(match.concursos_inscritos || [])];
+        const jaInscrito = inscricoes.some(
+          (i) => i.concurso_id === concursoId && i.cargo_id === cargoId
+        );
+        if (!jaInscrito && concursoId && cargoId) {
+          inscricoes.push({
+            concurso_id: concursoId,
+            cargo_id: cargoId,
+            data_inscricao: hojeStr,
+          });
+        }
+
+        const atualizado: Usuario = {
+          ...match,
+          cpf: match.cpf || (cand.cpf ? cand.cpf.trim() : ''),
+          candidato_id: match.candidato_id || cand.id,
+          concurso_id: match.concurso_id || concursoId,
+          cargo_id: match.cargo_id || cargoId,
+          orgao: match.orgao || orgaoNome,
+          cargo_nome: match.cargo_nome || cargoNome,
+          concursos_inscritos: inscricoes,
+        };
+
+        reg[matchKey] = atualizado;
+        if (cpfLimpo.length >= 7) mapByCpf.set(cpfLimpo, matchKey);
+        if (nomeNorm.length >= 3) mapByNome.set(nomeNorm, matchKey);
+        atualizados++;
+        return;
+      }
+
+      const generatedId =
+        cand.id ||
+        `cand-pre-${Date.now().toString(36)}-${idx}-${Math.random().toString(36).substring(2, 5)}`;
+      const dictKey = generatedId.toLowerCase();
+
+      const novoPerfil: Usuario = {
+        id: generatedId,
+        nome: cand.nome ? cand.nome.trim() : 'Candidato Importado',
+        email: realEmail,
+        email_contato: realEmail,
+        cpf: cand.cpf ? cand.cpf.trim() : '',
+        cpf_verificado: Boolean(cand.cpf),
+        whatsapp: cand.whatsapp || '',
+        telefone: cand.whatsapp || '',
+        is_admin: false,
+        tipo_usuario: 'candidato',
+        status_cadastro: 'primeiro_acesso',
+        candidato_id: cand.id || generatedId,
+        concurso_id: concursoId,
+        cargo_id: cargoId,
+        orgao: orgaoNome,
+        cargo_nome: cargoNome,
+        concursos_inscritos:
+          concursoId && cargoId
+            ? [
+                {
+                  concurso_id: concursoId,
+                  cargo_id: cargoId,
+                  data_inscricao: hojeStr,
+                },
+              ]
+            : [],
+      };
+
+      reg[dictKey] = novoPerfil;
+      if (cpfLimpo.length >= 7) mapByCpf.set(cpfLimpo, dictKey);
+      if (nomeNorm.length >= 3) mapByNome.set(nomeNorm, dictKey);
+      novos++;
     });
 
-    return { vinculado: Boolean(match), usuario: match };
+    this.salvarRegistry(reg);
+    return { novos, atualizados };
   },
 
   /**
@@ -400,92 +549,16 @@ export const userRegistryStore = {
     orgaoNome?: string,
     cargoNome?: string
   ): { usuario: Usuario; jaExistia: boolean } {
+    const res = this.cadastrarOuSincronizarCandidatosEmLote(
+      [cand],
+      concursoId,
+      cargoId,
+      orgaoNome,
+      cargoNome
+    );
     const reg = this.getRegistry();
-    const entries = Object.entries(reg);
-
-    const cpfLimpo = cand.cpf ? limparCpf(cand.cpf) : '';
-    const nomeNorm = cand.nome ? normalizarTexto(cand.nome) : '';
-    const realEmail =
-      cand.email && !isFakeEmail(cand.email) ? cand.email.toLowerCase().trim() : '';
-
-    // 1. Busca por CPF
-    let matchEntry =
-      cpfLimpo.length >= 7
-        ? entries.find(([_, u]) => u.cpf && limparCpf(u.cpf) === cpfLimpo)
-        : undefined;
-
-    // 2. Busca por Nome Completo Exato
-    if (!matchEntry && nomeNorm.length >= 3) {
-      matchEntry = entries.find(([_, u]) => u.nome && normalizarTexto(u.nome) === nomeNorm);
-    }
-
-    if (matchEntry) {
-      const [matchKey, match] = matchEntry;
-      const inscricoes = [...(match.concursos_inscritos || [])];
-      const jaInscrito = inscricoes.some(
-        (i) => i.concurso_id === concursoId && i.cargo_id === cargoId
-      );
-
-      if (!jaInscrito && concursoId && cargoId) {
-        inscricoes.push({
-          concurso_id: concursoId,
-          cargo_id: cargoId,
-          data_inscricao: new Date().toLocaleDateString('pt-BR'),
-        });
-      }
-
-      const atualizado: Usuario = {
-        ...match,
-        cpf: match.cpf || (cand.cpf ? cand.cpf.trim() : ''),
-        candidato_id: match.candidato_id || cand.id,
-        concurso_id: match.concurso_id || concursoId,
-        cargo_id: match.cargo_id || cargoId,
-        orgao: match.orgao || orgaoNome,
-        cargo_nome: match.cargo_nome || cargoNome,
-        concursos_inscritos: inscricoes,
-      };
-
-      reg[matchKey] = atualizado;
-      this.salvarRegistry(reg);
-      return { usuario: atualizado, jaExistia: true };
-    }
-
-    // Não existia: cria pré-cadastro vinculável SEM e-mail aleatório e com status "primeiro_acesso"
-    const generatedId =
-      cand.id ||
-      `cand-pre-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`;
-
-    const novoPerfil: Usuario = {
-      id: generatedId,
-      nome: cand.nome ? cand.nome.trim() : 'Candidato Importado',
-      email: realEmail, // Vazio até que o usuário faça o 1º acesso e vincule sua conta
-      email_contato: realEmail,
-      cpf: cand.cpf ? cand.cpf.trim() : '',
-      cpf_verificado: Boolean(cand.cpf),
-      whatsapp: cand.whatsapp || '',
-      telefone: cand.whatsapp || '',
-      is_admin: false,
-      tipo_usuario: 'candidato',
-      status_cadastro: 'primeiro_acesso',
-      candidato_id: cand.id || generatedId,
-      concurso_id: concursoId,
-      cargo_id: cargoId,
-      orgao: orgaoNome,
-      cargo_nome: cargoNome,
-      concursos_inscritos:
-        concursoId && cargoId
-          ? [
-              {
-                concurso_id: concursoId,
-                cargo_id: cargoId,
-                data_inscricao: new Date().toLocaleDateString('pt-BR'),
-              },
-            ]
-          : [],
-    };
-
-    reg[generatedId.toLowerCase()] = novoPerfil;
-    this.salvarRegistry(reg);
-    return { usuario: novoPerfil, jaExistia: false };
+    const key = (cand.id || '').toLowerCase();
+    const u = reg[key] || Object.values(reg)[0];
+    return { usuario: u, jaExistia: res.atualizados > 0 };
   },
 };

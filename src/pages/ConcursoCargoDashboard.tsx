@@ -93,10 +93,27 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
   const [lotes, setLotes] = useState<Lote[]>(() => lotesStore.getLotes());
 
   useEffect(() => {
-    const c = certamStore.getConcurso(concursoId) || certamStore.getConcursos()[0];
-    setConcurso(c);
-    setCargo(certamStore.getCargo(c.id, cargoId) || c.cargos[0]);
-    setLotes(lotesStore.getLotes());
+    const syncData = () => {
+      const c = certamStore.getConcurso(concursoId) || certamStore.getConcursos()[0];
+      const cg = certamStore.getCargo(c.id, cargoId) || c.cargos[0];
+      setConcurso(c);
+      setCargo(cg);
+      setLotes(lotesStore.getLotes());
+      if (cg) {
+        setCandidatos(lotesStore.getCandidatos(c.id, cg.id));
+      }
+    };
+    syncData();
+    window.addEventListener('storage', syncData);
+    window.addEventListener('certam_concursos_updated', syncData);
+    window.addEventListener('certam_lotes_updated', syncData);
+    window.addEventListener('certam_candidatos_updated', syncData);
+    return () => {
+      window.removeEventListener('storage', syncData);
+      window.removeEventListener('certam_concursos_updated', syncData);
+      window.removeEventListener('certam_lotes_updated', syncData);
+      window.removeEventListener('certam_candidatos_updated', syncData);
+    };
   }, [concursoId, cargoId]);
 
   const [modalEditarConcursoAberto, setModalEditarConcursoAberto] = useState(false);
@@ -172,45 +189,42 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
     setTimeout(() => setToastData(null), 3500);
   };
 
+  // Candidato logado vinculado nesta lista (se houver)
+  const meuCandidato = useMemo(() => {
+    if (!usuario) return null;
+    const cpfUsuarioLimpo = usuario.cpf ? usuario.cpf.replace(/\D/g, '') : '';
+    const emailUsuarioLimpo = usuario.email ? usuario.email.trim().toLowerCase() : '';
+    const nomeUsuarioNorm = usuario.nome && usuario.nome.trim().length >= 3 ? normalizarTexto(usuario.nome) : '';
+
+    return (
+      candidatos.find((c) => {
+        if (usuario.candidato_id && c.id && c.id === usuario.candidato_id) return true;
+        if (cpfUsuarioLimpo.length >= 6 && c.cpf) {
+          const cpfCandLimpo = c.cpf.replace(/\D/g, '');
+          if (cpfCandLimpo.length >= 6 && cpfCandLimpo === cpfUsuarioLimpo) return true;
+        }
+        if (emailUsuarioLimpo && c.email && c.email.trim().toLowerCase() === emailUsuarioLimpo) {
+          return true;
+        }
+        if (nomeUsuarioNorm && c.nome && normalizarTexto(c.nome) === nomeUsuarioNorm) {
+          return true;
+        }
+        return false;
+      }) || null
+    );
+  }, [candidatos, usuario]);
+
   // -------------------------------------------------------------
   // REGRA DE IDENTIFICAÇÃO DE APROVADO HOMOLOGADO
   // -------------------------------------------------------------
+  const isAprovadoComoCandidato = useMemo(() => {
+    return Boolean(meuCandidato);
+  }, [meuCandidato]);
+
   const isCandidatoAprovado = useMemo(() => {
     if (isAdmin) return true;
-    if (!usuario) return false;
-
-    // 1. Verificar por ID
-    const matchId = candidatos.find((c) => c.id === usuario.candidato_id);
-    if (matchId) return true;
-
-    // 2. Verificar por CPF se cadastrado
-    if (usuario.cpf) {
-      const cpfLimpo = usuario.cpf.replace(/\D/g, '');
-      if (cpfLimpo.length >= 6) {
-        const matchCpf = candidatos.find(
-          (c) => c.cpf && c.cpf.replace(/\D/g, '').includes(cpfLimpo.slice(0, 6))
-        );
-        if (matchCpf) return true;
-      }
-    }
-
-    // 3. Verificar por Nome Completo normalizado
-    if (usuario.nome && usuario.nome.length >= 3) {
-      const nomeNorm = normalizarTexto(usuario.nome);
-      const matchNome = candidatos.find((c) => normalizarTexto(c.nome) === nomeNorm);
-      if (matchNome) return true;
-    }
-
-    // 4. Verificar por e-mail
-    if (usuario.email) {
-      const matchEmail = candidatos.find(
-        (c) => c.email && c.email.toLowerCase() === usuario.email.toLowerCase()
-      );
-      if (matchEmail) return true;
-    }
-
-    return false;
-  }, [usuario, isAdmin, candidatos]);
+    return isAprovadoComoCandidato;
+  }, [isAdmin, isAprovadoComoCandidato]);
 
   // Se o concurso está homologado e o usuário NÃO é aprovado, restringe o chat
   const isChatRestrito = useMemo(() => {
@@ -218,20 +232,6 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
     if (!estáHomologado) return false;
     return !isCandidatoAprovado;
   }, [concurso, isCandidatoAprovado]);
-
-  // Candidato logado vinculado nesta lista (se houver)
-  const meuCandidato = useMemo(() => {
-    if (!usuario) return null;
-    return (
-      candidatos.find(
-        (c) =>
-          c.id === usuario.candidato_id ||
-          (usuario.cpf && c.cpf && c.cpf.replace(/\D/g, '') === usuario.cpf.replace(/\D/g, '')) ||
-          (usuario.email && c.email?.toLowerCase() === usuario.email.toLowerCase()) ||
-          (usuario.nome && normalizarTexto(c.nome) === normalizarTexto(usuario.nome))
-      ) || null
-    );
-  }, [candidatos, usuario]);
 
   // KPIs
   const kpiStats = useMemo(() => {
@@ -1640,7 +1640,7 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
               .filter(
                 (l) =>
                   l.concurso_id === concurso.id &&
-                  (l.cargo_id === cargo.id || !l.cargo_id || l.concurso_id === 'tjrs_2025')
+                  (!l.cargo_id || l.cargo_id === cargo.id)
               )
               .sort((a, b) => {
                 const numA = (a.numero_lote || a.nome || '').toString().replace(/[^\d.]/g, '');
@@ -1703,20 +1703,24 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
                 };
 
                 // Item 6: Verificar estritamente se o candidato logado está contemplado na lista configurada para este lote
-                const estaContemplado =
-                  isAdmin ||
-                  Boolean(
-                    meuCandidato &&
-                      ((lote.candidatos_ids &&
+                const estaContempladoComoCandidato = Boolean(
+                  meuCandidato &&
+                    ((lote.convocados &&
+                      lote.convocados.length > 0 &&
+                      lote.convocados.some(
+                        (cv) =>
+                          (cv.candidato_id && cv.candidato_id === meuCandidato.id) ||
+                          normalizarTexto(cv.nome) === normalizarTexto(meuCandidato.nome)
+                      )) ||
+                      ((!lote.convocados || lote.convocados.length === 0) &&
+                        lote.candidatos_ids &&
+                        lote.candidatos_ids.length > 0 &&
                         (lote.candidatos_ids.includes(meuCandidato.id) ||
-                          lote.candidatos_ids.includes(meuCandidato.nome))) ||
-                        (lote.convocados &&
-                          lote.convocados.some(
-                            (cv) =>
-                              (cv.candidato_id && cv.candidato_id === meuCandidato.id) ||
-                              cv.nome.trim().toLowerCase() === (meuCandidato?.nome || '').trim().toLowerCase()
-                          )))
-                  );
+                          lote.candidatos_ids.some(
+                            (idOuNome) => normalizarTexto(idOuNome) === normalizarTexto(meuCandidato.nome)
+                          ))))
+                );
+                const temAcessoAoLote = estaContempladoComoCandidato || isAdmin;
 
                 return (
                   <div
@@ -2015,7 +2019,7 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
                     {/* Área do Candidato / Acesso ao Lote */}
                     <div className="pt-2 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                       <div>
-                        {estaContemplado ? (
+                        {estaContempladoComoCandidato ? (
                           <div className="flex items-center gap-2 text-emerald-800 bg-emerald-50 px-3.5 py-2 rounded-xl border border-emerald-200">
                             <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
                             <span className="text-xs font-semibold">
@@ -2023,31 +2027,40 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
                               {meuCandidato && ` (${meuCandidato.posicao}º lugar na classificação)`}
                             </span>
                           </div>
-                        ) : isCandidatoAprovado && meuCandidato ? (
+                        ) : isAdmin ? (
+                          <div className="flex items-center gap-2 text-amber-900 bg-amber-50 px-3.5 py-2 rounded-xl border border-amber-300">
+                            <ShieldCheck className="w-4 h-4 text-amber-700 shrink-0" />
+                            <span className="text-xs font-semibold">
+                              Acesso liberado por ser Administrador
+                            </span>
+                          </div>
+                        ) : isAprovadoComoCandidato && meuCandidato ? (
                           <div className="text-xs text-slate-500">
-                            Sua classificação ({meuCandidato.posicao}º lugar) aguarda os próximos lotes de convocação.
+                            Sua classificação ({meuCandidato.posicao}º lugar) não consta neste lote e aguarda os próximos lotes de convocação.
                           </div>
                         ) : (
                           <div className="text-xs text-slate-500">
-                            A manifestação de comarcas é restrita aos candidatos aprovados neste lote.
+                            O acesso à página do lote e à manifestação de {tipoLotacao.toLowerCase()}s é restrito aos candidatos convocados neste lote.
                           </div>
                         )}
                       </div>
 
                       <div className="flex items-center gap-2 flex-wrap">
-                        {estaContemplado ? (
+                        {temAcessoAoLote ? (
                           <>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setLoteSelecionadoParaEscolha(lote);
-                                setModalEscolhaComarcasAberto(true);
-                              }}
-                              className="px-4 py-2 bg-white hover:bg-slate-50 border border-slate-300 text-slate-800 font-bold text-xs rounded-xl shadow-2xs transition-all cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap"
-                            >
-                              <MapPin className="w-3.5 h-3.5 text-teal-600" />
-                              <span>Escolher {tipoLotacao}s</span>
-                            </button>
+                            {estaContempladoComoCandidato && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setLoteSelecionadoParaEscolha(lote);
+                                  setModalEscolhaComarcasAberto(true);
+                                }}
+                                className="px-4 py-2 bg-white hover:bg-slate-50 border border-slate-300 text-slate-800 font-bold text-xs rounded-xl shadow-2xs transition-all cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap"
+                              >
+                                <MapPin className="w-3.5 h-3.5 text-teal-600" />
+                                <span>Escolher {tipoLotacao}s</span>
+                              </button>
+                            )}
 
                             <button
                               type="button"

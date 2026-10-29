@@ -20,11 +20,11 @@ export const notificationStore = {
     return DEFAULT_NOTIFICATIONS;
   },
 
-  salvarNotificacoes(list: NotificacaoItem[]) {
+  salvarNotificacoes(list: NotificacaoItem[], forceReplace = false) {
     try {
       const jsonStr = JSON.stringify(list);
       localStorage.setItem(NOTIFICATIONS_STORAGE_KEY, jsonStr);
-      cloudSync.pushKey(NOTIFICATIONS_STORAGE_KEY, jsonStr, true);
+      cloudSync.pushKey(NOTIFICATIONS_STORAGE_KEY, jsonStr, forceReplace);
       window.dispatchEvent(new CustomEvent('certam_notifications_updated', { detail: list }));
     } catch {
       // ignore
@@ -42,7 +42,7 @@ export const notificationStore = {
         new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
     };
     list.unshift(nova);
-    this.salvarNotificacoes(list);
+    this.salvarNotificacoes(list, false);
     return nova;
   },
 
@@ -52,6 +52,6 @@ export const notificationStore = {
 
   removerNotificacao(id: string) {
     const list = this.getNotificacoes().filter((n) => n.id !== id);
-    this.salvarNotificacoes(list);
+    this.salvarNotificacoes(list, true);
   },
 };

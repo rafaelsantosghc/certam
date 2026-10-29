@@ -3,7 +3,7 @@ import { lotesStore } from '../store/lotesStore';
 import { userRegistryStore } from '../store/userRegistryStore';
 import { useAuth } from '../store/authContext';
 import { COMARCAS_RS } from '../data/comarcas';
-import { Candidato, Lote } from '../types';
+import { Candidato, Lote, Comarca } from '../types';
 import { ModalEditarLote } from '../components/ModalEditarLote';
 import * as XLSX from 'xlsx';
 import {
@@ -44,58 +44,145 @@ export const SimuladorLotes: React.FC<SimuladorLotesProps> = ({
   const { usuario, isAdmin, loginGoogle } = useAuth();
 
   const [lotes, setLotes] = useState<Lote[]>(() => lotesStore.getLotes());
+
+  useEffect(() => {
+    const syncLotes = () => setLotes(lotesStore.getLotes());
+    window.addEventListener('storage', syncLotes);
+    window.addEventListener('certam_lotes_updated', syncLotes);
+    return () => {
+      window.removeEventListener('storage', syncLotes);
+      window.removeEventListener('certam_lotes_updated', syncLotes);
+    };
+  }, []);
+
+  const lotesDoCargo = useMemo(() => {
+    const filtrados = lotes.filter(
+      (l) => l.concurso_id === concursoId && (!l.cargo_id || l.cargo_id === cargoId)
+    );
+    return filtrados.length > 0 ? filtrados : lotes;
+  }, [lotes, concursoId, cargoId]);
+
   const [loteAtivoId, setLoteAtivoId] = useState<string>(() => {
     if (loteId) {
       const achado = lotes.find((l) => l.id === loteId);
       if (achado) return achado.id;
     }
-    return lotes[0]?.id || 'lote_1';
+    const doCargo = lotes.filter(
+      (l) => l.concurso_id === concursoId && (!l.cargo_id || l.cargo_id === cargoId)
+    );
+    return doCargo[0]?.id || lotes[0]?.id || '';
   });
-  const loteAtivo = lotes.find((l) => l.id === loteAtivoId) || lotes[0];
+
+  useEffect(() => {
+    if (loteId) {
+      const achado = lotes.find((l) => l.id === loteId);
+      if (achado) {
+        setLoteAtivoId(achado.id);
+        return;
+      }
+    }
+    if (!lotes.some((l) => l.id === loteAtivoId)) {
+      setLoteAtivoId(lotesDoCargo[0]?.id || lotes[0]?.id || '');
+    }
+  }, [loteId, lotes, lotesDoCargo, loteAtivoId]);
+
+  const loteAtivo = useMemo(() => {
+    if (loteId) {
+      const porProp = lotes.find((l) => l.id === loteId);
+      if (porProp && (!loteAtivoId || loteAtivoId === loteId)) return porProp;
+    }
+    return lotes.find((l) => l.id === loteAtivoId) || lotesDoCargo[0] || lotes[0] || null;
+  }, [lotes, loteAtivoId, loteId, lotesDoCargo]);
+
+  const concursoEfetivoId = loteAtivo?.concurso_id || concursoId;
+  const cargoEfetivoId = loteAtivo?.cargo_id || cargoId;
+
   const [modalConfigurarLoteAberto, setModalConfigurarLoteAberto] = useState(false);
 
   const [abaAtiva, setAbaAtiva] = useState<'formulario' | 'dashboard' | 'geral' | 'comarcas' | 'impressao' | 'admin'>('formulario');
 
-  // Candidatos do Lote
+  // Candidatos do Cargo do Lote
   const [candidatos, setCandidatos] = useState<Candidato[]>(() =>
-    lotesStore.getCandidatos(concursoId, cargoId)
+    lotesStore.getCandidatos(concursoEfetivoId, cargoEfetivoId)
   );
 
-  // Item 6: Restringir acesso estritamente aos candidatos convocados neste lote
-  const isContempladoNesteLote = useMemo(() => {
-    if (isAdmin) return true;
-    if (!usuario) return false;
-    if (!loteAtivo) return false;
+  useEffect(() => {
+    const syncCandidatos = () => {
+      setCandidatos(lotesStore.getCandidatos(concursoEfetivoId, cargoEfetivoId));
+    };
+    syncCandidatos();
+    window.addEventListener('storage', syncCandidatos);
+    window.addEventListener('certam_candidatos_updated', syncCandidatos);
+    return () => {
+      window.removeEventListener('storage', syncCandidatos);
+      window.removeEventListener('certam_candidatos_updated', syncCandidatos);
+    };
+  }, [concursoEfetivoId, cargoEfetivoId]);
+
+  const normalizarNome = (str?: string) =>
+    (str || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim()
+      .toLowerCase();
+
+  // Item 6: Verificar estritamente se o usuário logado é um candidato contemplado neste lote
+  const isCandidatoContempladoNesteLote = useMemo(() => {
+    if (!usuario || !loteAtivo) return false;
 
     const cpfLimpo = usuario.cpf ? usuario.cpf.replace(/\D/g, '') : '';
-    const nomeLimpo = usuario.nome ? usuario.nome.trim().toLowerCase() : '';
+    const nomeLimpo = normalizarNome(usuario.nome);
+    const emailLimpo = usuario.email ? usuario.email.trim().toLowerCase() : '';
 
-    const cand = candidatos.find(
-      (c) =>
-        (usuario.candidato_id && c.id === usuario.candidato_id) ||
-        (cpfLimpo && c.cpf && c.cpf.replace(/\D/g, '') === cpfLimpo) ||
-        (nomeLimpo && c.nome && c.nome.trim().toLowerCase() === nomeLimpo)
-    );
+    const cand = candidatos.find((c) => {
+      if (usuario.candidato_id && c.id && c.id === usuario.candidato_id) return true;
+      if (cpfLimpo.length >= 6 && c.cpf) {
+        const cpfCandLimpo = c.cpf.replace(/\D/g, '');
+        if (cpfCandLimpo.length >= 6 && cpfCandLimpo === cpfLimpo) return true;
+      }
+      if (emailLimpo && c.email && c.email.trim().toLowerCase() === emailLimpo) return true;
+      if (nomeLimpo.length >= 3 && c.nome && normalizarNome(c.nome) === nomeLimpo) return true;
+      return false;
+    });
+
+    if (!cand) return false;
 
     // Verificar estritamente na relação de convocados ou candidatos_ids do lote
     if (loteAtivo.convocados && loteAtivo.convocados.length > 0) {
       return loteAtivo.convocados.some(
         (cv) =>
-          (cand && cv.candidato_id && cv.candidato_id === cand.id) ||
-          (cand && cv.nome.trim().toLowerCase() === cand.nome.trim().toLowerCase()) ||
-          (nomeLimpo && cv.nome.trim().toLowerCase() === nomeLimpo)
+          (cv.candidato_id && cv.candidato_id === cand.id) ||
+          normalizarNome(cv.nome) === normalizarNome(cand.nome)
       );
     }
 
     if (loteAtivo.candidatos_ids && loteAtivo.candidatos_ids.length > 0) {
       return Boolean(
-        (cand && (loteAtivo.candidatos_ids.includes(cand.id) || loteAtivo.candidatos_ids.includes(cand.nome))) ||
-          (usuario.candidato_id && loteAtivo.candidatos_ids.includes(usuario.candidato_id))
+        loteAtivo.candidatos_ids.includes(cand.id) ||
+          loteAtivo.candidatos_ids.some((idOuNome) => normalizarNome(idOuNome) === normalizarNome(cand.nome))
       );
     }
 
     return false;
-  }, [usuario, isAdmin, loteAtivo, candidatos]);
+  }, [usuario, loteAtivo, candidatos]);
+
+  const temPermissaoAcesso = isCandidatoContempladoNesteLote || isAdmin;
+
+  // Comarcas do lote ativo (ou fallback para COMARCAS_RS se não houver comarcas configuradas)
+  const comarcasDoLote = useMemo<Comarca[]>(() => {
+    if (loteAtivo && loteAtivo.comarcas && loteAtivo.comarcas.length > 0) {
+      return loteAtivo.comarcas.map((c, idx) => {
+        const ref = COMARCAS_RS.find((r) => r.nome.toLowerCase() === c.nome.toLowerCase());
+        return {
+          id: ref?.id ?? idx + 1000,
+          nome: c.nome,
+          regiao: ref?.regiao || 'Metropolitana',
+          vagas_total: c.vagas,
+        };
+      });
+    }
+    return COMARCAS_RS;
+  }, [loteAtivo]);
 
   // Filtrar os candidatos contemplados neste lote para a simulação
   const candidatosContempladosNoLote = useMemo(() => {
@@ -105,13 +192,15 @@ export const SimuladorLotes: React.FC<SimuladorLotesProps> = ({
         loteAtivo.convocados!.some(
           (cv) =>
             (cv.candidato_id && cv.candidato_id === c.id) ||
-            cv.nome.trim().toLowerCase() === c.nome.trim().toLowerCase()
+            normalizarNome(cv.nome) === normalizarNome(c.nome)
         )
       );
     }
     if (loteAtivo.candidatos_ids && loteAtivo.candidatos_ids.length > 0) {
       return candidatos.filter(
-        (c) => loteAtivo.candidatos_ids.includes(c.id) || loteAtivo.candidatos_ids.includes(c.nome)
+        (c) =>
+          loteAtivo.candidatos_ids.includes(c.id) ||
+          loteAtivo.candidatos_ids.some((idOuNome) => normalizarNome(idOuNome) === normalizarNome(c.nome))
       );
     }
     return [];
@@ -119,17 +208,26 @@ export const SimuladorLotes: React.FC<SimuladorLotesProps> = ({
 
   // Executa Simulação em Tempo Real apenas com os candidatos contemplados no lote
   const simulacao = useMemo(() => {
-    return lotesStore.simularLotacao(candidatosContempladosNoLote, COMARCAS_RS);
-  }, [candidatosContempladosNoLote]);
+    return lotesStore.simularLotacao(candidatosContempladosNoLote, comarcasDoLote);
+  }, [candidatosContempladosNoLote, comarcasDoLote]);
 
   // Candidato Logado
   const candidatoLogado = useMemo<Candidato | null>(() => {
     if (!usuario) return null;
-    const match = candidatos.find(
-      (c) =>
-        (c.email && usuario.email && c.email.toLowerCase() === usuario.email.toLowerCase()) ||
-        (usuario.candidato_id && c.id === usuario.candidato_id)
-    );
+    const cpfLimpo = usuario.cpf ? usuario.cpf.replace(/\D/g, '') : '';
+    const nomeLimpo = normalizarNome(usuario.nome);
+    const emailLimpo = usuario.email ? usuario.email.trim().toLowerCase() : '';
+
+    const match = candidatos.find((c) => {
+      if (usuario.candidato_id && c.id && c.id === usuario.candidato_id) return true;
+      if (cpfLimpo.length >= 6 && c.cpf) {
+        const cpfCandLimpo = c.cpf.replace(/\D/g, '');
+        if (cpfCandLimpo.length >= 6 && cpfCandLimpo === cpfLimpo) return true;
+      }
+      if (emailLimpo && c.email && c.email.trim().toLowerCase() === emailLimpo) return true;
+      if (nomeLimpo.length >= 3 && c.nome && normalizarNome(c.nome) === nomeLimpo) return true;
+      return false;
+    });
     if (match) return match;
 
     const novoCandidato: Candidato = {
@@ -144,8 +242,8 @@ export const SimuladorLotes: React.FC<SimuladorLotesProps> = ({
       intencao: 'Sim',
       status: 'Aguardando',
       lotacao_atual: '',
-      comarca_desejada_1: 'Porto Alegre',
-      escolhas_comarcas: ['Porto Alegre', 'Canoas', 'São Leopoldo'],
+      comarca_desejada_1: comarcasDoLote[0]?.nome || 'Porto Alegre',
+      escolhas_comarcas: comarcasDoLote.slice(0, 3).map((c) => c.nome),
       fg_cc: {
         possui: false,
         registro_funcional: '',
@@ -155,7 +253,7 @@ export const SimuladorLotes: React.FC<SimuladorLotesProps> = ({
       },
     };
     return novoCandidato;
-  }, [usuario, candidatos]);
+  }, [usuario, candidatos, comarcasDoLote]);
 
   // Form de Manifestação do Candidato
   const [intencao, setIntencao] = useState<Candidato['intencao']>(
@@ -173,7 +271,7 @@ export const SimuladorLotes: React.FC<SimuladorLotesProps> = ({
 
   // Minhas escolhas de comarcas
   const [escolhasComarcas, setEscolhasComarcas] = useState<string[]>(() => {
-    return candidatoLogado?.escolhas_comarcas || ['Porto Alegre', 'Canoas', 'São Leopoldo'];
+    return candidatoLogado?.escolhas_comarcas || comarcasDoLote.slice(0, 3).map((c) => c.nome);
   });
 
   useEffect(() => {
@@ -202,13 +300,13 @@ export const SimuladorLotes: React.FC<SimuladorLotesProps> = ({
   // Filtro Comarcas
   const [buscaComarcaDisponivel, setBuscaComarcaDisponivel] = useState('');
   const comarcasDisponiveis = useMemo(() => {
-    return COMARCAS_RS.filter(
+    return comarcasDoLote.filter(
       (c) =>
         !escolhasComarcas.includes(c.nome) &&
         (!buscaComarcaDisponivel.trim() ||
           c.nome.toLowerCase().includes(buscaComarcaDisponivel.toLowerCase()))
     );
-  }, [escolhasComarcas, buscaComarcaDisponivel]);
+  }, [comarcasDoLote, escolhasComarcas, buscaComarcaDisponivel]);
 
   // Toast
   const [toastMsg, setToastMsg] = useState<string | null>(null);
@@ -240,8 +338,8 @@ export const SimuladorLotes: React.FC<SimuladorLotesProps> = ({
       },
     };
 
-    lotesStore.salvarCandidato(concursoId, cargoId, atualizado);
-    setCandidatos(lotesStore.getCandidatos(concursoId, cargoId));
+    lotesStore.salvarCandidato(concursoEfetivoId, cargoEfetivoId, atualizado);
+    setCandidatos(lotesStore.getCandidatos(concursoEfetivoId, cargoEfetivoId));
     showToast('Manifestação e escolhas de comarca salvas com sucesso!');
   };
 
@@ -260,10 +358,18 @@ export const SimuladorLotes: React.FC<SimuladorLotesProps> = ({
   const [colunasImpressao, setColunasImpressao] = useState<1 | 2 | 3 | 4 | 5>(3);
 
   // Admin Controles
-  const [loteTravado, setLoteTravado] = useState(loteAtivo.travado);
-  const [rankingVisivel, setRankingVisivel] = useState(loteAtivo.is_ranking_visible);
+  const [loteTravado, setLoteTravado] = useState(Boolean(loteAtivo?.travado));
+  const [rankingVisivel, setRankingVisivel] = useState(Boolean(loteAtivo?.is_ranking_visible));
+
+  useEffect(() => {
+    if (loteAtivo) {
+      setLoteTravado(Boolean(loteAtivo.travado));
+      setRankingVisivel(Boolean(loteAtivo.is_ranking_visible));
+    }
+  }, [loteAtivo]);
 
   const toggleTravarLote = () => {
+    if (!loteAtivo) return;
     const novoTravado = !loteTravado;
     setLoteTravado(novoTravado);
     loteAtivo.travado = novoTravado;
@@ -272,6 +378,7 @@ export const SimuladorLotes: React.FC<SimuladorLotesProps> = ({
   };
 
   const toggleRankingVisivel = () => {
+    if (!loteAtivo) return;
     const novoVisivel = !rankingVisivel;
     setRankingVisivel(novoVisivel);
     loteAtivo.is_ranking_visible = novoVisivel;
@@ -293,32 +400,12 @@ export const SimuladorLotes: React.FC<SimuladorLotesProps> = ({
 
     const ws = XLSX.utils.json_to_sheet(dados);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Simulação Lote TJRS');
-    XLSX.writeFile(wb, 'CERTAM_Simulacao_Lote_TJRS.xlsx');
+    XLSX.utils.book_append_sheet(wb, ws, 'Simulação Lote');
+    XLSX.writeFile(wb, `CERTAM_Simulacao_${(loteAtivo?.nome || 'Lote').replace(/\s+/g, '_')}.xlsx`);
     showToast('Planilha Excel exportada com sucesso!');
   };
 
-  // Restrição de Acesso: apenas candidatos homologados ou administradores
-  const isAprovadoNesteConcurso = useMemo(() => {
-    if (isAdmin) return true;
-    if (!usuario) return false;
-
-    const match = candidatos.find(
-      (c) =>
-        (usuario.email && c.email?.toLowerCase() === usuario.email.toLowerCase()) ||
-        (usuario.candidato_id && c.id === usuario.candidato_id) ||
-        (usuario.cpf && c.cpf && c.cpf.replace(/\D/g, '') === usuario.cpf.replace(/\D/g, '')) ||
-        (usuario.nome && c.nome.trim().toLowerCase() === usuario.nome.trim().toLowerCase())
-    );
-    if (match) return true;
-
-    if (usuario.concursos_inscritos?.some((ci) => ci.concurso_id === concursoId)) return true;
-    if (usuario.outros_concursos?.some((oc) => oc.concurso_id === concursoId || oc.concurso_nome?.toLowerCase().includes('tjrs'))) return true;
-
-    return false;
-  }, [usuario, isAdmin, candidatos, concursoId]);
-
-  if (!isContempladoNesteLote) {
+  if (!loteAtivo || !temPermissaoAcesso) {
     return (
       <div className="max-w-xl mx-auto my-12 p-8 bg-white rounded-3xl shadow-xl border border-slate-200 text-center space-y-5">
         <div className="w-16 h-16 rounded-2xl bg-amber-500/10 text-amber-600 flex items-center justify-center mx-auto">
@@ -330,7 +417,7 @@ export const SimuladorLotes: React.FC<SimuladorLotesProps> = ({
             Acesso Restrito ao Lote
           </span>
           <h2 className="text-xl sm:text-2xl font-bold font-serif text-slate-900">
-            {loteAtivo?.numero_lote ? `Página do Lote ${loteAtivo.numero_lote}` : loteAtivo?.nome}
+            {loteAtivo?.numero_lote ? `Página do Lote ${loteAtivo.numero_lote}` : loteAtivo?.nome || 'Lote de Convocação'}
           </h2>
           <p className="text-xs sm:text-sm text-slate-600 max-w-md mx-auto leading-relaxed">
             Esta página e o formulário de manifestação de lotação são exclusivos para os candidatos convocados neste lote de convocação. Seu perfil ou classificação atual não consta na lista de convocados deste lote específico.
@@ -340,7 +427,7 @@ export const SimuladorLotes: React.FC<SimuladorLotesProps> = ({
         {!usuario ? (
           <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
             <p className="text-xs text-slate-500">
-              Faça login com sua conta Google para verificar sua aprovação:
+              Faça login com sua conta Google para verificar sua convocação neste lote:
             </p>
             <button
               type="button"
@@ -354,14 +441,14 @@ export const SimuladorLotes: React.FC<SimuladorLotesProps> = ({
           <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 text-xs text-slate-600">
             Conta conectada: <strong className="text-slate-900">{usuario.email}</strong>.
             <br />
-            Se você foi aprovado e sua vinculação ainda não consta no sistema, acione a moderação no botão abaixo.
+            Apenas os candidatos cadastrados na lista de convocados deste lote (e administradores) possuem acesso a esta página.
           </div>
         )}
 
         <div className="pt-2">
           <button
             type="button"
-            onClick={onVoltar || (() => onNavigate('concurso_geral', { concursoId }))}
+            onClick={onVoltar || (() => onNavigate('concurso', { concursoId: concursoEfetivoId, cargoId: cargoEfetivoId, tab: 'lotes' }))}
             className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs cursor-pointer transition-all"
           >
             <ArrowLeft className="w-4 h-4" />
@@ -378,7 +465,7 @@ export const SimuladorLotes: React.FC<SimuladorLotesProps> = ({
       <div className="flex items-center justify-between">
         <button
           type="button"
-          onClick={onVoltar || (() => onNavigate('concurso_geral', { concursoId }))}
+          onClick={onVoltar || (() => onNavigate('concurso', { concursoId: concursoEfetivoId, cargoId: cargoEfetivoId, tab: 'lotes' }))}
           className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-white hover:bg-slate-100 text-slate-700 font-semibold text-xs border border-slate-200 shadow-xs cursor-pointer transition-all"
         >
           <ArrowLeft className="w-3.5 h-3.5" />
@@ -386,9 +473,24 @@ export const SimuladorLotes: React.FC<SimuladorLotesProps> = ({
         </button>
 
         <span className="text-2xs text-slate-400 font-mono">
-          CERTAM • Simulador de Lotes e Audiência Pública
+          CERTAM • Página do Lote e Audiência Pública
         </span>
       </div>
+
+      {/* Aviso quando acesso foi liberado por ser Admin (Item 6) */}
+      {isAdmin && !isCandidatoContempladoNesteLote && (
+        <div className="bg-amber-50 border border-amber-300 rounded-2xl px-4 py-3 flex items-center justify-between gap-3 text-amber-950 shadow-2xs">
+          <div className="flex items-center gap-2.5 text-xs">
+            <Shield className="w-4 h-4 text-amber-700 shrink-0" />
+            <span>
+              <strong>Acesso liberado por ser Administrador:</strong> você está visualizando a página deste lote com permissão administrativa (seu usuário não consta como candidato contemplado neste lote).
+            </span>
+          </div>
+          <span className="px-2.5 py-0.5 rounded-full bg-amber-200/80 text-amber-900 font-mono font-bold text-[10px] uppercase shrink-0">
+            Modo Admin
+          </span>
+        </div>
+      )}
 
       {/* Toast flutuante */}
       {toastMsg && (
@@ -403,26 +505,28 @@ export const SimuladorLotes: React.FC<SimuladorLotesProps> = ({
         <div>
           <div className="flex items-center gap-2 mb-1.5 flex-wrap">
             <span className="px-2.5 py-0.5 rounded-lg bg-teal-500/20 text-[#2DD4AA] border border-teal-500/30 font-mono font-bold text-xs uppercase">
-              TJRS • Simulação de Lotação
+              Lote de Convocação • {candidatosContempladosNoLote.length} Convocados
             </span>
             <span className="px-2 py-0.5 rounded text-[11px] font-mono font-bold bg-emerald-500/20 text-emerald-300">
               {loteTravado ? '🔒 TRAVADO' : '🟢 ATIVO EM TEMPO REAL'}
             </span>
-            <select
-              value={loteAtivoId}
-              onChange={(e) => setLoteAtivoId(e.target.value)}
-              className="bg-[#0C2640] border border-teal-500/30 text-white font-semibold text-xs px-2.5 py-1 rounded-lg focus:outline-none cursor-pointer"
-            >
-              {lotes.map((l) => (
-                <option key={l.id} value={l.id}>
-                  {l.nome}
-                </option>
-              ))}
-            </select>
+            {lotesDoCargo.length > 1 && (
+              <select
+                value={loteAtivo.id}
+                onChange={(e) => setLoteAtivoId(e.target.value)}
+                className="bg-[#0C2640] border border-teal-500/30 text-white font-semibold text-xs px-2.5 py-1 rounded-lg focus:outline-none cursor-pointer"
+              >
+                {lotesDoCargo.map((l) => (
+                  <option key={l.id} value={l.id}>
+                    {l.nome}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
           <h2 className="text-xl sm:text-2xl font-bold font-serif">{loteAtivo.nome}</h2>
           <p className="text-xs text-slate-300 mt-1">
-            {simulacao.totalVagasOfertadas} vagas ofertadas em {COMARCAS_RS.length} comarcas •{' '}
+            {simulacao.totalVagasOfertadas} vagas ofertadas em {comarcasDoLote.length} lotações •{' '}
             {simulacao.totalAssumem} manifestações ativas
           </p>
         </div>

@@ -19,11 +19,11 @@ export const auditStore = {
     return [];
   },
 
-  salvarAuditRequests(list: PerfilAuditRequest[]) {
+  salvarAuditRequests(list: PerfilAuditRequest[], forceReplace = false) {
     try {
       const jsonStr = JSON.stringify(list);
       localStorage.setItem(AUDIT_STORAGE_KEY, jsonStr);
-      cloudSync.pushKey(AUDIT_STORAGE_KEY, jsonStr, true);
+      cloudSync.pushKey(AUDIT_STORAGE_KEY, jsonStr, forceReplace);
       window.dispatchEvent(new CustomEvent('certam_audit_updated', { detail: list }));
     } catch {
       // ignore
@@ -47,7 +47,7 @@ export const auditStore = {
       alteracoes: dados.alteracoes,
     };
     list.unshift(nova);
-    this.salvarAuditRequests(list);
+    this.salvarAuditRequests(list, false);
     return nova;
   },
 
@@ -57,7 +57,7 @@ export const auditStore = {
     if (!item) return null;
     item.status = 'aprovado';
     item.data_resposta = new Date().toLocaleString('pt-BR');
-    this.salvarAuditRequests(list);
+    this.salvarAuditRequests(list, false);
     return item;
   },
 
@@ -68,7 +68,7 @@ export const auditStore = {
     item.status = 'rejeitado';
     item.motivo_rejeicao = motivo || 'Dados divergentes do cadastro oficial.';
     item.data_resposta = new Date().toLocaleString('pt-BR');
-    this.salvarAuditRequests(list);
+    this.salvarAuditRequests(list, false);
     return item;
   },
 
@@ -89,11 +89,11 @@ export const auditStore = {
     return [];
   },
 
-  salvarVinculacoes(list: SolicitacaoVinculacao[]) {
+  salvarVinculacoes(list: SolicitacaoVinculacao[], forceReplace = false) {
     try {
       const jsonStr = JSON.stringify(list);
       localStorage.setItem(VINCULACOES_STORAGE_KEY, jsonStr);
-      cloudSync.pushKey(VINCULACOES_STORAGE_KEY, jsonStr, true);
+      cloudSync.pushKey(VINCULACOES_STORAGE_KEY, jsonStr, forceReplace);
       window.dispatchEvent(new CustomEvent('certam_vinculacoes_updated', { detail: list }));
     } catch {
       // ignore

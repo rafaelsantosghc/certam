@@ -49,7 +49,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
       setConcursos(certamStore.getConcursos());
     };
     window.addEventListener('certam_concursos_updated', handleUpdate);
-    return () => window.removeEventListener('certam_concursos_updated', handleUpdate);
+    window.addEventListener('storage', handleUpdate);
+    return () => {
+      window.removeEventListener('certam_concursos_updated', handleUpdate);
+      window.removeEventListener('storage', handleUpdate);
+    };
   }, []);
 
   const handleLinkClick = (view: string, params?: { concursoId?: string; cargoId?: string; tab?: string }) => {

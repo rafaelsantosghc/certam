@@ -5,6 +5,7 @@ import { faqStore } from '../store/faqStore';
 import { auditStore } from '../store/auditStore';
 import { contactStore } from '../store/contactStore';
 import { notificationStore } from '../store/notificationStore';
+import { cloudSync } from '../store/cloudSync';
 import { useAuth } from '../store/authContext';
 import {
   Concurso,
@@ -138,12 +139,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     const handleNotif = () => setNotificacoes(notificationStore.getNotificacoes());
     const handleUsers = () => setUsuariosGerais(userRegistryStore.getAllUsers());
 
+    const handleConcursos = () => setConcursos(certamStore.getConcursos());
+    const handleLotes = () => setLotesLista(lotesStore.getLotes());
+
     const handleStorage = () => {
       setAuditRequests(auditStore.getAuditRequests());
       setVinculacoes(auditStore.getVinculacoes());
       setContatos(contactStore.getMensagens());
       setNotificacoes(notificationStore.getNotificacoes());
       setConcursos(certamStore.getConcursos());
+      setLotesLista(lotesStore.getLotes());
       setUsuariosGerais(userRegistryStore.getAllUsers());
     };
 
@@ -152,6 +157,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     window.addEventListener('certam_contact_updated', handleCont);
     window.addEventListener('certam_notifications_updated', handleNotif);
     window.addEventListener('certam_users_updated', handleUsers);
+    window.addEventListener('certam_concursos_updated', handleConcursos);
+    window.addEventListener('certam_lotes_updated', handleLotes);
     window.addEventListener('storage', handleStorage);
 
     return () => {
@@ -160,17 +167,25 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       window.removeEventListener('certam_contact_updated', handleCont);
       window.removeEventListener('certam_notifications_updated', handleNotif);
       window.removeEventListener('certam_users_updated', handleUsers);
+      window.removeEventListener('certam_concursos_updated', handleConcursos);
+      window.removeEventListener('certam_lotes_updated', handleLotes);
       window.removeEventListener('storage', handleStorage);
     };
   }, []);
 
-  // Recarregar dados sempre que o admin trocar de aba no painel
+  // Recarregar dados e sincronizar com servidor sempre que o admin trocar de aba no painel (Item 2 e Item 5)
   useEffect(() => {
-    setAuditRequests(auditStore.getAuditRequests());
-    setVinculacoes(auditStore.getVinculacoes());
-    setContatos(contactStore.getMensagens());
-    setNotificacoes(notificationStore.getNotificacoes());
-    setConcursos(certamStore.getConcursos());
+    const syncAndRefresh = async () => {
+      await cloudSync.pullFromServer();
+      setAuditRequests(auditStore.getAuditRequests());
+      setVinculacoes(auditStore.getVinculacoes());
+      setContatos(contactStore.getMensagens());
+      setNotificacoes(notificationStore.getNotificacoes());
+      setConcursos(certamStore.getConcursos());
+      setLotesLista(lotesStore.getLotes());
+      setUsuariosGerais(userRegistryStore.getAllUsers());
+    };
+    syncAndRefresh();
   }, [abaAdmin]);
 
   // Modais e Estados de FAQ
@@ -347,6 +362,56 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       }
     };
 
+    // Pré-classificar os cabeçalhos das colunas apenas UMA vez fora do loop de linhas (Item 8: Alta Performance)
+    const sampleCols = Object.keys(rows[0] || {});
+    const colunasPcd: string[] = [];
+    const colunasPpp: string[] = [];
+    const colunasCotaExtra: string[] = [];
+
+    sampleCols.forEach((colKey) => {
+      const keyNorm = colKey
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '');
+      if (keyNorm.includes('pcd') || keyNorm.includes('defic')) {
+        colunasPcd.push(colKey);
+      }
+      if (
+        keyNorm.includes('ppp') ||
+        keyNorm.includes('negro') ||
+        keyNorm.includes('pardo') ||
+        /\bcn\b/.test(keyNorm)
+      ) {
+        colunasPpp.push(colKey);
+      }
+      if (
+        colKey !== mapa.cota &&
+        (keyNorm.includes('cota') ||
+          keyNorm.includes('modalidade') ||
+          keyNorm.includes('reserva') ||
+          keyNorm.includes('lista') ||
+          keyNorm.includes('concorrencia'))
+      ) {
+        colunasCotaExtra.push(colKey);
+      }
+    });
+
+    const isPositiveCell = (valStr: string): boolean => {
+      if (!valStr) return false;
+      const v = valStr.toLowerCase().trim();
+      return (
+        v !== 'nao' &&
+        v !== 'não' &&
+        v !== 'n' &&
+        v !== '-' &&
+        v !== '0' &&
+        v !== 'false' &&
+        v !== 'ampla'
+      );
+    };
+
+    const tsBase = Date.now().toString(36);
+
     const parsedRaw: Partial<Candidato>[] = rows.map((row, idx) => {
       const getVal = (colName: string) =>
         colName && row[colName] !== undefined ? String(row[colName]).trim() : '';
@@ -366,65 +431,32 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       const email = getVal(mapa.email).toLowerCase() || undefined;
       const whatsapp = getVal(mapa.whatsapp) || undefined;
 
-      // Item 8: Detectar múltiplas cotas (PCD e PPP simultaneamente) tanto na coluna mapeada quanto em colunas auxiliares de cota da planilha
+      // Item 8: Detectar múltiplas cotas (PCD e PPP simultaneamente) em O(1) usando as colunas pré-classificadas
       const setCotas = new Set<Candidato['cota']>(['Ampla']);
       extrairCotasDeTexto(rawCota, setCotas);
 
-      // Inspecionar também outras colunas da linha cujo nome mencione cota/pcd/ppp/negro/deficiência/modalidade/lista
-      Object.keys(row || {}).forEach((colKey) => {
-        const keyNorm = colKey
-          .toLowerCase()
-          .normalize('NFD')
-          .replace(/[\u0300-\u036f]/g, '');
-        const valStr = String(row[colKey] ?? '').trim();
-        if (!valStr) return;
-        const valNorm = valStr
-          .toLowerCase()
-          .normalize('NFD')
-          .replace(/[\u0300-\u036f]/g, '');
+      for (let i = 0; i < colunasPcd.length; i++) {
+        const valStr = String(row[colunasPcd[i]] ?? '').trim();
+        if (isPositiveCell(valStr)) {
+          setCotas.add('PCD');
+          break;
+        }
+      }
 
-        // Se o cabeçalho da coluna é específico de PCD (ex: "PCD", "Cota PCD", "Classif PCD") e a célula tem valor positivo ("Sim", "S", "X", número de posição, "PCD")
-        if (keyNorm.includes('pcd') || keyNorm.includes('defic')) {
-          if (
-            valNorm !== 'nao' &&
-            valNorm !== 'n' &&
-            valNorm !== '-' &&
-            valNorm !== '0' &&
-            valNorm !== 'false' &&
-            valNorm !== 'ampla'
-          ) {
-            setCotas.add('PCD');
-          }
+      for (let i = 0; i < colunasPpp.length; i++) {
+        const valStr = String(row[colunasPpp[i]] ?? '').trim();
+        if (isPositiveCell(valStr)) {
+          setCotas.add('PPP');
+          break;
         }
-        // Se o cabeçalho da coluna é específico de PPP/Negros (ex: "PPP", "CN", "Cota Negros", "Classif PPP") e a célula tem valor positivo
-        if (
-          keyNorm.includes('ppp') ||
-          keyNorm.includes('negro') ||
-          keyNorm.includes('pardo') ||
-          /\bcn\b/.test(keyNorm)
-        ) {
-          if (
-            valNorm !== 'nao' &&
-            valNorm !== 'n' &&
-            valNorm !== '-' &&
-            valNorm !== '0' &&
-            valNorm !== 'false' &&
-            valNorm !== 'ampla'
-          ) {
-            setCotas.add('PPP');
-          }
-        }
-        // Se o cabeçalho menciona cota/modalidade/reserva/lista, extrai cotas do texto da célula
-        if (
-          keyNorm.includes('cota') ||
-          keyNorm.includes('modalidade') ||
-          keyNorm.includes('reserva') ||
-          keyNorm.includes('lista') ||
-          keyNorm.includes('concorrencia')
-        ) {
+      }
+
+      for (let i = 0; i < colunasCotaExtra.length; i++) {
+        const valStr = String(row[colunasCotaExtra[i]] ?? '').trim();
+        if (valStr) {
           extrairCotasDeTexto(valStr, setCotas);
         }
-      });
+      }
 
       const cotasIdentificadas = Array.from(setCotas);
       const cotaPrincipal: Candidato['cota'] = cotasIdentificadas.includes('PCD')
@@ -612,49 +644,73 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   };
 
   const handleConfirmarImportacao = () => {
-    if (previewPlanilha.length === 0) return;
+    if (previewPlanilha.length === 0 || importando) return;
     setImportando(true);
 
-    const candidatosCompletos: Candidato[] = previewPlanilha.map((p, idx) => ({
-      id: p.id || `cand-${importConcursoId}-${importCargoId}-${idx + 1}`,
-      concurso_id: importConcursoId,
-      cargo_id: importCargoId,
-      posicao: p.posicao || idx + 1,
-      nome: p.nome || `Candidato ${idx + 1}`,
-      cpf: p.cpf,
-      nota_final: p.nota_final ?? 0,
-      cota: p.cota || 'Ampla',
-      cotas: p.cotas && p.cotas.length > 0 ? p.cotas : [p.cota || 'Ampla'],
-      data_convocacao: p.data_convocacao,
-      data_nomeacao: p.data_nomeacao,
-      comarca_definitiva: p.comarca_definitiva,
-      status: p.status || 'Aguardando Convocação',
-      intencao: p.intencao || 'Sim',
-      email: p.email,
-      whatsapp: p.whatsapp,
-      escolhas_comarcas: p.escolhas_comarcas || (p.comarca_definitiva ? [p.comarca_definitiva] : []),
-    }));
+    // Executar em micro-task assíncrona para permitir que a interface renderize o estado "Importando..." sem travar (Item 8)
+    window.setTimeout(() => {
+      try {
+        const candidatosCompletos: Candidato[] = previewPlanilha.map((p, idx) => ({
+          id: p.id || `cand-${importConcursoId}-${importCargoId}-${idx + 1}`,
+          concurso_id: importConcursoId,
+          cargo_id: importCargoId,
+          posicao: p.posicao || idx + 1,
+          nome: p.nome || `Candidato ${idx + 1}`,
+          cpf: p.cpf,
+          nota_final: p.nota_final ?? 0,
+          cota: p.cota || 'Ampla',
+          cotas: p.cotas && p.cotas.length > 0 ? p.cotas : [p.cota || 'Ampla'],
+          data_convocacao: p.data_convocacao,
+          data_nomeacao: p.data_nomeacao,
+          comarca_definitiva: p.comarca_definitiva,
+          status: p.status || 'Aguardando Convocação',
+          intencao: p.intencao || 'Sim',
+          email: p.email,
+          whatsapp: p.whatsapp,
+          escolhas_comarcas: p.escolhas_comarcas || (p.comarca_definitiva ? [p.comarca_definitiva] : []),
+        }));
 
-    // 1. Salvar lista de classificação do cargo
-    lotesStore.salvarCandidatos(importConcursoId, importCargoId, candidatosCompletos);
+        const concObj = concursos.find((c) => c.id === importConcursoId);
+        const cargoObj = concObj?.cargos?.find((cg) => cg.id === importCargoId);
 
-    // 2. Sincronizar todos os candidatos com o Cadastro Geral de Usuários (Item 18)
-    candidatosCompletos.forEach((cand) => {
-      userRegistryStore.cadastrarOuSincronizarCandidatoImportado(cand, importConcursoId, importCargoId);
+        // 1. Salvar lista de classificação do cargo em lote
+        lotesStore.salvarCandidatos(importConcursoId, importCargoId, candidatosCompletos, true);
 
-      // Se informou lotação definitiva, adiciona ao catálogo do concurso
-      if (cand.comarca_definitiva) {
-        certamStore.adicionarLotacaoAoCatalogo(importConcursoId, cand.comarca_definitiva);
+        // 2. Sincronizar todos os candidatos com o Cadastro Geral de Usuários em uma única operação em lote O(N) (Item 8 & Item 18)
+        userRegistryStore.cadastrarOuSincronizarCandidatosEmLote(
+          candidatosCompletos,
+          importConcursoId,
+          importCargoId,
+          concObj?.orgao,
+          cargoObj?.nome
+        );
+
+        // 3. Se informou lotação definitiva, adiciona todas de uma só vez ao catálogo do concurso
+        const lotacoesUnicas = Array.from(
+          new Set(
+            candidatosCompletos
+              .map((c) => c.comarca_definitiva || '')
+              .filter((l) => l.trim().length > 0)
+          )
+        );
+        if (lotacoesUnicas.length > 0) {
+          certamStore.adicionarLotacoesAoCatalogoEmLote(importConcursoId, lotacoesUnicas);
+        }
+
+        setUsuariosGerais(userRegistryStore.getAllUsers());
+        setImportando(false);
+        showToast(
+          `${candidatosCompletos.length} candidatos importados para o cargo e sincronizados com o Cadastro Geral!`
+        );
+        setPreviewPlanilha([]);
+        setLinhasBrutasPlanilha([]);
+        setNomeArquivo('');
+      } catch (err) {
+        console.error('Erro na importação em lote:', err);
+        setImportando(false);
+        setErroImportacao('Ocorreu um erro ao finalizar a gravação dos candidatos.');
       }
-    });
-
-    setImportando(false);
-    showToast(
-      `${candidatosCompletos.length} candidatos importados para o cargo e sincronizados com o Cadastro Geral!`
-    );
-    setPreviewPlanilha([]);
-    setLinhasBrutasPlanilha([]);
-    setNomeArquivo('');
+    }, 20);
   };
 
   // Toast

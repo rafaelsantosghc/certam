@@ -72,9 +72,18 @@ export const ModalEditarLote: React.FC<ModalEditarLoteProps> = ({
   const [seletorListaCargoAberto, setSeletorListaCargoAberto] = useState(true);
   const [textoColadoConvocados, setTextoColadoConvocados] = useState('');
   const [buscaCandCargo, setBuscaCandCargo] = useState('');
-  const [faixaPosInicio, setFaixaPosInicio] = useState<number>(1);
-  const [faixaPosFim, setFaixaPosFim] = useState<number>(10);
+  const [filtroCotaCargo, setFiltroCotaCargo] = useState<string>('todas');
+  const [filtroSelecaoCargo, setFiltroSelecaoCargo] = useState<'todos' | 'selecionados' | 'nao_selecionados'>('todos');
+  const [limiteListaCargo, setLimiteListaCargo] = useState<100 | 250 | 500 | 'todos'>(100);
   const [papelPadraoFaixa, setPapelPadraoFaixa] = useState<'Titular' | 'Suplente'>('Titular');
+
+  // Estado de questionamento quando candidatos colados do Excel não existem na lista de classificação do cargo (Item 6)
+  const [questionamentoNaoEncontrados, setQuestionamentoNaoEncontrados] = useState<{
+    substituir: boolean;
+    todos: CandidatoConvocadoLote[];
+    apenasReconhecidos: CandidatoConvocadoLote[];
+    naoEncontrados: CandidatoConvocadoLote[];
+  } | null>(null);
 
   const candidatosDoCargo = React.useMemo(
     () => lotesStore.getCandidatos(concursoId, cargoId),
@@ -125,6 +134,7 @@ export const ModalEditarLote: React.FC<ModalEditarLoteProps> = ({
     setTextoColadoConvocados('');
     setModalImportarComarcasAberto(false);
     setModalImportarConvocadosAberto(false);
+    setQuestionamentoNaoEncontrados(null);
     setErro(null);
     setSucessoMsg(null);
     setAbaInterna('dados_comarcas');
@@ -232,8 +242,47 @@ export const ModalEditarLote: React.FC<ModalEditarLoteProps> = ({
     setErro(null);
   };
 
+  const normalizarNomeBusca = (str: string = ''): string =>
+    str
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/\s+/g, ' ')
+      .trim();
+
+  const concluirImportacaoConvocados = (listaFinal: CandidatoConvocadoLote[], substituir: boolean) => {
+    const ordenados = [...listaFinal].sort((a, b) => a.ordem_nomeacao - b.ordem_nomeacao);
+    if (substituir) {
+      setConvocados(ordenados);
+    } else {
+      setConvocados((prev) => {
+        const copy = [...prev];
+        ordenados.forEach((nv) => {
+          const idxExistente = copy.findIndex(
+            (cv) =>
+              (cv.candidato_id && nv.candidato_id && cv.candidato_id === nv.candidato_id) ||
+              normalizarNomeBusca(cv.nome) === normalizarNomeBusca(nv.nome)
+          );
+          if (idxExistente >= 0) {
+            copy[idxExistente] = nv;
+          } else {
+            copy.push(nv);
+          }
+        });
+        copy.sort((a, b) => a.ordem_nomeacao - b.ordem_nomeacao);
+        return copy;
+      });
+    }
+
+    setQuestionamentoNaoEncontrados(null);
+    setTextoColadoConvocados('');
+    setModalImportarConvocadosAberto(false);
+    setSucessoMsg(`Sucesso! ${ordenados.length} candidatos convocados aplicados ao lote.`);
+    setErro(null);
+  };
+
   // --------------------------------------------------------------------------
-  // PARSER DE CANDIDATOS CONVOCADOS COLADOS DO EXCEL
+  // PARSER DE CANDIDATOS CONVOCADOS COLADOS DO EXCEL (COM VALIDAÇÃO NA LISTA DO CARGO)
   // --------------------------------------------------------------------------
   const handleProcessarImportacaoConvocados = (substituir: boolean) => {
     if (!textoColadoConvocados.trim()) {
@@ -243,13 +292,15 @@ export const ModalEditarLote: React.FC<ModalEditarLoteProps> = ({
 
     const linhas = textoColadoConvocados.split(/\r?\n/).filter((l) => l.trim().length > 0);
     const novosConvocados: CandidatoConvocadoLote[] = [];
+    const apenasReconhecidos: CandidatoConvocadoLote[] = [];
+    const naoEncontrados: CandidatoConvocadoLote[] = [];
 
     let seqAuto = 1;
     for (const linha of linhas) {
       const linhaLower = linha.toLowerCase();
       // Ignorar cabeçalhos
       if (
-        linhaLower.includes('ordem') ||
+        (linhaLower.includes('ordem') && linhaLower.includes('nome')) ||
         linhaLower.includes('nomeação') ||
         (linhaLower.includes('candidato') && linhaLower.includes('vaga'))
       ) {
@@ -261,74 +312,86 @@ export const ModalEditarLote: React.FC<ModalEditarLoteProps> = ({
       if (colunas.length < 2) colunas = linha.split(';');
       if (colunas.length < 2) colunas = linha.split(',');
 
-      if (colunas.length >= 2) {
-        // Identificar colunas: Ordem, Nome, Tipo de Vaga, Titular/Suplente
-        let ordem = parseInt(colunas[0].replace(/\D/g, ''), 10);
-        let nomeCand = '';
-        let tipoVaga = 'Ampla';
-        let papel: 'Titular' | 'Suplente' = 'Titular';
+      let ordem = seqAuto;
+      let nomeCand = '';
+      let tipoVaga = 'Ampla';
+      let papel: 'Titular' | 'Suplente' = 'Titular';
 
-        if (isNaN(ordem)) {
-          // Se a 1ª coluna não for número, assume seqAuto e a 1ª coluna é o nome
+      if (colunas.length >= 2) {
+        const parsedOrdem = parseInt(colunas[0].replace(/\D/g, ''), 10);
+        if (isNaN(parsedOrdem)) {
           ordem = seqAuto++;
           nomeCand = colunas[0].trim();
           if (colunas[1]) tipoVaga = normalizarCota(colunas[1]);
           if (colunas[2]) papel = colunas[2].toLowerCase().includes('suplente') ? 'Suplente' : 'Titular';
         } else {
+          ordem = parsedOrdem;
           seqAuto = Math.max(seqAuto, ordem + 1);
           nomeCand = colunas[1]?.trim() || '';
 
           const col2 = colunas[2] || '';
           const col3 = colunas[3] || '';
 
-          // Detectar se a coluna 2 é papel ou cota
-          const isCol2Papel = col2.toLowerCase().includes('titular') || col2.toLowerCase().includes('suplente');
+          const isCol2Papel =
+            col2.toLowerCase().includes('titular') || col2.toLowerCase().includes('suplente');
           tipoVaga = normalizarCota(isCol2Papel ? col3 : col2);
 
-          // Detectar Titular / Suplente
           if (col2.toLowerCase().includes('suplente') || col3.toLowerCase().includes('suplente')) {
             papel = 'Suplente';
           } else {
             papel = 'Titular';
           }
         }
+      } else {
+        // Caso o usuário tenha colado apenas 1 coluna com os nomes
+        const textoLimpo = linha.replace(/^\d+[\s.\-–—)]+/, '').trim();
+        nomeCand = textoLimpo;
+        ordem = seqAuto++;
+      }
 
-        if (nomeCand) {
-          const candMatch = candidatosDoCargo.find(
-            (c) => c.nome.trim().toLowerCase() === nomeCand.trim().toLowerCase()
-          );
-          novosConvocados.push({
-            candidato_id: candMatch?.id,
-            ordem_nomeacao: ordem,
-            nome: candMatch?.nome || nomeCand,
-            tipo_vaga: tipoVaga,
-            papel: papel,
-          });
+      if (nomeCand) {
+        const nomeNorm = normalizarNomeBusca(nomeCand);
+        const candMatch = candidatosDoCargo.find(
+          (c) => normalizarNomeBusca(c.nome) === nomeNorm
+        );
+
+        const itemConvocado: CandidatoConvocadoLote = {
+          candidato_id: candMatch?.id,
+          ordem_nomeacao: ordem,
+          nome: candMatch?.nome || nomeCand,
+          tipo_vaga: candMatch && (!colunas[2] || tipoVaga === 'Ampla') ? candMatch.cota || 'Ampla' : tipoVaga,
+          papel: papel,
+        };
+
+        novosConvocados.push(itemConvocado);
+        if (candMatch) {
+          apenasReconhecidos.push(itemConvocado);
+        } else {
+          naoEncontrados.push(itemConvocado);
         }
       }
     }
 
     if (novosConvocados.length === 0) {
-      setErro('Nenhum candidato válido identificado. Certifique-se de copiar as colunas de Ordem, Nome, Tipo de Vaga e Titular/Suplente.');
+      setErro(
+        'Nenhum candidato válido identificado. Certifique-se de copiar as colunas de Ordem, Nome, Tipo de Vaga e Titular/Suplente.'
+      );
       return;
     }
 
-    novosConvocados.sort((a, b) => a.ordem_nomeacao - b.ordem_nomeacao);
-
-    if (substituir) {
-      setConvocados(novosConvocados);
-    } else {
-      setConvocados((prev) => {
-        const todos = [...prev, ...novosConvocados];
-        todos.sort((a, b) => a.ordem_nomeacao - b.ordem_nomeacao);
-        return todos;
+    // Item 6: Questionar caso algum candidato importado via texto não exista na lista de classificação do cargo
+    if (naoEncontrados.length > 0) {
+      setQuestionamentoNaoEncontrados({
+        substituir,
+        todos: novosConvocados,
+        apenasReconhecidos,
+        naoEncontrados,
       });
+      setErro(null);
+      return;
     }
 
-    setTextoColadoConvocados('');
-    setModalImportarConvocadosAberto(false);
-    setSucessoMsg(`Sucesso! ${novosConvocados.length} candidatos convocados importados da planilha.`);
-    setErro(null);
+    concluirImportacaoConvocados(novosConvocados, substituir);
   };
 
   const handleAdicionarComarcaManual = () => {
@@ -356,24 +419,24 @@ export const ModalEditarLote: React.FC<ModalEditarLoteProps> = ({
     setConvocados((prev) => prev.filter((_, idx) => idx !== index));
   };
 
-  const handleToggleCandidatoDaLista = (cand: Candidato, papel: 'Titular' | 'Suplente' = 'Titular') => {
+  const handleToggleCandidatoDaLista = (cand: Candidato, papel: 'Titular' | 'Suplente' = papelPadraoFaixa) => {
     setConvocados((prev) => {
       const jaExiste = prev.some(
         (cv) =>
           (cv.candidato_id && cv.candidato_id === cand.id) ||
-          cv.nome.trim().toLowerCase() === cand.nome.trim().toLowerCase()
+          normalizarNomeBusca(cv.nome) === normalizarNomeBusca(cand.nome)
       );
       if (jaExiste) {
         return prev.filter(
           (cv) =>
             !(
               (cv.candidato_id && cv.candidato_id === cand.id) ||
-              cv.nome.trim().toLowerCase() === cand.nome.trim().toLowerCase()
+              normalizarNomeBusca(cv.nome) === normalizarNomeBusca(cand.nome)
             )
         );
       }
       const proxOrdem = prev.length > 0 ? Math.max(...prev.map((p) => p.ordem_nomeacao || 0)) + 1 : 1;
-      const atualizado = [
+      return [
         ...prev,
         {
           candidato_id: cand.id,
@@ -383,41 +446,7 @@ export const ModalEditarLote: React.FC<ModalEditarLoteProps> = ({
           papel,
         },
       ];
-      return atualizado;
     });
-  };
-
-  const handleAdicionarFaixaClassificacao = () => {
-    const ini = Math.max(1, Number(faixaPosInicio) || 1);
-    const fim = Math.max(ini, Number(faixaPosFim) || ini);
-    const selecionados = candidatosDoCargo.filter((c) => c.posicao >= ini && c.posicao <= fim);
-    if (selecionados.length === 0) {
-      setErro(`Nenhum candidato encontrado entre a ${ini}ª e a ${fim}ª posição.`);
-      return;
-    }
-    setConvocados((prev) => {
-      const copy = [...prev];
-      let proxOrdem = copy.length > 0 ? Math.max(...copy.map((p) => p.ordem_nomeacao || 0)) + 1 : 1;
-      selecionados.forEach((cand) => {
-        const jaExiste = copy.some(
-          (cv) =>
-            (cv.candidato_id && cv.candidato_id === cand.id) ||
-            cv.nome.trim().toLowerCase() === cand.nome.trim().toLowerCase()
-        );
-        if (!jaExiste) {
-          copy.push({
-            candidato_id: cand.id,
-            ordem_nomeacao: proxOrdem++,
-            nome: cand.nome,
-            tipo_vaga: cand.cota || 'Ampla',
-            papel: papelPadraoFaixa,
-          });
-        }
-      });
-      return copy;
-    });
-    setSucessoMsg(`Adicionados candidatos da ${ini}ª à ${fim}ª posição ao lote!`);
-    setErro(null);
   };
 
   const totalVagas = comarcas.reduce((acc, c) => acc + (Number(c.vagas) || 0), 0);
@@ -952,164 +981,348 @@ export const ModalEditarLote: React.FC<ModalEditarLoteProps> = ({
                 </div>
               </div>
 
-              {/* SELETOR INTERATIVO DE CANDIDATOS DA LISTA DE CLASSIFICAÇÃO DO CARGO (Item 6) */}
+              {/* SELETOR MANUAL DIRETO NA LISTA DE CLASSIFICAÇÃO DO CARGO (Item 6) */}
               {seletorListaCargoAberto && (
                 <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                     <div>
                       <span className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
                         <Users className="w-4 h-4 text-teal-700" />
-                        <span>Configurar Candidatos Chamados neste Lote ({candidatosDoCargo.length} aprovados no cargo)</span>
+                        <span>
+                          Lista de Classificação do Cargo ({candidatosDoCargo.length} aprovados cadastrados)
+                        </span>
                       </span>
                       <p className="text-[11px] text-slate-500">
-                        Defina quais aprovados fazem parte deste lote. Apenas os candidatos incluídos abaixo terão acesso liberado à página deste lote.
+                        Selecione manualmente na lista de classificação os candidatos que integram este lote (Ampla e Cotas).
                       </p>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <span className="text-[11px] font-bold text-slate-600">Papel ao selecionar:</span>
+                      <select
+                        value={papelPadraoFaixa}
+                        onChange={(e) => setPapelPadraoFaixa(e.target.value as 'Titular' | 'Suplente')}
+                        className="px-2.5 py-1 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-800"
+                      >
+                        <option value="Titular">Titular</option>
+                        <option value="Suplente">Suplente</option>
+                      </select>
                     </div>
                   </div>
 
-                  {/* Adição rápida por faixa de classificação */}
-                  <div className="flex flex-wrap items-center gap-2 p-2.5 bg-white rounded-xl border border-slate-200">
-                    <span className="text-[11px] font-bold text-slate-700">Adicionar faixa da lista:</span>
-                    <div className="flex items-center gap-1">
-                      <span className="text-[10px] text-slate-400">De</span>
-                      <input
-                        type="number"
-                        min={1}
-                        value={faixaPosInicio}
-                        onChange={(e) => setFaixaPosInicio(parseInt(e.target.value, 10) || 1)}
-                        className="w-16 px-2 py-1 bg-slate-50 border border-slate-300 rounded-lg font-mono font-bold text-center text-xs"
-                      />
-                      <span className="text-[10px] text-slate-400">até</span>
-                      <input
-                        type="number"
-                        min={1}
-                        value={faixaPosFim}
-                        onChange={(e) => setFaixaPosFim(parseInt(e.target.value, 10) || 1)}
-                        className="w-16 px-2 py-1 bg-slate-50 border border-slate-300 rounded-lg font-mono font-bold text-center text-xs"
-                      />
-                    </div>
-                    <select
-                      value={papelPadraoFaixa}
-                      onChange={(e) => setPapelPadraoFaixa(e.target.value as 'Titular' | 'Suplente')}
-                      className="px-2 py-1 bg-slate-50 border border-slate-300 rounded-lg text-xs font-bold"
-                    >
-                      <option value="Titular">Como Titular</option>
-                      <option value="Suplente">Como Suplente</option>
-                    </select>
-                    <button
-                      type="button"
-                      onClick={handleAdicionarFaixaClassificacao}
-                      className="px-3 py-1 bg-[#07192B] hover:bg-[#0C2640] text-[#2DD4AA] font-bold rounded-lg text-xs cursor-pointer flex items-center gap-1"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>Incluir Faixa</span>
-                    </button>
-
-                    <div className="relative ml-auto min-w-[180px]">
+                  {/* Barra de Busca e Filtros por Cota, Status de Seleção e Limite de Linhas */}
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 p-2.5 bg-white rounded-xl border border-slate-200 items-center">
+                    <div className="sm:col-span-5 relative">
                       <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2" />
                       <input
                         type="text"
-                        placeholder="Filtrar candidato..."
+                        placeholder="Buscar por nome, posição ou CPF..."
                         value={buscaCandCargo}
                         onChange={(e) => setBuscaCandCargo(e.target.value)}
-                        className="w-full pl-8 pr-2.5 py-1 bg-slate-50 border border-slate-300 rounded-lg text-xs"
+                        className="w-full pl-8 pr-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs focus:bg-white focus:border-teal-600 outline-hidden"
                       />
+                    </div>
+
+                    <div className="sm:col-span-3">
+                      <select
+                        value={filtroCotaCargo}
+                        onChange={(e) => setFiltroCotaCargo(e.target.value)}
+                        className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-semibold text-slate-700"
+                      >
+                        <option value="todas">Todas as Cotas / Listas</option>
+                        <option value="Ampla">Ampla Concorrência</option>
+                        <option value="PPP">Cota PPP / Negros</option>
+                        <option value="PCD">Cota PCD</option>
+                        <option value="Indígena">Cota Indígena</option>
+                        <option value="Trans">Cota Trans</option>
+                      </select>
+                    </div>
+
+                    <div className="sm:col-span-2">
+                      <select
+                        value={filtroSelecaoCargo}
+                        onChange={(e) => setFiltroSelecaoCargo(e.target.value as any)}
+                        className="w-full px-2 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-semibold text-slate-700"
+                      >
+                        <option value="todos">Todos</option>
+                        <option value="selecionados">No Lote ({convocados.length})</option>
+                        <option value="nao_selecionados">Não Selecionados</option>
+                      </select>
+                    </div>
+
+                    <div className="sm:col-span-2">
+                      <select
+                        value={limiteListaCargo}
+                        onChange={(e) =>
+                          setLimiteListaCargo(
+                            e.target.value === 'todos' ? 'todos' : (Number(e.target.value) as any)
+                          )
+                        }
+                        className="w-full px-2 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-mono font-bold text-slate-700"
+                        title="Quantidade de candidatos exibidos na lista"
+                      >
+                        <option value={100}>Exibir 100</option>
+                        <option value={250}>Exibir 250</option>
+                        <option value={500}>Exibir 500</option>
+                        <option value="todos">Exibir Todos</option>
+                      </select>
                     </div>
                   </div>
 
-                  {/* Lista de seleção individual com indicador de usuário vinculado */}
-                  <div className="max-h-44 overflow-y-auto border border-slate-200 rounded-xl bg-white divide-y divide-slate-100">
-                    {candidatosDoCargo
-                      .filter(
-                        (c) =>
-                          !buscaCandCargo.trim() ||
-                          c.nome.toLowerCase().includes(buscaCandCargo.toLowerCase()) ||
-                          String(c.posicao) === buscaCandCargo.trim()
-                      )
-                      .slice(0, 150)
-                      .map((cand) => {
-                        const selecionado = convocados.some(
-                          (cv) =>
-                            (cv.candidato_id && cv.candidato_id === cand.id) ||
-                            cv.nome.trim().toLowerCase() === cand.nome.trim().toLowerCase()
-                        );
-                        const infoVinculo = userRegistryStore.verificarVinculoCandidato(cand);
-                        return (
-                          <div
-                            key={cand.id}
-                            className={`px-3 py-2 flex items-center justify-between gap-2 text-xs hover:bg-slate-50 ${
-                              selecionado ? 'bg-teal-50/50' : ''
-                            }`}
-                          >
-                            <div className="flex items-center gap-2 min-w-0">
-                              <input
-                                type="checkbox"
-                                checked={selecionado}
-                                onChange={() => handleToggleCandidatoDaLista(cand, papelPadraoFaixa)}
-                                className="rounded border-slate-300 text-teal-600 cursor-pointer"
-                              />
-                              <span className="font-mono font-bold text-slate-700 w-8 shrink-0">
-                                {cand.posicao}º
-                              </span>
-                              <span className="font-semibold text-slate-900 truncate">{cand.nome}</span>
-                              <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 font-mono text-[10px]">
-                                {(cand.cotas && cand.cotas.length > 0 ? cand.cotas : [cand.cota]).join('/')}
-                              </span>
-                              {infoVinculo.vinculado ? (
-                                <span
-                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 shrink-0"
-                                  title={`Usuário vinculado: ${infoVinculo.usuario?.email || infoVinculo.usuario?.nome}`}
-                                >
-                                  <UserCheck className="w-3 h-3 text-emerald-700" />
-                                  <span>Conta Vinculada</span>
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-500 border border-slate-200 shrink-0">
-                                  <span>Sem acesso ainda</span>
-                                </span>
-                              )}
-                            </div>
+                  {/* Lista de Classificação do Cargo para Seleção Manual */}
+                  <div className="max-h-64 overflow-y-auto border border-slate-200 rounded-xl bg-white divide-y divide-slate-100">
+                    {candidatosDoCargo.length === 0 ? (
+                      <div className="p-6 text-center text-xs text-slate-400">
+                        Nenhum candidato importado na lista de classificação deste cargo ainda.
+                      </div>
+                    ) : (
+                      (() => {
+                        const filtrados = candidatosDoCargo.filter((c) => {
+                          const termo = buscaCandCargo.trim().toLowerCase();
+                          if (termo) {
+                            const matchNome = normalizarNomeBusca(c.nome).includes(normalizarNomeBusca(termo));
+                            const matchPos = String(c.posicao) === termo.replace(/\D/g, '');
+                            const matchCpf = c.cpf && c.cpf.replace(/\D/g, '').includes(termo.replace(/\D/g, ''));
+                            if (!matchNome && !matchPos && !matchCpf) return false;
+                          }
+                          if (filtroCotaCargo !== 'todas') {
+                            const cotasCand = c.cotas && c.cotas.length > 0 ? c.cotas : [c.cota || 'Ampla'];
+                            if (filtroCotaCargo === 'Ampla') {
+                              if (c.cota !== 'Ampla' && !cotasCand.includes('Ampla')) return false;
+                            } else if (!cotasCand.includes(filtroCotaCargo as any) && c.cota !== filtroCotaCargo) {
+                              return false;
+                            }
+                          }
+                          const estaNoLote = convocados.some(
+                            (cv) =>
+                              (cv.candidato_id && cv.candidato_id === c.id) ||
+                              normalizarNomeBusca(cv.nome) === normalizarNomeBusca(c.nome)
+                          );
+                          if (filtroSelecaoCargo === 'selecionados' && !estaNoLote) return false;
+                          if (filtroSelecaoCargo === 'nao_selecionados' && estaNoLote) return false;
+                          return true;
+                        });
 
-                            <button
-                              type="button"
+                        const exibidos =
+                          limiteListaCargo === 'todos' ? filtrados : filtrados.slice(0, limiteListaCargo);
+
+                        if (exibidos.length === 0) {
+                          return (
+                            <div className="p-6 text-center text-xs text-slate-400">
+                              Nenhum candidato encontrado para o filtro selecionado.
+                            </div>
+                          );
+                        }
+
+                        return exibidos.map((cand) => {
+                          const convocadoItem = convocados.find(
+                            (cv) =>
+                              (cv.candidato_id && cv.candidato_id === cand.id) ||
+                              normalizarNomeBusca(cv.nome) === normalizarNomeBusca(cand.nome)
+                          );
+                          const selecionado = Boolean(convocadoItem);
+                          const infoVinculo = userRegistryStore.verificarVinculoCandidato(cand);
+                          const cotasBadge = (
+                            cand.cotas && cand.cotas.length > 0 ? cand.cotas : [cand.cota || 'Ampla']
+                          )
+                            .filter((ct, _, arr) => arr.length === 1 || ct !== 'Ampla')
+                            .join(' + ');
+
+                          return (
+                            <div
+                              key={cand.id}
                               onClick={() => handleToggleCandidatoDaLista(cand, papelPadraoFaixa)}
-                              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold cursor-pointer shrink-0 ${
-                                selecionado
-                                  ? 'bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200'
-                                  : 'bg-teal-50 text-teal-800 hover:bg-teal-100 border border-teal-200'
+                              className={`px-3 py-2 flex items-center justify-between gap-2 text-xs hover:bg-slate-50 cursor-pointer transition-colors ${
+                                selecionado ? 'bg-teal-50/70' : ''
                               }`}
                             >
-                              {selecionado ? 'Remover' : '+ Convocar'}
-                            </button>
-                          </div>
-                        );
-                      })}
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                <input
+                                  type="checkbox"
+                                  checked={selecionado}
+                                  onChange={() => {}}
+                                  className="rounded border-slate-300 text-teal-600 cursor-pointer w-4 h-4 shrink-0"
+                                />
+                                <span className="font-mono font-bold text-slate-700 w-10 shrink-0">
+                                  {cand.posicao}º
+                                </span>
+                                <span className="font-semibold text-slate-900 truncate">{cand.nome}</span>
+                                <span
+                                  className={`px-1.5 py-0.5 rounded font-mono text-[10px] font-bold shrink-0 ${
+                                    cotasBadge.includes('PCD') && cotasBadge.includes('PPP')
+                                      ? 'bg-purple-100 text-purple-900 border border-purple-300'
+                                      : cotasBadge.includes('PCD')
+                                      ? 'bg-purple-50 text-purple-800 border border-purple-200'
+                                      : cotasBadge.includes('PPP')
+                                      ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                                      : 'bg-slate-100 text-slate-600'
+                                  }`}
+                                >
+                                  {cotasBadge || 'Ampla'}
+                                </span>
+                                {infoVinculo.vinculado ? (
+                                  <span
+                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 shrink-0"
+                                    title={`Usuário vinculado: ${infoVinculo.usuario?.email || infoVinculo.usuario?.nome}`}
+                                  >
+                                    <UserCheck className="w-3 h-3 text-emerald-700" />
+                                    <span>Conta Vinculada</span>
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-500 border border-slate-200 shrink-0">
+                                    <span>Sem acesso ainda</span>
+                                  </span>
+                                )}
+                              </div>
+
+                              <div
+                                className="flex items-center gap-1.5 shrink-0"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                {selecionado ? (
+                                  <>
+                                    <span className="px-2 py-0.5 rounded bg-teal-100 text-teal-900 font-mono text-[10px] font-bold">
+                                      {convocadoItem?.ordem_nomeacao}º • {convocadoItem?.papel}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleToggleCandidatoDaLista(cand)}
+                                      className="px-2.5 py-1 rounded-lg text-[11px] font-bold cursor-pointer bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200"
+                                    >
+                                      Remover
+                                    </button>
+                                  </>
+                                ) : (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleToggleCandidatoDaLista(cand, 'Titular')}
+                                      className="px-2.5 py-1 rounded-lg text-[11px] font-bold cursor-pointer bg-teal-50 text-teal-800 hover:bg-teal-100 border border-teal-200"
+                                    >
+                                      + Titular
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleToggleCandidatoDaLista(cand, 'Suplente')}
+                                      className="px-2 py-1 rounded-lg text-[11px] font-semibold cursor-pointer bg-cyan-50 text-cyan-800 hover:bg-cyan-100 border border-cyan-200"
+                                    >
+                                      + Suplente
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        });
+                      })()
+                    )}
                   </div>
                 </div>
               )}
 
-              {/* CAIXA DE IMPORTAÇÃO EM MASSA DE CONVOCADOS */}
+              {/* CAIXA DE IMPORTAÇÃO EM MASSA DE CONVOCADOS VIA TEXTO EXCEL */}
               {modalImportarConvocadosAberto && (
                 <div className="p-4 bg-teal-50/50 rounded-2xl border border-teal-200 space-y-3 animate-in fade-in-50">
                   <div className="flex items-center justify-between">
                     <span className="font-bold text-teal-950 flex items-center gap-1.5">
                       <FileSpreadsheet className="w-4 h-4 text-teal-700" />
-                      <span>Importar Convocados da Planilha (4 Colunas)</span>
+                      <span>Importar Convocados da Planilha (Colunas do Excel)</span>
                     </span>
-                    <span className="text-[10px] text-teal-800 font-mono">Ordem • Nome • Cota/Ampla • Titular/Suplente</span>
+                    <span className="text-[10px] text-teal-800 font-mono">
+                      Ordem • Nome • Cota/Ampla • Titular/Suplente
+                    </span>
                   </div>
 
                   <p className="text-2xs text-teal-900 leading-relaxed">
-                    Copie as colunas do Excel com: <strong>Ordem de Nomeação</strong>, <strong>Nome Completo</strong>, <strong>Tipo de Vaga (Ampla, CN/PPP, PCD, Indígena, Trans)</strong> e <strong>Titular ou Suplente</strong>:
+                    Copie as colunas do Excel com: <strong>Ordem de Nomeação</strong>, <strong>Nome Completo</strong>,{' '}
+                    <strong>Tipo de Vaga (Ampla, CN/PPP, PCD, Indígena, Trans)</strong> e{' '}
+                    <strong>Titular ou Suplente</strong>. O sistema verificará automaticamente se todos os nomes constam na lista de classificação deste cargo:
                   </p>
 
                   <textarea
                     rows={6}
                     placeholder={`1\tCarlos Eduardo Silveira\tAmpla\tTitular\n2\tMariana Rocha Santos\tCN\tTitular\n3\tRoberto Lima\tPCD\tTitular\n4\tKamila Guarani\tIndígena\tTitular\n5\tLorena Miller\tTrans\tTitular\n6\tFernanda Souza\tPPP\tSuplente`}
                     value={textoColadoConvocados}
-                    onChange={(e) => setTextoColadoConvocados(e.target.value)}
+                    onChange={(e) => {
+                      setTextoColadoConvocados(e.target.value);
+                      if (questionamentoNaoEncontrados) setQuestionamentoNaoEncontrados(null);
+                    }}
                     className="w-full p-3 bg-white border border-teal-300 rounded-xl font-mono text-xs focus:outline-hidden focus:border-teal-700 text-slate-900"
                   />
+
+                  {/* ALERTA / QUESTIONAMENTO SE ALGUM CANDIDATO COLADO NÃO EXISTIR NA LISTA DE CLASSIFICAÇÃO DO CARGO (Item 6) */}
+                  {questionamentoNaoEncontrados && (
+                    <div className="p-4 bg-amber-50 border-2 border-amber-300 rounded-2xl space-y-3 animate-in fade-in-50">
+                      <div className="flex items-start gap-2.5 text-amber-950">
+                        <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                        <div className="space-y-1">
+                          <span className="font-bold text-xs block">
+                            Atenção: {questionamentoNaoEncontrados.naoEncontrados.length} candidato(s) colado(s) não foram localizados na lista de classificação deste cargo!
+                          </span>
+                          <p className="text-[11px] text-amber-800 leading-relaxed">
+                            Dos <strong>{questionamentoNaoEncontrados.todos.length}</strong> nomes informados no texto,{' '}
+                            <strong>{questionamentoNaoEncontrados.apenasReconhecidos.length}</strong> constam na lista de classificação do cargo e{' '}
+                            <strong>{questionamentoNaoEncontrados.naoEncontrados.length}</strong> não foram encontrados:
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="max-h-28 overflow-y-auto bg-white/90 border border-amber-200 rounded-xl p-2.5 divide-y divide-amber-100">
+                        {questionamentoNaoEncontrados.naoEncontrados.map((nc, i) => (
+                          <div key={i} className="py-1 flex items-center justify-between text-[11px] text-amber-950">
+                            <span className="font-mono font-bold">
+                              {nc.ordem_nomeacao}º — {nc.nome}
+                            </span>
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-semibold">
+                              Não consta na lista do cargo
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+
+                      <p className="text-[11px] font-bold text-amber-900">
+                        Como você deseja prosseguir com esta importação?
+                      </p>
+
+                      <div className="flex flex-wrap items-center gap-2">
+                        {questionamentoNaoEncontrados.apenasReconhecidos.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              concluirImportacaoConvocados(
+                                questionamentoNaoEncontrados.apenasReconhecidos,
+                                questionamentoNaoEncontrados.substituir
+                              )
+                            }
+                            className="px-3.5 py-1.5 bg-teal-700 hover:bg-teal-800 text-white font-bold rounded-xl text-xs cursor-pointer shadow-xs"
+                          >
+                            Importar Apenas os {questionamentoNaoEncontrados.apenasReconhecidos.length} Reconhecidos na Lista
+                          </button>
+                        )}
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            concluirImportacaoConvocados(
+                              questionamentoNaoEncontrados.todos,
+                              questionamentoNaoEncontrados.substituir
+                            )
+                          }
+                          className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl text-xs cursor-pointer shadow-xs"
+                        >
+                          Importar Todos os {questionamentoNaoEncontrados.todos.length} Mesmo Assim
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setQuestionamentoNaoEncontrados(null)}
+                          className="px-3 py-1.5 bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 font-semibold rounded-xl text-xs cursor-pointer"
+                        >
+                          Cancelar e Revisar Texto
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span className="text-2xs text-slate-500 italic">

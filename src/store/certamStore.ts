@@ -24,7 +24,6 @@ export const certamStore = {
     } catch {
       // Fallback
     }
-    this.salvarTodos(DEFAULT_CONCURSOS);
     return DEFAULT_CONCURSOS;
   },
 
@@ -40,7 +39,7 @@ export const certamStore = {
     return conc.cargos.find((cg) => cg.id === cargoId) || conc.cargos[0] || null;
   },
 
-  salvarConcurso(concurso: Concurso): boolean {
+  salvarConcurso(concurso: Concurso, forceReplace = false): boolean {
     if (!concurso || !concurso.id) return false;
     const list = this.getConcursos();
     const index = list.findIndex((c) => c.id === concurso.id);
@@ -61,7 +60,7 @@ export const certamStore = {
     } else {
       list.push(concurso);
     }
-    this.salvarTodos(list);
+    this.salvarTodos(list, forceReplace);
     return true;
   },
 
@@ -75,26 +74,26 @@ export const certamStore = {
     } else {
       conc.cargos.push(cargo);
     }
-    return this.salvarConcurso(conc);
+    return this.salvarConcurso(conc, true);
   },
 
   removerCargo(concursoId: string, cargoId: string): boolean {
     const conc = this.getConcurso(concursoId);
     if (!conc || !conc.cargos) return false;
     conc.cargos = conc.cargos.filter((cg) => cg.id !== cargoId);
-    return this.salvarConcurso(conc);
+    return this.salvarConcurso(conc, true);
   },
 
   removerConcurso(concursoId: string): boolean {
     const list = this.getConcursos().filter((c) => c.id !== concursoId);
-    this.salvarTodos(list);
+    this.salvarTodos(list, true);
     return true;
   },
 
-  salvarTodos(concursos: Concurso[]) {
+  salvarTodos(concursos: Concurso[], forceReplace = false) {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(concursos));
-      cloudSync.pushKey(STORAGE_KEY, concursos);
+      cloudSync.pushKey(STORAGE_KEY, concursos, forceReplace);
       window.dispatchEvent(new CustomEvent('certam_concursos_updated', { detail: concursos }));
     } catch {
       // ignore
@@ -107,7 +106,7 @@ export const certamStore = {
     if (!conc) return;
     conc.documentos = conc.documentos || [];
     conc.documentos.unshift(doc);
-    this.salvarConcurso(conc);
+    this.salvarConcurso(conc, true);
   },
 
   // Comunicados
@@ -116,7 +115,7 @@ export const certamStore = {
     if (!conc) return;
     conc.comunicados = conc.comunicados || [];
     conc.comunicados.unshift(com);
-    this.salvarConcurso(conc);
+    this.salvarConcurso(conc, true);
   },
 
   // Cronograma
@@ -139,7 +138,7 @@ export const certamStore = {
       conc.cronograma = cronograma;
     }
 
-    this.salvarConcurso(conc);
+    this.salvarConcurso(conc, true);
   },
 
   // Catálogo de Lotações do Concurso
@@ -162,15 +161,44 @@ export const certamStore = {
       vagas_total: 0,
     });
     conc.catalogo_lotacoes.sort((a, b) => a.nome.localeCompare(b.nome));
-    this.salvarConcurso(conc);
+    this.salvarConcurso(conc, true);
     return true;
+  },
+
+  adicionarLotacoesAoCatalogoEmLote(concursoId: string, nomesLotacoes: string[]): number {
+    const conc = this.getConcurso(concursoId);
+    if (!conc || !nomesLotacoes || nomesLotacoes.length === 0) return 0;
+
+    conc.catalogo_lotacoes = conc.catalogo_lotacoes || [];
+    const existentesLower = new Set(conc.catalogo_lotacoes.map((l) => l.nome.toLowerCase()));
+    let adicionadas = 0;
+
+    nomesLotacoes.forEach((nomeRaw, idx) => {
+      const nomeTrim = (nomeRaw || '').trim();
+      if (!nomeTrim) return;
+      const key = nomeTrim.toLowerCase();
+      if (existentesLower.has(key)) return;
+      existentesLower.add(key);
+      conc.catalogo_lotacoes!.push({
+        id: `lot-${Date.now().toString(36)}-${idx}-${Math.random().toString(36).substring(2, 6)}`,
+        nome: nomeTrim,
+        vagas_total: 0,
+      });
+      adicionadas++;
+    });
+
+    if (adicionadas > 0) {
+      conc.catalogo_lotacoes.sort((a, b) => a.nome.localeCompare(b.nome));
+      this.salvarConcurso(conc, true);
+    }
+    return adicionadas;
   },
 
   removerLotacaoDoCatalogo(concursoId: string, lotacaoId: string): boolean {
     const conc = this.getConcurso(concursoId);
     if (!conc || !conc.catalogo_lotacoes) return false;
     conc.catalogo_lotacoes = conc.catalogo_lotacoes.filter((l) => l.id !== lotacaoId);
-    this.salvarConcurso(conc);
+    this.salvarConcurso(conc, true);
     return true;
   },
 };
