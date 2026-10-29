@@ -43,23 +43,108 @@ function readDbFile(filePath: string): SyncDbFileFormat | null {
   return null;
 }
 
+const LEGACY_KEY_MIGRATIONS: Record<string, string> = {
+  certam_concursos_cargos: 'certam_concursos_cargos_v6',
+  certam_concursos_cargos_v1: 'certam_concursos_cargos_v6',
+  certam_concursos_cargos_v2: 'certam_concursos_cargos_v6',
+  certam_concursos_cargos_v3: 'certam_concursos_cargos_v6',
+  certam_concursos_cargos_v4: 'certam_concursos_cargos_v6',
+  certam_concursos_cargos_v5: 'certam_concursos_cargos_v6',
+  certam_lotes_data: 'certam_lotes_data_v6',
+  certam_lotes_data_v1: 'certam_lotes_data_v6',
+  certam_lotes_data_v2: 'certam_lotes_data_v6',
+  certam_lotes_data_v3: 'certam_lotes_data_v6',
+  certam_lotes_data_v4: 'certam_lotes_data_v6',
+  certam_lotes_data_v5: 'certam_lotes_data_v6',
+  certam_users_registry_v1: 'certam_users_registry_v2',
+  certam_perfil_audit_requests_v4: 'certam_perfil_audit_requests_v5',
+  certam_vinculacao_requests_v4: 'certam_vinculacao_requests_v5',
+  certam_contact_messages_v4: 'certam_contact_messages_v5',
+  certam_notifications_events_v3: 'certam_notifications_events_v5',
+  certam_notifications_events_v4: 'certam_notifications_events_v5',
+  certam_faq_items_v1: 'certam_faq_items_v6',
+  certam_faq_items_v2: 'certam_faq_items_v6',
+  certam_faq_items_v3: 'certam_faq_items_v6',
+  certam_faq_items_v4: 'certam_faq_items_v6',
+  certam_faq_items_v5: 'certam_faq_items_v6',
+};
+
+function isNonEmptyJsonStr(val: string | undefined): boolean {
+  if (!val || typeof val !== 'string') return false;
+  const trimmed = val.trim();
+  return trimmed.length > 2 && trimmed !== '[]' && trimmed !== '{}' && trimmed !== 'null';
+}
+
+function normalizeAndMigrateDb(db: SyncDbFileFormat): { db: SyncDbFileFormat; migrated: boolean } {
+  const entries = { ...db.entries };
+  const versions = { ...db.versions };
+  let migrated = false;
+
+  if ('_test_ping' in entries) {
+    delete entries['_test_ping'];
+    delete versions['_test_ping'];
+    migrated = true;
+  }
+
+  for (const [oldKey, newKey] of Object.entries(LEGACY_KEY_MIGRATIONS)) {
+    if (oldKey in entries) {
+      const oldVal = entries[oldKey];
+      if (isNonEmptyJsonStr(oldVal)) {
+        if (!isNonEmptyJsonStr(entries[newKey])) {
+          entries[newKey] = oldVal;
+          versions[newKey] = versions[oldKey] || Date.now();
+        } else {
+          entries[newKey] = mergeSyncValues(entries[newKey], oldVal, false);
+          versions[newKey] = Math.max(versions[newKey] || 0, versions[oldKey] || Date.now());
+        }
+      }
+      delete entries[oldKey];
+      delete versions[oldKey];
+      migrated = true;
+    }
+  }
+
+  for (const key of Object.keys(entries)) {
+    const match = key.match(/^certam_candidatos_data_v[1-5]_(.+)$/);
+    if (match) {
+      const newKey = `certam_candidatos_data_v6_${match[1]}`;
+      const oldVal = entries[key];
+      if (isNonEmptyJsonStr(oldVal) && !isNonEmptyJsonStr(entries[newKey])) {
+        entries[newKey] = oldVal;
+        versions[newKey] = versions[key] || Date.now();
+      }
+      delete entries[key];
+      delete versions[key];
+      migrated = true;
+    }
+  }
+
+  return { db: { entries, versions }, migrated };
+}
+
 function loadSyncDb(): SyncDbFileFormat {
   const fromCache = readDbFile(CACHE_SYNC_DB_FILE);
   const fromTmp = readDbFile(TMP_SYNC_DB_FILE);
 
-  const entries: Record<string, string> = {
+  const rawEntries: Record<string, string> = {
     ...(fromTmp?.entries || {}),
     ...(fromCache?.entries || {}),
   };
-  const versions: Record<string, number> = {
+  const rawVersions: Record<string, number> = {
     ...(fromTmp?.versions || {}),
     ...(fromCache?.versions || {}),
   };
 
-  delete entries['_test_ping'];
-  delete versions['_test_ping'];
+  const { db, migrated } = normalizeAndMigrateDb({
+    entries: rawEntries,
+    versions: rawVersions,
+  });
 
-  return { entries, versions };
+  if (migrated) {
+    saveSyncDb(db);
+  }
+
+  return db;
 }
 
 function saveSyncDb(db: SyncDbFileFormat) {
@@ -78,6 +163,34 @@ function saveSyncDb(db: SyncDbFileFormat) {
   } catch {
     // ignore
   }
+}
+
+function isResolvedModerationStatus(status: unknown): boolean {
+  return (
+    status === 'aprovado' ||
+    status === 'rejeitado' ||
+    status === 'respondido' ||
+    status === 'arquivado'
+  );
+}
+
+function mergeKeyedObjectItems(existingItem: any, incomingItem: any): any {
+  const merged = { ...existingItem, ...incomingItem };
+  if (
+    isResolvedModerationStatus(existingItem?.status) &&
+    (incomingItem?.status === 'pendente' || incomingItem?.status === 'aberto')
+  ) {
+    merged.status = existingItem.status;
+    if (existingItem.data_avaliacao) merged.data_avaliacao = existingItem.data_avaliacao;
+    if (existingItem.avaliado_por) merged.avaliado_por = existingItem.avaliado_por;
+    if (existingItem.motivo_rejeicao) merged.motivo_rejeicao = existingItem.motivo_rejeicao;
+    if (existingItem.candidato_id_vinculado) {
+      merged.candidato_id_vinculado = existingItem.candidato_id_vinculado;
+    }
+    if (existingItem.respondido_em) merged.respondido_em = existingItem.respondido_em;
+    if (existingItem.respondido_por) merged.respondido_por = existingItem.respondido_por;
+  }
+  return merged;
 }
 
 function mergeSyncValues(
@@ -114,7 +227,7 @@ function mergeSyncValues(
         incomingArr.forEach((item: any) => {
           const k = item.id || item.email;
           const prev = map.get(String(k));
-          map.set(String(k), prev ? { ...prev, ...item } : item);
+          map.set(String(k), prev ? mergeKeyedObjectItems(prev, item) : item);
         });
         return JSON.stringify(Array.from(map.values()));
       }
@@ -164,7 +277,13 @@ function certamSyncPlugin(): Plugin {
       if (req.method === 'GET') {
         const db = loadSyncDb();
         res.setHeader('Content-Type', 'application/json; charset=utf-8');
-        res.end(JSON.stringify({ entries: db.entries, versions: db.versions }));
+        res.end(
+          JSON.stringify({
+            entries: db.entries,
+            versions: db.versions,
+            serverTime: new Date().toISOString(),
+          })
+        );
         return;
       }
       if (req.method === 'POST') {
@@ -178,14 +297,32 @@ function certamSyncPlugin(): Plugin {
             const payload = JSON.parse(body || '{}');
             const incoming = payload?.entries || {};
             const forceReplace = Boolean(payload?.forceReplace);
-            const db = loadSyncDb();
+            const cleanConflicts = Boolean(payload?.cleanConflicts);
+            const keysToDelete: string[] = Array.isArray(payload?.deleteKeys) ? payload.deleteKeys : [];
+            let db = loadSyncDb();
             let modified = false;
             const now = Date.now();
-            for (const [k, v] of Object.entries(incoming)) {
-              if (k === '_test_ping') continue;
+
+            if (cleanConflicts) {
+              const normalized = normalizeAndMigrateDb(db);
+              db = normalized.db;
+              modified = true;
+            }
+
+            for (const delKey of keysToDelete) {
+              if (typeof delKey === 'string' && delKey in db.entries) {
+                delete db.entries[delKey];
+                delete db.versions[delKey];
+                modified = true;
+              }
+            }
+
+            for (const [rawKey, v] of Object.entries(incoming)) {
+              if (rawKey === '_test_ping') continue;
+              const k = LEGACY_KEY_MIGRATIONS[rawKey] || rawKey;
               if (typeof v === 'string') {
                 const nextVal = mergeSyncValues(db.entries[k], v, forceReplace);
-                if (db.entries[k] !== nextVal || !db.versions[k]) {
+                if (db.entries[k] !== nextVal || !db.versions[k] || forceReplace) {
                   db.entries[k] = nextVal;
                   db.versions[k] = now;
                   modified = true;
@@ -196,7 +333,14 @@ function certamSyncPlugin(): Plugin {
               saveSyncDb(db);
             }
             res.setHeader('Content-Type', 'application/json; charset=utf-8');
-            res.end(JSON.stringify({ ok: true, versions: db.versions }));
+            res.end(
+              JSON.stringify({
+                ok: true,
+                versions: db.versions,
+                totalKeys: Object.keys(db.entries).length,
+                serverTime: new Date().toISOString(),
+              })
+            );
           } catch {
             res.statusCode = 400;
             res.end(JSON.stringify({ ok: false }));

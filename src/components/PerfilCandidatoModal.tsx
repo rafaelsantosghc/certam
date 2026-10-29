@@ -220,8 +220,18 @@ export const PerfilCandidatoModal: React.FC<PerfilCandidatoModalProps> = ({
         status_aprovacao: ap.status,
       }));
 
-    // Se for o primeiro preenchimento estritamente obrigatório de primeiro acesso
-    if (obrigatorio && primeiroCadastro) {
+    const diffs = calcularDiffs();
+    const jaPossuiaCpfVinculado = Boolean((usuario.cpf || '').replace(/\D/g, '').length >= 11);
+    const alterouCamposExistentes = diffs.some(
+      (d) =>
+        d.valor_antigo &&
+        d.valor_antigo !== '(não informado)' &&
+        d.valor_antigo.trim() !== '' &&
+        d.valor_antigo.trim() !== d.valor_novo.trim()
+    );
+
+    // Se for estritamente o primeiro preenchimento inicial sem alterar dados já vinculados
+    if (obrigatorio && primeiroCadastro && !jaPossuiaCpfVinculado && !alterouCamposExistentes) {
       if (!nome.trim() || !cpf.trim() || !dataNascimento.trim() || !whatsapp.trim()) {
         return;
       }
@@ -244,33 +254,31 @@ export const PerfilCandidatoModal: React.FC<PerfilCandidatoModalProps> = ({
     }
 
     // Qualquer solicitação de alteração de dados cadastrais gera registro na fila de Auditoria do Painel Admin (Item 2)
-    let diffs = calcularDiffs();
-    if (diffs.length === 0) {
-      diffs = [
-        {
-          campo: 'nome',
-          campo_label: 'Nome Completo',
-          valor_antigo: usuario.nome || '(não informado)',
-          valor_novo: nome.trim() || usuario.nome,
-        },
-        {
-          campo: 'cpf',
-          campo_label: 'CPF',
-          valor_antigo: usuario.cpf || '(não informado)',
-          valor_novo: cpf.trim() || usuario.cpf || '(não informado)',
-        },
-      ];
-    }
+    const finalDiffs: AlteracaoCampoItem[] =
+      diffs.length > 0
+        ? diffs
+        : [
+            {
+              campo: 'nome',
+              campo_label: 'Nome Completo',
+              valor_antigo: usuario.nome || '(não informado)',
+              valor_novo: nome.trim() || usuario.nome,
+            },
+            {
+              campo: 'cpf',
+              campo_label: 'CPF',
+              valor_antigo: usuario.cpf || '(não informado)',
+              valor_novo: cpf.trim() || usuario.cpf || '(não informado)',
+            },
+          ];
 
-    // Se ainda não tinha CPF ou data de nascimento salvos, salva a base inicial mas mantém a solicitação na auditoria
-    if (primeiroCadastro) {
+    // Se ainda não tinha data de nascimento salva no primeiro acesso, salva a data de nascimento mas envia as alterações para auditoria
+    if (primeiroCadastro && dataNascimento.trim() && !usuario.data_nascimento) {
       atualizarDadosUsuario({
-        nome: sanitizeInput(nome, 100),
-        cpf: sanitizeInput(cpf, 20),
         data_nascimento: sanitizeInput(dataNascimento, 15),
-        whatsapp: sanitizeInput(whatsapp, 25),
-        telefone: sanitizeInput(whatsapp, 25),
-        email_contato: sanitizeInput(emailContato || usuario.email, 80),
+        whatsapp: usuario.whatsapp || sanitizeInput(whatsapp, 25),
+        telefone: usuario.telefone || sanitizeInput(whatsapp, 25),
+        email_contato: usuario.email_contato || sanitizeInput(emailContato || usuario.email, 80),
         outros_concursos: outrosSincronizados,
       });
     }
@@ -278,13 +286,13 @@ export const PerfilCandidatoModal: React.FC<PerfilCandidatoModalProps> = ({
     // Registrar imediatamente no auditStore para moderação administrativa (Item 2)
     auditStore.submeterSolicitacaoAlteracao({
       usuario_email: usuario.email || emailContato.trim() || 'candidato@certam',
-      usuario_nome: sanitizeInput(nome.trim() || usuario.nome || 'Candidato', 100),
-      cpf: sanitizeInput(cpf.trim() || usuario.cpf || '', 20),
-      alteracoes: diffs,
+      usuario_nome: sanitizeInput(usuario.nome || nome.trim() || 'Candidato', 100),
+      cpf: sanitizeInput(usuario.cpf || cpf.trim() || '', 20),
+      alteracoes: finalDiffs,
     });
 
     setTodasSolicitacoes(auditStore.getAuditRequests());
-    setDiffAlteracoes(diffs);
+    setDiffAlteracoes(finalDiffs);
     setPrimeiroCadastro(false);
     setSubmetidoSucesso(true);
     setTimeout(() => {

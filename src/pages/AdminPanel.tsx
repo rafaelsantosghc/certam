@@ -5,7 +5,7 @@ import { faqStore } from '../store/faqStore';
 import { auditStore } from '../store/auditStore';
 import { contactStore } from '../store/contactStore';
 import { notificationStore } from '../store/notificationStore';
-import { cloudSync } from '../store/cloudSync';
+import { cloudSync, FullSyncDiagnosticsReport } from '../store/cloudSync';
 import { useAuth } from '../store/authContext';
 import {
   Concurso,
@@ -84,7 +84,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     | 'candidatos'
     | 'importar'
     | 'faq'
+    | 'supabase'
   >((initialTab as any) || 'concursos');
+
+  const [diagReport, setDiagReport] = useState<FullSyncDiagnosticsReport | null>(null);
+  const [diagLoading, setDiagLoading] = useState(false);
+  const [cleaningConflicts, setCleaningConflicts] = useState(false);
+  const [supabaseUrlInput, setSupabaseUrlInput] = useState<string>(
+    () => cloudSync.getSupabaseConfig()?.url || ''
+  );
+  const [supabaseKeyInput, setSupabaseKeyInput] = useState<string>(
+    () => cloudSync.getSupabaseConfig()?.anonKey || ''
+  );
 
   const [concursos, setConcursos] = useState<Concurso[]>(() => certamStore.getConcursos());
   const [lotesLista, setLotesLista] = useState<Lote[]>(() => lotesStore.getLotes());
@@ -1358,6 +1369,31 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           >
             <HelpCircle className="w-4 h-4" />
             <span>FAQ Oficial</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setAbaAdmin('supabase');
+              const cfg = cloudSync.getSupabaseConfig();
+              if (cfg) {
+                setSupabaseUrlInput(cfg.url);
+                setSupabaseKeyInput(cfg.anonKey);
+              }
+              setDiagLoading(true);
+              cloudSync
+                .runDiagnostics()
+                .then((rep) => setDiagReport(rep))
+                .finally(() => setDiagLoading(false));
+            }}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+              abaAdmin === 'supabase'
+                ? 'bg-[#0C2640] text-[#2DD4AA]'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            <Sparkles className="w-4 h-4 text-emerald-500" />
+            <span>Supabase & Sincronização</span>
           </button>
         </div>
       </div>
@@ -3145,6 +3181,405 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               </div>
             ))}
           </div>
+        </section>
+      )}
+
+      {/* ============================================================== */}
+      {/* ABA 8: DIAGNÓSTICO SUPABASE & SINCRONIZAÇÃO EM TEMPO REAL      */}
+      {/* ============================================================== */}
+      {abaAdmin === 'supabase' && (
+        <section className="space-y-6">
+          {/* Cabeçalho e Ações de Verificação e Limpeza */}
+          <div className="bg-white rounded-2xl p-6 sm:p-8 border border-slate-200 card-shadow flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            <div className="space-y-1 max-w-2xl">
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-[10px] font-mono font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                <span>MONITOR DE COMUNICAÇÃO EM TEMPO REAL</span>
+              </div>
+              <h2 className="text-xl font-bold font-serif text-slate-900">
+                Diagnóstico do Supabase & Servidor de Sincronização
+              </h2>
+              <p className="text-xs text-slate-500 leading-relaxed">
+                Verifique se o banco de dados está recebendo e enviando Concursos, Lotes, Solicitações de Alteração Cadastral (Auditoria) e Fale Conosco, e limpe chaves antigas ou tabelas em conflito com 1 clique.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+              <button
+                type="button"
+                disabled={diagLoading}
+                onClick={async () => {
+                  setDiagLoading(true);
+                  try {
+                    await cloudSync.pullFromServer();
+                    await cloudSync.pushAllLocal(false);
+                    const rep = await cloudSync.runDiagnostics();
+                    setDiagReport(rep);
+                    reloadData();
+                    setAuditRequests(auditStore.getAuditRequests());
+                    setVinculacoes(auditStore.getVinculacoes());
+                    setContatos(contactStore.getMensagens());
+                    setUsuariosGerais(userRegistryStore.getAllUsers());
+                    showToast('Teste de envio e recebimento concluído com sucesso!');
+                  } finally {
+                    setDiagLoading(false);
+                  }
+                }}
+                className="px-4 py-2.5 bg-[#07192B] hover:bg-[#0C2640] text-[#2DD4AA] font-bold text-xs rounded-xl cursor-pointer transition-all shadow-xs disabled:opacity-50"
+              >
+                {diagLoading ? 'Verificando comunicação...' : 'Testar Envio e Recebimento Agora'}
+              </button>
+
+              <button
+                type="button"
+                disabled={cleaningConflicts}
+                onClick={async () => {
+                  setCleaningConflicts(true);
+                  try {
+                    const res = await cloudSync.cleanConflictsAndSyncAll();
+                    const rep = await cloudSync.runDiagnostics();
+                    setDiagReport(rep);
+                    reloadData();
+                    setAuditRequests(auditStore.getAuditRequests());
+                    setVinculacoes(auditStore.getVinculacoes());
+                    setContatos(contactStore.getMensagens());
+                    setUsuariosGerais(userRegistryStore.getAllUsers());
+                    showToast(
+                      `Conflitos limpos e ${res.publishedKeysCount} bases republicadas para todos os usuários!`
+                    );
+                  } finally {
+                    setCleaningConflicts(false);
+                  }
+                }}
+                className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl cursor-pointer transition-all shadow-xs disabled:opacity-50"
+              >
+                {cleaningConflicts
+                  ? 'Limpando e republicando...'
+                  : 'Limpar Conflitos e Republicar Tudo Agora'}
+              </button>
+            </div>
+          </div>
+
+          {/* Configuração Direta da Conexão Supabase */}
+          <div className="bg-white rounded-2xl p-6 border border-slate-200 card-shadow space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">
+                  Credenciais de Conexão com o Projeto Supabase (REST API / PostgreSQL)
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Caso as variáveis <code className="font-mono text-slate-700">VITE_SUPABASE_URL</code> e{' '}
+                  <code className="font-mono text-slate-700">VITE_SUPABASE_ANON_KEY</code> não estejam definidas no ambiente, informe abaixo os dados do seu projeto (disponíveis no Supabase em{' '}
+                  <strong>Project Settings → API</strong>) para ativar a sincronização direta com as tabelas{' '}
+                  <code className="font-mono text-slate-700">public.configuracoes</code> e{' '}
+                  <code className="font-mono text-slate-700">public.concursos</code>.
+                </p>
+              </div>
+              <span
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-mono font-bold shrink-0 ${
+                  cloudSync.getSupabaseConfig()
+                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                    : 'bg-amber-50 text-amber-700 border border-amber-200'
+                }`}
+              >
+                {cloudSync.getSupabaseConfig() ? 'SUPABASE CONFIGURADO' : 'USANDO SERVIDOR LOCAL (/api/sync)'}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                  Project URL (ex: https://xyzcompany.supabase.co)
+                </label>
+                <input
+                  type="text"
+                  value={supabaseUrlInput}
+                  onChange={(e) => setSupabaseUrlInput(e.target.value)}
+                  placeholder="https://seu-projeto.supabase.co"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-mono text-slate-800 bg-slate-50 focus:bg-white"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                  Anon / Public Key (chave pública anon)
+                </label>
+                <input
+                  type="password"
+                  value={supabaseKeyInput}
+                  onChange={(e) => setSupabaseKeyInput(e.target.value)}
+                  placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-mono text-slate-800 bg-slate-50 focus:bg-white"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-1">
+              {cloudSync.getSupabaseConfig() && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await cloudSync.clearSupabaseConfig();
+                    setSupabaseUrlInput('');
+                    setSupabaseKeyInput('');
+                    const rep = await cloudSync.runDiagnostics();
+                    setDiagReport(rep);
+                    showToast('Configuração manual do Supabase removida.');
+                  }}
+                  className="px-3.5 py-2 border border-slate-300 hover:bg-slate-100 text-slate-600 rounded-xl text-xs font-semibold cursor-pointer"
+                >
+                  Desconectar Chave Manual
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!supabaseUrlInput.trim() || !supabaseKeyInput.trim()) {
+                    showToast('Preencha a URL do projeto e a chave Anon/Public do Supabase.');
+                    return;
+                  }
+                  setDiagLoading(true);
+                  try {
+                    const ok = await cloudSync.setSupabaseConfig(supabaseUrlInput, supabaseKeyInput);
+                    const rep = await cloudSync.runDiagnostics();
+                    setDiagReport(rep);
+                    reloadData();
+                    if (ok) {
+                      showToast('Conectado ao Supabase e dados sincronizados com sucesso!');
+                    } else {
+                      showToast('Credenciais salvas, mas o Supabase retornou erro. Verifique a tabela abaixo.');
+                    }
+                  } finally {
+                    setDiagLoading(false);
+                  }
+                }}
+                className="px-4 py-2 bg-[#07192B] hover:bg-[#0C2640] text-[#2DD4AA] rounded-xl text-xs font-bold cursor-pointer"
+              >
+                Salvar e Conectar ao Supabase
+              </button>
+            </div>
+          </div>
+
+          {/* Resumo Visual do Estado Atual das Bases Sincronizadas */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="bg-white rounded-2xl p-4 border border-slate-200 card-shadow space-y-1">
+              <span className="text-[10px] font-mono uppercase font-bold text-slate-400">
+                Concursos Publicados (v6)
+              </span>
+              <div className="text-lg font-bold text-slate-900">
+                {concursos.length} concurso(s) • {metricas.totalCargos} cargo(s)
+              </div>
+              <p className="text-[11px] text-emerald-700 font-medium">
+                Chave ativa: <code className="font-mono">certam_concursos_cargos_v6</code>
+              </p>
+            </div>
+
+            <div className="bg-white rounded-2xl p-4 border border-slate-200 card-shadow space-y-1">
+              <span className="text-[10px] font-mono uppercase font-bold text-slate-400">
+                Fila de Auditoria Cadastral (v5)
+              </span>
+              <div className="text-lg font-bold text-slate-900">
+                {auditRequests.length} solicitação(ões) ({metricas.pendentesAudit} pendente)
+              </div>
+              <p className="text-[11px] text-emerald-700 font-medium">
+                Chave ativa: <code className="font-mono">certam_perfil_audit_requests_v5</code>
+              </p>
+            </div>
+
+            <div className="bg-white rounded-2xl p-4 border border-slate-200 card-shadow space-y-1">
+              <span className="text-[10px] font-mono uppercase font-bold text-slate-400">
+                Mensagens de Contato / Admin (v5)
+              </span>
+              <div className="text-lg font-bold text-slate-900">
+                {contatos.length} mensagem(ns) ({metricas.contatosAbertos} aberta)
+              </div>
+              <p className="text-[11px] text-emerald-700 font-medium">
+                Chave ativa: <code className="font-mono">certam_contact_messages_v5</code>
+              </p>
+            </div>
+
+            <div className="bg-white rounded-2xl p-4 border border-slate-200 card-shadow space-y-1">
+              <span className="text-[10px] font-mono uppercase font-bold text-slate-400">
+                Cadastro Geral & Lotes
+              </span>
+              <div className="text-lg font-bold text-slate-900">
+                {usuariosGerais.length} usuário(s) • {lotesLista.length} lote(s)
+              </div>
+              <p className="text-[11px] text-emerald-700 font-medium">
+                Chaves: <code className="font-mono">users_v2</code> & <code className="font-mono">lotes_v6</code>
+              </p>
+            </div>
+          </div>
+
+          {/* Relatório Detalhado do Diagnóstico */}
+          {diagReport && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Coluna 1: Servidor de Sincronização (/api/sync) */}
+              <div className="bg-white rounded-2xl p-6 border border-slate-200 card-shadow space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900">
+                      1. Servidor de Sincronização (<code className="font-mono">/api/sync</code>)
+                    </h3>
+                    <p className="text-xs text-slate-500">
+                      Latência: {diagReport.localApi.latencyMs} ms • Total de chaves ativas:{' '}
+                      {diagReport.localApi.totalKeys}
+                    </p>
+                  </div>
+                  <span
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-mono font-bold ${
+                      diagReport.localApi.ok && diagReport.localApi.roundtripOk
+                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                        : 'bg-rose-50 text-rose-700 border border-rose-200'
+                    }`}
+                  >
+                    {diagReport.localApi.ok && diagReport.localApi.roundtripOk
+                      ? 'ENVIO & RECEBIMENTO OK'
+                      : diagReport.localApi.error || 'INDISPONÍVEL'}
+                  </span>
+                </div>
+
+                <div className="border border-slate-200 rounded-xl overflow-hidden">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-100 text-slate-700 text-[10px] uppercase font-mono">
+                      <tr>
+                        <th className="py-2 px-3">Chave no Servidor</th>
+                        <th className="py-2 px-3">Registros</th>
+                        <th className="py-2 px-3">Tamanho</th>
+                        <th className="py-2 px-3">Última Atualização</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {diagReport.localApi.keys.map((item) => (
+                        <tr key={item.key} className="hover:bg-slate-50">
+                          <td className="py-2 px-3 font-mono text-[11px] font-bold text-slate-800">
+                            {item.key}
+                          </td>
+                          <td className="py-2 px-3 font-mono text-slate-700">{item.itemCount}</td>
+                          <td className="py-2 px-3 font-mono text-slate-500">
+                            {(item.sizeBytes / 1024).toFixed(1)} KB
+                          </td>
+                          <td className="py-2 px-3 font-mono text-[11px] text-slate-500">
+                            {item.updatedAt
+                              ? new Date(item.updatedAt).toLocaleTimeString('pt-BR')
+                              : '-'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Coluna 2: Tabelas do Supabase PostgreSQL */}
+              <div className="bg-white rounded-2xl p-6 border border-slate-200 card-shadow space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900">
+                      2. Tabelas no Supabase PostgreSQL
+                    </h3>
+                    <p className="text-xs text-slate-500">
+                      {diagReport.supabase.configured
+                        ? `Endpoint: ${diagReport.supabase.url}`
+                        : 'Informe a URL e Anon Key acima para inspecionar as tabelas do Supabase ao vivo'}
+                    </p>
+                  </div>
+                  {diagReport.supabase.configured && (
+                    <span
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-mono font-bold ${
+                        diagReport.supabase.connected && diagReport.supabase.roundtripOk
+                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                          : 'bg-rose-50 text-rose-700 border border-rose-200'
+                      }`}
+                    >
+                      {diagReport.supabase.connected && diagReport.supabase.roundtripOk
+                        ? 'LEITURA & ESCRITA OK'
+                        : diagReport.supabase.error || 'ERRO DE CONEXÃO'}
+                    </span>
+                  )}
+                </div>
+
+                {diagReport.supabase.configured ? (
+                  <>
+                    <div className="border border-slate-200 rounded-xl overflow-hidden">
+                      <table className="w-full text-left text-xs">
+                        <thead className="bg-slate-100 text-slate-700 text-[10px] uppercase font-mono">
+                          <tr>
+                            <th className="py-2 px-3">Tabela</th>
+                            <th className="py-2 px-3">Status</th>
+                            <th className="py-2 px-3">Linhas</th>
+                            <th className="py-2 px-3">Conflitos / Observações</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {diagReport.supabase.tables.map((tb) => (
+                            <tr key={tb.table} className="hover:bg-slate-50">
+                              <td className="py-2 px-3 font-mono font-bold text-slate-800">
+                                public.{tb.table}
+                              </td>
+                              <td className="py-2 px-3">
+                                {tb.ok ? (
+                                  <span className="text-emerald-700 font-bold text-[11px]">
+                                    OK ({tb.latencyMs}ms)
+                                  </span>
+                                ) : (
+                                  <span className="text-rose-600 font-bold text-[11px]">
+                                    {tb.error || 'Falha'}
+                                  </span>
+                                )}
+                              </td>
+                              <td className="py-2 px-3 font-mono font-bold text-slate-800">
+                                {tb.rowCount}
+                              </td>
+                              <td className="py-2 px-3 text-[11px]">
+                                {tb.conflictKeys && tb.conflictKeys.length > 0 ? (
+                                  <span className="text-amber-700 font-semibold">
+                                    Conflito: {tb.conflictKeys.join(', ')}
+                                  </span>
+                                ) : (
+                                  <span className="text-slate-500">Sem conflitos</span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {diagReport.supabase.conflictsFound.length > 0 && (
+                      <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900">
+                        <strong>Conflitos detectados nas tabelas do Supabase:</strong>{' '}
+                        {diagReport.supabase.conflictsFound.join(', ')}. Clique no botão verde{' '}
+                        <strong>"Limpar Conflitos e Republicar Tudo Agora"</strong> no topo para remover automaticamente esses registros legados.
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-600 space-y-2 leading-relaxed">
+                    <p>
+                      <strong>Como verificar diretamente no painel do Supabase:</strong>
+                    </p>
+                    <ol className="list-decimal list-inside space-y-1">
+                      <li>
+                        Acesse o painel do seu projeto em{' '}
+                        <code className="font-mono text-slate-800">https://supabase.com/dashboard</code> e abra{' '}
+                        <strong>Table Editor</strong>.
+                      </li>
+                      <li>
+                        Verifique a tabela <code className="font-mono text-slate-800">public.configuracoes</code>: ela armazena em tempo real as chaves{' '}
+                        <code className="font-mono text-slate-800">certam_concursos_cargos_v6</code>,{' '}
+                        <code className="font-mono text-slate-800">certam_lotes_data_v6</code>,{' '}
+                        <code className="font-mono text-slate-800">certam_perfil_audit_requests_v5</code> e{' '}
+                        <code className="font-mono text-slate-800">certam_contact_messages_v5</code>.
+                      </li>
+                      <li>
+                        Cole a <strong>Project URL</strong> e a <strong>Anon Key</strong> no quadro acima e clique em{' '}
+                        <strong>Salvar e Conectar ao Supabase</strong> para testar a gravação e leitura diretamente daqui.
+                      </li>
+                    </ol>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </section>
       )}
 
