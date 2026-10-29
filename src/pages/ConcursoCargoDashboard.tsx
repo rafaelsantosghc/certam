@@ -46,6 +46,10 @@ import {
   AlertCircle,
   ShieldCheck,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
+  Clock,
+  Users,
   ArrowLeft,
   ArrowRight,
   Layers,
@@ -94,6 +98,7 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
   const [modalEditarCargoAberto, setModalEditarCargoAberto] = useState(false);
   const [modalEditarLoteAberto, setModalEditarLoteAberto] = useState(false);
   const [loteEditando, setLoteEditando] = useState<Lote | null>(null);
+  const [lotesExpandidosComarcas, setLotesExpandidosComarcas] = useState<Record<string, boolean>>({});
 
   const podeEditarEsteConcurso = podeEditarConcurso(usuario, concurso.id);
   const podeEditarEsteCargo = podeEditarCargo(usuario, concurso.id, cargo.id);
@@ -1508,13 +1513,64 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
               })
               .map((lote) => {
                 const totalVagas = lote.comarcas.reduce((acc, c) => acc + c.vagas, 0);
-                const totalConvocados = lote.candidatos_ids?.length || totalVagas;
+
+                // Convocados e contagem titulares / suplentes / preenchimento
+                let totalTitulares = 0;
+                let totalSuplentes = 0;
+                let totalConvocados = 0;
+                let preenchidos = 0;
+
+                if (lote.convocados && lote.convocados.length > 0) {
+                  totalConvocados = lote.convocados.length;
+                  totalTitulares = lote.convocados.filter(c => (c.papel || '').toLowerCase().includes('titular')).length;
+                  totalSuplentes = lote.convocados.filter(c => (c.papel || '').toLowerCase().includes('suplente')).length;
+                  preenchidos = lote.convocados.filter(c => {
+                    if (c.comarca_escolhida) return true;
+                    const candObj = candidatos.find(cd => (c.candidato_id && cd.id === c.candidato_id) || cd.nome.toLowerCase() === c.nome.toLowerCase());
+                    return Boolean(candObj && ((candObj.escolhas_comarcas && candObj.escolhas_comarcas.length > 0) || (candObj.intencao && candObj.intencao !== 'Indefinido') || candObj.comarca_definitiva));
+                  }).length;
+                } else if (lote.candidatos_ids && lote.candidatos_ids.length > 0) {
+                  totalConvocados = lote.candidatos_ids.length;
+                  totalTitulares = Math.min(totalConvocados, totalVagas);
+                  totalSuplentes = Math.max(0, totalConvocados - totalTitulares);
+                  preenchidos = candidatos.filter(c => 
+                    lote.candidatos_ids.includes(c.id) &&
+                    ((c.escolhas_comarcas && c.escolhas_comarcas.length > 0) ||
+                     (c.intencao && c.intencao !== 'Indefinido') ||
+                     Boolean(c.comarca_definitiva))
+                  ).length;
+                } else {
+                  totalConvocados = totalVagas;
+                  totalTitulares = totalVagas;
+                  totalSuplentes = 0;
+                  preenchidos = 0;
+                }
+
+                const faltamPreencher = Math.max(0, totalConvocados - preenchidos);
+                const percentualPreenchido = totalConvocados > 0 ? Math.round((preenchidos / totalConvocados) * 100) : 0;
+                const expandido = Boolean(lotesExpandidosComarcas[lote.id]);
+
+                const getStatusLoteLabel = (st?: string) => {
+                  switch (st) {
+                    case 'criado':
+                      return 'Aguardando Início';
+                    case 'em_escolha':
+                      return 'Em Escolha de Comarcas';
+                    case 'escolhas_definidas':
+                      return 'Escolhas Definidas';
+                    case 'encerrado':
+                      return 'Encerrado';
+                    default:
+                      return 'Em Andamento';
+                  }
+                };
 
                 // Verificar se o candidato logado está contemplado neste lote
                 const estaContemplado =
                   isAdmin ||
                   (meuCandidato &&
                     (lote.candidatos_ids?.includes(meuCandidato.id) ||
+                      (lote.convocados && lote.convocados.some(cv => cv.nome.toLowerCase() === (meuCandidato?.nome || '').toLowerCase())) ||
                       meuCandidato.posicao <= totalConvocados ||
                       meuCandidato.status === 'Convocado Titular' ||
                       meuCandidato.status === 'Nomeado'));
@@ -1524,62 +1580,65 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
                     key={lote.id}
                     className="bg-white rounded-3xl border border-slate-200 card-shadow p-6 sm:p-7 space-y-5 hover:border-teal-500/40 transition-all"
                   >
+                    {/* Cabeçalho do Lote */}
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
                       <div>
-                        <div className="flex items-center gap-2 mb-1">
+                        <div className="flex flex-wrap items-center gap-2 mb-1">
                           <span className="px-2.5 py-0.5 rounded-md bg-[#07192B] text-teal-300 font-mono text-[11px] font-bold uppercase">
                             {concurso.orgao} • {cargo.nome}
                           </span>
                           <span
                             className={`px-2.5 py-0.5 rounded-md text-[11px] font-bold ${
-                              lote.travado
-                                  ? 'bg-amber-100 text-amber-800 border border-amber-300'
-                                  : lote.ativo
-                                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                                  : 'bg-slate-100 text-slate-700'
+                              lote.status_lote === 'escolhas_definidas'
+                                ? 'bg-purple-100 text-purple-800 border border-purple-200'
+                                : lote.status_lote === 'encerrado'
+                                ? 'bg-slate-200 text-slate-800'
+                                : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
                             }`}
                           >
-                            {lote.travado ? '🔒 Em Escolha / Travado' : '🟢 Ativo para Manifestação'}
+                            {getStatusLoteLabel(lote.status_lote)}
+                          </span>
+                          <span
+                            className={`px-2.5 py-0.5 rounded-md text-[11px] font-bold flex items-center gap-1 ${
+                              lote.travado
+                                ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                                : 'bg-teal-50 text-teal-800 border border-teal-200'
+                            }`}
+                          >
+                            {lote.travado ? (
+                              <>
+                                <Lock className="w-3 h-3 text-amber-700" />
+                                <span>Bloqueado (Travado)</span>
+                              </>
+                            ) : (
+                              <span>🟢 Aberto p/ Escolhas</span>
+                            )}
                           </span>
                         </div>
-                        <h3 className="text-lg font-bold font-serif text-slate-900">
+                        <h3 className="text-xl font-bold font-serif text-slate-900">
                           {lote.nome}
                         </h3>
                       </div>
 
                       <div className="flex items-center gap-3">
-                        <div className="text-right">
-                          <span className="text-2xs text-slate-400 font-semibold uppercase block">Vagas Ofertadas</span>
-                          <span className="text-xl font-bold font-mono text-teal-700 block">
-                            {totalVagas} vagas
-                          </span>
-                        </div>
-
-                        <div className="text-right pl-3 border-l border-slate-200">
-                          <span className="text-2xs text-slate-400 font-semibold uppercase block">Convocados</span>
-                          <span className="text-xl font-bold font-mono text-slate-900 block">
-                            {totalConvocados} candidatos
-                          </span>
-                        </div>
-
                         {podeEditarEsteLote && (
-                          <div className="flex items-center gap-1.5 pl-3 border-l border-slate-200">
+                          <div className="flex items-center gap-1.5">
                             <button
                               type="button"
                               onClick={() => {
                                 setLoteEditando(lote);
                                 setModalEditarLoteAberto(true);
                               }}
-                              className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs rounded-lg transition-colors cursor-pointer flex items-center gap-1 border border-slate-200"
+                              className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs rounded-xl transition-colors cursor-pointer flex items-center gap-1.5 border border-slate-200"
                               title="Editar configurações do lote"
                             >
                               <Pencil className="w-3.5 h-3.5 text-slate-600" />
-                              <span>Editar</span>
+                              <span>Editar Lote</span>
                             </button>
                             <button
                               type="button"
                               onClick={() => handleExcluirLote(lote.id, lote.nome)}
-                              className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                              className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer border border-transparent hover:border-rose-200"
                               title="Excluir Lote"
                             >
                               <Trash2 className="w-4 h-4" />
@@ -1589,28 +1648,153 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
                       </div>
                     </div>
 
-                    {/* Resumo das Comarcas deste Lote */}
-                    <div className="space-y-2">
-                      <span className="text-2xs font-bold text-slate-400 uppercase tracking-wider block">
-                        Distribuição de Vagas por Comarca ({lote.comarcas.length} comarcas contempladas)
-                      </span>
-                      <div className="flex flex-wrap gap-1.5">
-                        {lote.comarcas.map((c, i) => (
-                          <span
-                            key={i}
-                            className="px-2.5 py-1 rounded-xl bg-slate-50 border border-slate-200 text-xs font-medium text-slate-700 flex items-center gap-1.5"
-                          >
-                            <span>{c.nome}</span>
-                            <span className="px-1.5 py-0.2 rounded-md bg-teal-100 text-teal-800 font-mono font-bold text-[10px]">
-                              {c.vagas} {c.vagas === 1 ? 'vaga' : 'vagas'}
-                            </span>
-                          </span>
-                        ))}
+                    {/* Resumo Estruturado das Informações do Lote */}
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                      {/* 1. Vagas Ofertadas */}
+                      <div className="bg-slate-50/80 rounded-2xl p-3.5 border border-slate-200/80">
+                        <span className="text-2xs font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                          Vagas Ofertadas
+                        </span>
+                        <div className="text-xl font-mono font-bold text-teal-700">
+                          {totalVagas}
+                        </div>
+                        <span className="text-[11px] text-slate-500 mt-0.5 block truncate">
+                          {lote.comarcas.length} comarcas
+                        </span>
+                      </div>
+
+                      {/* 2. Titulares e Suplentes */}
+                      <div className="bg-slate-50/80 rounded-2xl p-3.5 border border-slate-200/80">
+                        <span className="text-2xs font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                          Convocados
+                        </span>
+                        <div className="text-xl font-mono font-bold text-slate-900">
+                          {totalConvocados}
+                        </div>
+                        <span className="text-[11px] text-slate-600 mt-0.5 block truncate font-medium">
+                          {totalTitulares} tit. • {totalSuplentes} supl.
+                        </span>
+                      </div>
+
+                      {/* 3. Data da Convocação */}
+                      <div className="bg-slate-50/80 rounded-2xl p-3.5 border border-slate-200/80">
+                        <span className="text-2xs font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                          Convocação
+                        </span>
+                        <div className="text-sm font-semibold text-slate-900 truncate">
+                          {lote.data_convocacao || 'Em definição'}
+                        </div>
+                        <span className="text-[11px] text-slate-500 mt-0.5 block truncate">
+                          {lote.data_convocacao ? 'Data oficial / prevista' : 'Aguardando publicação'}
+                        </span>
+                      </div>
+
+                      {/* 4. Audiência de Escolha */}
+                      <div className="bg-slate-50/80 rounded-2xl p-3.5 border border-slate-200/80">
+                        <span className="text-2xs font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                          Audiência Escolha
+                        </span>
+                        <div className="text-sm font-semibold text-slate-900 truncate">
+                          {lote.data_audiencia || 'Em definição'}
+                        </div>
+                        <span className="text-[11px] text-slate-500 mt-0.5 block truncate">
+                          {lote.data_audiencia ? 'Sessão de escolha' : 'A definir'}
+                        </span>
+                      </div>
+
+                      {/* 5. Data da Nomeação */}
+                      <div className="bg-slate-50/80 rounded-2xl p-3.5 border border-slate-200/80">
+                        <span className="text-2xs font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                          Data Nomeação
+                        </span>
+                        <div className="text-sm font-semibold text-slate-900 truncate">
+                          {lote.data_nomeacao || 'Em definição'}
+                        </div>
+                        <span className="text-[11px] text-slate-500 mt-0.5 block truncate">
+                          {lote.data_nomeacao ? 'Previsão no DOE' : 'Aguardando lote'}
+                        </span>
+                      </div>
+
+                      {/* 6. Status Geral */}
+                      <div className="bg-slate-50/80 rounded-2xl p-3.5 border border-slate-200/80">
+                        <span className="text-2xs font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                          Status Lote
+                        </span>
+                        <div className="text-sm font-bold text-slate-900 truncate">
+                          {getStatusLoteLabel(lote.status_lote)}
+                        </div>
+                        <span className="text-[11px] text-slate-500 mt-0.5 block truncate">
+                          {lote.travado ? 'Trava ativada' : 'Manifestação livre'}
+                        </span>
                       </div>
                     </div>
 
+                    {/* 7. Barra de Progresso de Preenchimento das Preferências */}
+                    <div className="bg-slate-50/60 rounded-2xl p-4 border border-slate-200/60 space-y-2">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between text-xs gap-1">
+                        <div className="font-semibold text-slate-800 flex items-center gap-1.5">
+                          <Users className="w-3.5 h-3.5 text-teal-600" />
+                          <span>Preenchimento das Preferências de Comarcas</span>
+                        </div>
+                        <div className="text-slate-600 font-medium">
+                          <span className="font-bold text-teal-700">{preenchidos}</span> já preencheram •{' '}
+                          <span className="font-bold text-amber-700">{faltamPreencher}</span> ainda faltam preencher{' '}
+                          <span className="text-slate-400 font-mono">({percentualPreenchido}%)</span>
+                        </div>
+                      </div>
+                      <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
+                        <div
+                          className="bg-teal-600 h-2 rounded-full transition-all duration-500"
+                          style={{ width: `${percentualPreenchido}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Acordeão Retrátil das Comarcas Contempladas */}
+                    <div className="pt-1 border-t border-slate-100">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setLotesExpandidosComarcas((prev) => ({
+                            ...prev,
+                            [lote.id]: !prev[lote.id],
+                          }))
+                        }
+                        className="w-full flex items-center justify-between py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 transition-colors cursor-pointer"
+                      >
+                        <span className="flex items-center gap-1.5">
+                          <MapPin className="w-3.5 h-3.5 text-teal-600" />
+                          <span>
+                            Detalhamento das comarcas ({lote.comarcas.length} comarcas contempladas • {totalVagas} vagas)
+                          </span>
+                        </span>
+                        <span className="flex items-center gap-1 text-slate-500 text-xs">
+                          <span>{expandido ? 'Ocultar comarcas' : 'Ver relação de comarcas'}</span>
+                          {expandido ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                        </span>
+                      </button>
+
+                      {expandido && (
+                        <div className="mt-2 p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 max-h-60 overflow-y-auto">
+                          <div className="flex flex-wrap gap-1.5">
+                            {lote.comarcas.map((c, i) => (
+                              <span
+                                key={i}
+                                className="px-2.5 py-1 rounded-xl bg-white border border-slate-200 text-xs font-medium text-slate-700 flex items-center gap-1.5 shadow-2xs"
+                              >
+                                <span>{c.nome}</span>
+                                <span className="px-1.5 py-0.2 rounded-md bg-teal-100 text-teal-800 font-mono font-bold text-[10px]">
+                                  {c.vagas} {c.vagas === 1 ? 'vaga' : 'vagas'}
+                                </span>
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
                     {/* Área do Candidato / Acesso ao Lote */}
-                    <div className="pt-4 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="pt-2 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                       <div>
                         {estaContemplado ? (
                           <div className="flex items-center gap-2 text-emerald-800 bg-emerald-50 px-3.5 py-2 rounded-xl border border-emerald-200">

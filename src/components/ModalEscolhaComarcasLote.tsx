@@ -42,7 +42,7 @@ export const ModalEscolhaComarcasLote: React.FC<ModalEscolhaComarcasLoteProps> =
   const [mensagemSucesso, setMensagemSucesso] = useState(false);
 
   const comarcasOfertadas = lote.comarcas || [];
-  const loteTravado = lote.travado || lote.status_lote === 'escolhas_definidas' || lote.status_lote === 'encerrado';
+  const loteTravado = Boolean(lote.travado);
 
   useEffect(() => {
     if (candidato) {

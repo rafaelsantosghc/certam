@@ -47,6 +47,8 @@ export const ModalEditarLote: React.FC<ModalEditarLoteProps> = ({
   const [travado, setTravado] = useState(false);
   const [statusLote, setStatusLote] = useState<StatusLote>('em_escolha');
   const [dataNomeacao, setDataNomeacao] = useState('');
+  const [dataConvocacao, setDataConvocacao] = useState('');
+  const [dataAudiencia, setDataAudiencia] = useState('');
   const [isRankingVisible, setIsRankingVisible] = useState(true);
   const [isPrintingEnabled, setIsPrintingEnabled] = useState(true);
   const [senha, setSenha] = useState('');
@@ -75,8 +77,11 @@ export const ModalEditarLote: React.FC<ModalEditarLoteProps> = ({
       setNumeroLote(numFinal);
       setNome(`Lote ${numFinal}`);
       setAtivo(lote.ativo ?? true);
-      setTravado(lote.travado ?? false);
-      setStatusLote(lote.status_lote || (lote.travado ? 'escolhas_definidas' : 'em_escolha'));
+      const isLoteTravado = lote.travado ?? false;
+      setTravado(isLoteTravado);
+      setStatusLote(lote.status_lote || (isLoteTravado ? 'escolhas_definidas' : 'em_escolha'));
+      setDataConvocacao(lote.data_convocacao || '');
+      setDataAudiencia(lote.data_audiencia || '');
       setDataNomeacao(lote.data_nomeacao || '');
       setIsRankingVisible(lote.is_ranking_visible ?? true);
       setIsPrintingEnabled(lote.is_printing_enabled ?? true);
@@ -89,6 +94,8 @@ export const ModalEditarLote: React.FC<ModalEditarLoteProps> = ({
       setAtivo(true);
       setTravado(false);
       setStatusLote('em_escolha');
+      setDataConvocacao('');
+      setDataAudiencia('');
       setDataNomeacao('');
       setIsRankingVisible(true);
       setIsPrintingEnabled(true);
@@ -344,6 +351,11 @@ export const ModalEditarLote: React.FC<ModalEditarLoteProps> = ({
     // Criar mapa de candidatos_ids
     const candidatosIds = convocados.map((c) => c.candidato_id || c.nome);
 
+    const finalTravado = Boolean(travado);
+    const finalStatus = !finalTravado && (statusLote === 'escolhas_definidas' || statusLote === 'encerrado')
+      ? 'em_escolha'
+      : statusLote;
+
     const loteAtualizado: Lote = {
       id: finalId,
       concurso_id: concursoId,
@@ -351,8 +363,10 @@ export const ModalEditarLote: React.FC<ModalEditarLoteProps> = ({
       nome: nomeFinal,
       numero_lote: numLimpo,
       ativo,
-      travado: travado || statusLote === 'escolhas_definidas' || statusLote === 'encerrado',
-      status_lote: statusLote,
+      travado: finalTravado,
+      status_lote: finalStatus,
+      data_convocacao: dataConvocacao.trim() || undefined,
+      data_audiencia: dataAudiencia.trim() || undefined,
       data_nomeacao: dataNomeacao.trim() || undefined,
       is_ranking_visible: isRankingVisible,
       is_printing_enabled: isPrintingEnabled,
@@ -514,13 +528,21 @@ export const ModalEditarLote: React.FC<ModalEditarLoteProps> = ({
                 </span>
               </div>
 
-              {/* Status do Lote e Data da Nomeação */}
+              {/* Status do Lote e Datas Oficiais / Previsões */}
               <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block font-bold text-slate-800 mb-1">Status Oficial do Lote:</label>
                   <select
                     value={statusLote}
-                    onChange={(e) => setStatusLote(e.target.value as StatusLote)}
+                    onChange={(e) => {
+                      const newStatus = e.target.value as StatusLote;
+                      setStatusLote(newStatus);
+                      if (newStatus === 'escolhas_definidas' || newStatus === 'encerrado') {
+                        setTravado(true);
+                      } else if (newStatus === 'em_escolha' || newStatus === 'aberto') {
+                        setTravado(false);
+                      }
+                    }}
                     className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-medium focus:border-teal-600 outline-hidden"
                   >
                     <option value="aberto">Aberto / Em Planejamento</option>
@@ -529,14 +551,51 @@ export const ModalEditarLote: React.FC<ModalEditarLoteProps> = ({
                     <option value="encerrado">Encerrado / Nomeações Efetuadas</option>
                   </select>
                   <span className="text-[10px] text-slate-500 mt-0.5 block">
-                    {statusLote === 'escolhas_definidas' && 'Fixa as comarcas definitivas dos candidatos contemplados.'}
+                    {statusLote === 'escolhas_definidas' && 'Audiência concluída. Trava a escolha e consolida alocações.'}
+                    {statusLote === 'em_escolha' && 'Candidatos convocados podem manifestar preferências.'}
+                    {statusLote === 'aberto' && 'Lote em preparação administrativa.'}
+                    {statusLote === 'encerrado' && 'Lote finalizado com nomeações publicadas.'}
+                  </span>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-800 mb-1 flex items-center justify-between">
+                    <span>Data da Convocação:</span>
+                    <span className="text-[10px] text-slate-400 font-normal">dia/mês/ano ou mês/ano</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ex: 15/10/2026 ou Outubro/2026"
+                    value={dataConvocacao}
+                    onChange={(e) => setDataConvocacao(e.target.value)}
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-mono focus:border-teal-600 outline-hidden"
+                  />
+                  <span className="text-[10px] text-slate-500 mt-0.5 block">
+                    Data do edital de chamamento deste lote (definida ou previsão).
+                  </span>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-800 mb-1 flex items-center justify-between">
+                    <span>Data da Audiência de Escolha:</span>
+                    <span className="text-[10px] text-slate-400 font-normal">dia/mês/ano ou mês/ano</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ex: 22/10/2026"
+                    value={dataAudiencia}
+                    onChange={(e) => setDataAudiencia(e.target.value)}
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-mono focus:border-teal-600 outline-hidden"
+                  />
+                  <span className="text-[10px] text-slate-500 mt-0.5 block">
+                    Data da sessão de alocação de comarcas (definida ou previsão).
                   </span>
                 </div>
 
                 <div>
                   <label className="block font-bold text-slate-800 mb-1 flex items-center justify-between">
                     <span>Data Oficial da Nomeação:</span>
-                    <span className="text-[10px] text-slate-400 font-normal">dia/mês/ano</span>
+                    <span className="text-[10px] text-slate-400 font-normal">dia/mês/ano ou mês/ano</span>
                   </label>
                   <input
                     type="text"
@@ -546,7 +605,7 @@ export const ModalEditarLote: React.FC<ModalEditarLoteProps> = ({
                     className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-mono focus:border-teal-600 outline-hidden"
                   />
                   <span className="text-[10px] text-slate-500 mt-0.5 block">
-                    Atualiza o status dos candidatos para &quot;Nomeado&quot; na lista de classificação.
+                    Data da publicação em DOE / Posse (definida ou previsão).
                   </span>
                 </div>
               </div>
@@ -567,7 +626,15 @@ export const ModalEditarLote: React.FC<ModalEditarLoteProps> = ({
                   <input
                     type="checkbox"
                     checked={travado}
-                    onChange={(e) => setTravado(e.target.checked)}
+                    onChange={(e) => {
+                      const isChecked = e.target.checked;
+                      setTravado(isChecked);
+                      if (!isChecked && (statusLote === 'escolhas_definidas' || statusLote === 'encerrado')) {
+                        setStatusLote('em_escolha');
+                      } else if (isChecked && statusLote === 'em_escolha') {
+                        setStatusLote('escolhas_definidas');
+                      }
+                    }}
                     className="rounded border-slate-300 text-amber-600 focus:ring-amber-500 w-4 h-4 cursor-pointer"
                   />
                   <span className="font-semibold text-amber-900 flex items-center gap-1">

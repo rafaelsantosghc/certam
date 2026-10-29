@@ -222,7 +222,9 @@ export interface Lote {
   is_printing_enabled: boolean;
   travado: boolean;
   status_lote?: StatusLote;
-  data_nomeacao?: string;
+  data_convocacao?: string; // Data da convocação oficial (definida ou previsão)
+  data_audiencia?: string;  // Data da audiência de escolha (definida ou previsão)
+  data_nomeacao?: string;   // Data oficial de nomeação / posse (definida ou previsão)
   senha?: string;
   comarcas: { nome: string; vagas: number }[];
   candidatos_ids: string[];
