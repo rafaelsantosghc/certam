@@ -6,11 +6,58 @@ import os from 'node:os';
 import path from 'node:path';
 
 const TMP_SYNC_DB_FILE = path.join(os.tmpdir(), 'certam_sync_db.json');
-const CACHE_SYNC_DB_FILE = path.join(process.cwd(), 'node_modules', '.cache', 'certam_sync_db.json');
+const PUBLIC_SYNC_DB_FILE = path.join(process.cwd(), 'public', 'certam_sync_db.json');
+const LEGACY_CACHE_FILE = path.join(process.cwd(), 'node_modules', '.cache', 'certam_sync_db.json');
 
 interface SyncDbFileFormat {
   entries: Record<string, string>;
   versions: Record<string, number>;
+}
+
+const BANNED_CONCURSO_IDS = new Set(['tjrs_2024', 'tjrs_analista_2024', 'mprs_2024']);
+
+function sanitizeSyncEntryValue(key: string, valStr: string): string {
+  if (!valStr || typeof valStr !== 'string') return valStr;
+  if (key === 'certam_concursos_cargos_v6' && valStr.startsWith('[')) {
+    try {
+      const parsed = JSON.parse(valStr);
+      if (Array.isArray(parsed)) {
+        const filtered = parsed.filter((c: any) => {
+          if (!c || typeof c !== 'object') return false;
+          const cid = String(c.id || '').toLowerCase();
+          if (BANNED_CONCURSO_IDS.has(cid)) return false;
+          if (
+            String(c.orgao || '').toUpperCase() === 'TJRS' &&
+            String(c.ano || '') === '2024'
+          ) {
+            return false;
+          }
+          return true;
+        });
+        return JSON.stringify(filtered);
+      }
+    } catch {
+      // ignore
+    }
+  }
+  if (key === 'certam_notifications_events_v5' && valStr.startsWith('[')) {
+    try {
+      const parsed = JSON.parse(valStr);
+      if (Array.isArray(parsed)) {
+        const filtered = parsed.filter((n: any) => {
+          if (!n || typeof n !== 'object') return false;
+          const cid = String(n.concurso_id || '').toLowerCase();
+          if (BANNED_CONCURSO_IDS.has(cid)) return false;
+          if (n.id === 'notif-1' || n.id === 'notif-2' || n.id === 'notif-3') return false;
+          return true;
+        });
+        return JSON.stringify(filtered);
+      }
+    } catch {
+      // ignore
+    }
+  }
+  return valStr;
 }
 
 function readDbFile(filePath: string): SyncDbFileFormat | null {
@@ -25,7 +72,6 @@ function readDbFile(filePath: string): SyncDbFileFormat | null {
             versions: parsed.versions && typeof parsed.versions === 'object' ? parsed.versions : {},
           };
         }
-        // Formato legado (mapa plano de chave -> valor)
         const entries: Record<string, string> = {};
         const versions: Record<string, number> = {};
         for (const [k, v] of Object.entries(parsed)) {
@@ -88,7 +134,7 @@ function normalizeAndMigrateDb(db: SyncDbFileFormat): { db: SyncDbFileFormat; mi
 
   for (const [oldKey, newKey] of Object.entries(LEGACY_KEY_MIGRATIONS)) {
     if (oldKey in entries) {
-      const oldVal = entries[oldKey];
+      const oldVal = sanitizeSyncEntryValue(newKey, entries[oldKey]);
       if (isNonEmptyJsonStr(oldVal)) {
         if (!isNonEmptyJsonStr(entries[newKey])) {
           entries[newKey] = oldVal;
@@ -119,21 +165,57 @@ function normalizeAndMigrateDb(db: SyncDbFileFormat): { db: SyncDbFileFormat; mi
     }
   }
 
+  for (const key of Object.keys(entries)) {
+    const sanitized = sanitizeSyncEntryValue(key, entries[key]);
+    if (sanitized !== entries[key]) {
+      if (isNonEmptyJsonStr(sanitized)) {
+        entries[key] = sanitized;
+      } else {
+        delete entries[key];
+        delete versions[key];
+      }
+      migrated = true;
+    }
+  }
+
   return { db: { entries, versions }, migrated };
 }
 
 function loadSyncDb(): SyncDbFileFormat {
-  const fromCache = readDbFile(CACHE_SYNC_DB_FILE);
+  try {
+    if (fs.existsSync(LEGACY_CACHE_FILE)) {
+      fs.unlinkSync(LEGACY_CACHE_FILE);
+    }
+  } catch {
+    // ignore
+  }
+
+  const fromPublic = readDbFile(PUBLIC_SYNC_DB_FILE);
   const fromTmp = readDbFile(TMP_SYNC_DB_FILE);
 
   const rawEntries: Record<string, string> = {
+    ...(fromPublic?.entries || {}),
     ...(fromTmp?.entries || {}),
-    ...(fromCache?.entries || {}),
   };
   const rawVersions: Record<string, number> = {
+    ...(fromPublic?.versions || {}),
     ...(fromTmp?.versions || {}),
-    ...(fromCache?.versions || {}),
   };
+
+  // Sempre prioriza a entrada com versão mais recente entre public e tmp
+  if (fromPublic && fromTmp) {
+    for (const k of new Set([...Object.keys(fromPublic.entries), ...Object.keys(fromTmp.entries)])) {
+      const vPub = fromPublic.versions[k] || 0;
+      const vTmp = fromTmp.versions[k] || 0;
+      if (vPub >= vTmp && fromPublic.entries[k]) {
+        rawEntries[k] = fromPublic.entries[k];
+        rawVersions[k] = vPub;
+      } else if (fromTmp.entries[k]) {
+        rawEntries[k] = fromTmp.entries[k];
+        rawVersions[k] = vTmp;
+      }
+    }
+  }
 
   const { db, migrated } = normalizeAndMigrateDb({
     entries: rawEntries,
@@ -148,13 +230,13 @@ function loadSyncDb(): SyncDbFileFormat {
 }
 
 function saveSyncDb(db: SyncDbFileFormat) {
-  const serialized = JSON.stringify(db);
+  const serialized = JSON.stringify(db, null, 2);
   try {
-    const dir = path.dirname(CACHE_SYNC_DB_FILE);
+    const dir = path.dirname(PUBLIC_SYNC_DB_FILE);
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
-    fs.writeFileSync(CACHE_SYNC_DB_FILE, serialized, 'utf-8');
+    fs.writeFileSync(PUBLIC_SYNC_DB_FILE, serialized, 'utf-8');
   } catch {
     // ignore
   }
@@ -321,8 +403,16 @@ function certamSyncPlugin(): Plugin {
               if (rawKey === '_test_ping') continue;
               const k = LEGACY_KEY_MIGRATIONS[rawKey] || rawKey;
               if (typeof v === 'string') {
-                const nextVal = mergeSyncValues(db.entries[k], v, forceReplace);
-                if (db.entries[k] !== nextVal || !db.versions[k] || forceReplace) {
+                const sanitizedIncoming = sanitizeSyncEntryValue(k, v);
+                // Para certam_concursos_cargos_v6 vindo do Admin, usa forceReplace para que exclusões sejam definitivas
+                const shouldForceKey =
+                  forceReplace || k === 'certam_concursos_cargos_v6' || k === 'certam_lotes_data_v6';
+                const nextVal = mergeSyncValues(
+                  db.entries[k],
+                  sanitizedIncoming,
+                  shouldForceKey
+                );
+                if (db.entries[k] !== nextVal || !db.versions[k] || shouldForceKey) {
                   db.entries[k] = nextVal;
                   db.versions[k] = now;
                   modified = true;
@@ -371,7 +461,7 @@ export default defineConfig(({ mode }) => ({
     strictPort: true,
     hmr: false,
     watch: {
-      ignored: ['**/.certam_sync_db.json'],
+      ignored: ['**/.certam_sync_db.json', '**/certam_sync_db.json'],
     },
   },
   esbuild: {

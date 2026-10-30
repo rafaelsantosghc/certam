@@ -135,6 +135,72 @@ const LEGACY_KEYS_TO_REMOVE = [
   'certam_diag_heartbeat',
 ];
 
+const BANNED_CONCURSO_IDS = new Set(['tjrs_2024', 'tjrs_analista_2024', 'mprs_2024']);
+
+const ADMIN_AUTHORITATIVE_KEYS = new Set([
+  'certam_concursos_cargos_v6',
+  'certam_lotes_data_v6',
+  'certam_faq_items_v6',
+]);
+
+function isAdminSession(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const raw = localStorage.getItem('certam_auth_user_v8');
+    if (!raw) return false;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return false;
+    const email = String(parsed.email || '').trim().toLowerCase();
+    return Boolean(parsed.is_admin) || email === 'rafasms0@hotmail.com';
+  } catch {
+    return false;
+  }
+}
+
+function sanitizeSyncValue(key: string, valStr: string | null | undefined): string | null {
+  if (valStr === null || valStr === undefined || typeof valStr !== 'string') return null;
+  if (key === 'certam_concursos_cargos_v6' && valStr.startsWith('[')) {
+    try {
+      const parsed = JSON.parse(valStr);
+      if (Array.isArray(parsed)) {
+        const filtered = parsed.filter((c: any) => {
+          if (!c || typeof c !== 'object') return false;
+          const cid = String(c.id || '').toLowerCase();
+          if (BANNED_CONCURSO_IDS.has(cid)) return false;
+          if (
+            String(c.orgao || '').toUpperCase() === 'TJRS' &&
+            String(c.ano || '') === '2024'
+          ) {
+            return false;
+          }
+          return true;
+        });
+        return JSON.stringify(filtered);
+      }
+    } catch {
+      // ignore
+    }
+  }
+  if (key === 'certam_notifications_events_v5' && valStr.startsWith('[')) {
+    try {
+      const parsed = JSON.parse(valStr);
+      if (Array.isArray(parsed)) {
+        const filtered = parsed.filter((n: any) => {
+          if (!n || typeof n !== 'object') return false;
+          const cid = String(n.concurso_id || '').toLowerCase();
+          if (BANNED_CONCURSO_IDS.has(cid)) return false;
+          if (n.id === 'notif-1' || n.id === 'notif-2' || n.id === 'notif-3') return false;
+          return true;
+        });
+        return JSON.stringify(filtered);
+      }
+    } catch {
+      // ignore
+    }
+  }
+  return valStr;
+}
+
 function shouldSyncKey(key: string): boolean {
   if (key in LEGACY_KEY_MIGRATIONS || key === '_test_ping' || key === 'certam_diag_heartbeat') {
     return false;
@@ -241,11 +307,11 @@ function getSupabaseHeaders(anonKey: string, extra?: Record<string, string>): Re
 function migrateAndCleanupLegacyLocalStorage(): void {
   if (typeof window === 'undefined') return;
   try {
-    // 1. Migrar dados de chaves legadas para as chaves atuais antes de remover
     for (const [oldKey, newKey] of Object.entries(LEGACY_KEY_MIGRATIONS)) {
-      const oldVal = localStorage.getItem(oldKey);
+      const rawOld = localStorage.getItem(oldKey);
+      const oldVal = sanitizeSyncValue(newKey, rawOld);
       if (isNonEmptySerialized(oldVal)) {
-        const currentVal = localStorage.getItem(newKey);
+        const currentVal = sanitizeSyncValue(newKey, localStorage.getItem(newKey));
         if (!isNonEmptySerialized(currentVal)) {
           localStorage.setItem(newKey, oldVal);
           memoryStore.set(newKey, oldVal);
@@ -253,6 +319,23 @@ function migrateAndCleanupLegacyLocalStorage(): void {
       }
       localStorage.removeItem(oldKey);
       memoryStore.delete(oldKey);
+    }
+
+    // Higieniza também as chaves atuais caso contenham tjrs_2024 em cache no navegador
+    for (const activeKey of ['certam_concursos_cargos_v6', 'certam_notifications_events_v5']) {
+      const rawCurrent = localStorage.getItem(activeKey);
+      if (rawCurrent) {
+        const sanitized = sanitizeSyncValue(activeKey, rawCurrent);
+        if (sanitized !== rawCurrent) {
+          if (isNonEmptySerialized(sanitized)) {
+            localStorage.setItem(activeKey, sanitized);
+            memoryStore.set(activeKey, sanitized);
+          } else {
+            localStorage.removeItem(activeKey);
+            memoryStore.delete(activeKey);
+          }
+        }
+      }
     }
 
     const keysToDelete: string[] = [];
@@ -272,7 +355,13 @@ function migrateAndCleanupLegacyLocalStorage(): void {
           }
         }
         keysToDelete.push(k);
-      } else if (k.startsWith('certam_chat_messages_v4_') || k === '_test_ping' || k === 'certam_diag_heartbeat') {
+      } else if (
+        k.startsWith('certam_chat_messages_v4_') ||
+        k === '_test_ping' ||
+        k === 'certam_diag_heartbeat' ||
+        k.endsWith('_tjrs_2024') ||
+        k.includes('_tjrs_2024_')
+      ) {
         keysToDelete.push(k);
       }
     }
@@ -333,7 +422,7 @@ function getAllLocalSyncEntries(): Record<string, string> {
       for (let i = 0; i < localStorage.length; i++) {
         const k = localStorage.key(i);
         if (k && shouldSyncKey(k)) {
-          const val = localStorage.getItem(k);
+          const val = sanitizeSyncValue(k, localStorage.getItem(k));
           if (val !== null) {
             result[k] = val;
             if (!memoryStore.has(k)) {
@@ -348,7 +437,10 @@ function getAllLocalSyncEntries(): Record<string, string> {
   }
   for (const [k, v] of memoryStore.entries()) {
     if (shouldSyncKey(k)) {
-      result[k] = v;
+      const sanitized = sanitizeSyncValue(k, v);
+      if (sanitized !== null) {
+        result[k] = sanitized;
+      }
     }
   }
   return result;
@@ -365,11 +457,12 @@ async function pushEntriesToSupabase(entries: Record<string, string>): Promise<b
 
   const nowIso = new Date().toISOString();
   const rows = keys.map((chave) => {
-    let parsedValor: any = entries[chave];
+    const cleanStr = sanitizeSyncValue(chave, entries[chave]) || entries[chave];
+    let parsedValor: any = cleanStr;
     try {
-      parsedValor = JSON.parse(entries[chave]);
+      parsedValor = JSON.parse(cleanStr);
     } catch {
-      parsedValor = entries[chave];
+      parsedValor = cleanStr;
     }
     return {
       chave,
@@ -394,10 +487,12 @@ async function pushEntriesToSupabase(entries: Record<string, string>): Promise<b
       return false;
     }
 
-    // Se certam_concursos_cargos_v6 estiver no lote, espelha também na tabela public.concursos
     if (entries['certam_concursos_cargos_v6']) {
       try {
-        const concursosArr = JSON.parse(entries['certam_concursos_cargos_v6']);
+        const cleanConcStr =
+          sanitizeSyncValue('certam_concursos_cargos_v6', entries['certam_concursos_cargos_v6']) ||
+          '[]';
+        const concursosArr = JSON.parse(cleanConcStr);
         if (Array.isArray(concursosArr) && concursosArr.length > 0) {
           const concursoRows = concursosArr
             .filter((c: any) => c && c.id && c.nome)
@@ -469,8 +564,9 @@ async function fetchEntriesFromSupabase(): Promise<{
         const rawKey = row.chave;
         if (rawKey === '_test_ping' || rawKey === 'certam_diag_heartbeat') continue;
         const canonicalKey = LEGACY_KEY_MIGRATIONS[rawKey] || rawKey;
-        const serialized =
+        const rawSerialized =
           typeof row.valor === 'string' ? row.valor : JSON.stringify(row.valor ?? null);
+        const serialized = sanitizeSyncValue(canonicalKey, rawSerialized);
         const ts = row.updated_at ? new Date(row.updated_at).getTime() : Date.now();
 
         if (!isNonEmptySerialized(serialized)) continue;
@@ -505,8 +601,10 @@ async function sendEntriesBatch(
   const bulkKeys: string[] = [];
 
   for (const k of keys) {
+    const cleanVal = sanitizeSyncValue(k, entries[k]);
+    if (!cleanVal) continue;
     if (isPriorityKey(k)) {
-      priorityBatch[k] = entries[k];
+      priorityBatch[k] = cleanVal;
     } else {
       bulkKeys.push(k);
     }
@@ -540,11 +638,13 @@ async function sendEntriesBatch(
   }
 
   for (const bk of bulkKeys) {
+    const cleanVal = sanitizeSyncValue(bk, entries[bk]);
+    if (!cleanVal) continue;
     try {
       const res = await fetch('/api/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ entries: { [bk]: entries[bk] }, forceReplace }),
+        body: JSON.stringify({ entries: { [bk]: cleanVal }, forceReplace }),
       });
       if (res.ok) {
         syncStatus.lastLocalApiOk = true;
@@ -561,7 +661,6 @@ async function sendEntriesBatch(
     }
   }
 
-  // Envia também para o Supabase se configurado
   if (Object.keys(entries).length > 0) {
     await pushEntriesToSupabase(entries);
   }
@@ -604,13 +703,15 @@ async function executePullFromServer(): Promise<boolean> {
   if (typeof window === 'undefined') return false;
   try {
     migrateAndCleanupLegacyLocalStorage();
+    const isCurrentUserAdmin = isAdminSession();
 
     let localApiEntries: Record<string, string> = {};
     let localApiVersions: Record<string, number> = {};
 
     try {
       const res = await fetch('/api/sync', { cache: 'no-store' });
-      if (res.ok) {
+      const contentType = res.headers.get('content-type') || '';
+      if (res.ok && contentType.includes('application/json')) {
         syncStatus.lastLocalApiOk = true;
         const data = await res.json();
         localApiEntries = data?.entries || {};
@@ -622,7 +723,22 @@ async function executePullFromServer(): Promise<boolean> {
       syncStatus.lastLocalApiOk = false;
     }
 
-    // Se o servidor local já tiver certam_supabase_config e o cliente ainda não tiver, adota imediatamente
+    // Fallback para arquivo estático /certam_sync_db.json caso /api/sync não esteja rodando (ex: deploy estático)
+    if (!syncStatus.lastLocalApiOk) {
+      try {
+        const snapRes = await fetch('/certam_sync_db.json', { cache: 'no-store' });
+        if (snapRes.ok) {
+          const snapData = await snapRes.json();
+          if (snapData?.entries && typeof snapData.entries === 'object') {
+            localApiEntries = snapData.entries;
+            localApiVersions = snapData.versions || {};
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+
     if (
       localApiEntries[SUPABASE_CONFIG_KEY] &&
       !memoryStore.has(SUPABASE_CONFIG_KEY) &&
@@ -632,15 +748,23 @@ async function executePullFromServer(): Promise<boolean> {
       safeLocalStorageSet(SUPABASE_CONFIG_KEY, localApiEntries[SUPABASE_CONFIG_KEY]);
     }
 
-    // Busca também do Supabase (se configurado via .env ou painel Admin)
     const supabaseData = await fetchEntriesFromSupabase();
 
-    // Combina as entradas do /api/sync com as do Supabase
-    const entries: Record<string, string> = { ...localApiEntries };
-    const serverVersions: Record<string, number> = { ...localApiVersions };
+    const entries: Record<string, string> = {};
+    const serverVersions: Record<string, number> = {};
+
+    for (const [k, rawVal] of Object.entries(localApiEntries)) {
+      const cleanVal = sanitizeSyncValue(k, rawVal);
+      if (cleanVal !== null) {
+        entries[k] = cleanVal;
+        serverVersions[k] = localApiVersions[k] || 0;
+      }
+    }
 
     if (supabaseData) {
-      for (const [k, supVal] of Object.entries(supabaseData.entries)) {
+      for (const [k, rawSupVal] of Object.entries(supabaseData.entries)) {
+        const supVal = sanitizeSyncValue(k, rawSupVal);
+        if (!supVal) continue;
         const supVer = supabaseData.versions[k] || 0;
         const locSrvVal = entries[k];
         const locSrvVer = serverVersions[k] || 0;
@@ -649,7 +773,13 @@ async function executePullFromServer(): Promise<boolean> {
           entries[k] = supVal;
           serverVersions[k] = supVer;
         } else if (supVal !== locSrvVal) {
-          // Mescla arrays de objetos se ambos tiverem itens
+          if (ADMIN_AUTHORITATIVE_KEYS.has(k)) {
+            if (supVer >= locSrvVer) {
+              entries[k] = supVal;
+              serverVersions[k] = supVer;
+            }
+            continue;
+          }
           if (locSrvVal.startsWith('[') && supVal.startsWith('[')) {
             try {
               const arrA = JSON.parse(locSrvVal);
@@ -687,11 +817,22 @@ async function executePullFromServer(): Promise<boolean> {
 
     const changedKeys: string[] = [];
     const toPushBack: Record<string, string> = {};
+    const toForcePushAdmin: Record<string, string> = {};
     const allLocal = getAllLocalSyncEntries();
 
-    // 1. Qualquer chave local não-vazia que ainda não exista no servidor/Supabase deve ser publicada imediatamente
+    // 1. Se o usuário conectado for o ADMIN, suas bases autoritativas locais (Concursos, Lotes, FAQs) prevalecem e são publicadas para todos!
     for (const [localKey, localVal] of Object.entries(allLocal)) {
       if (!isNonEmptySerialized(localVal)) continue;
+      if (ADMIN_AUTHORITATIVE_KEYS.has(localKey)) {
+        if (isCurrentUserAdmin) {
+          const srvVal = entries[localKey];
+          if (srvVal !== localVal) {
+            toForcePushAdmin[localKey] = localVal;
+          }
+        }
+        continue;
+      }
+
       const srvVal = entries[localKey];
       const supVal = supabaseData?.entries?.[localKey];
       if (!isNonEmptySerialized(srvVal) || (supabaseData && !isNonEmptySerialized(supVal))) {
@@ -700,9 +841,12 @@ async function executePullFromServer(): Promise<boolean> {
     }
 
     // 2. Processar e mesclar chaves vindas do servidor / Supabase
-    for (const [rawKey, serverVal] of Object.entries(entries)) {
+    for (const [rawKey, rawServerVal] of Object.entries(entries)) {
       const k = LEGACY_KEY_MIGRATIONS[rawKey] || rawKey;
-      if (!shouldSyncKey(k) || typeof serverVal !== 'string') continue;
+      if (!shouldSyncKey(k) || typeof rawServerVal !== 'string') continue;
+
+      const serverVal = sanitizeSyncValue(k, rawServerVal);
+      if (!serverVal) continue;
 
       const localVal = cloudSync.getItem(k);
       const srvVer = serverVersions[rawKey] || serverVersions[k] || 0;
@@ -711,9 +855,40 @@ async function executePullFromServer(): Promise<boolean> {
 
       if (!isNonEmptySerialized(serverVal)) {
         if (isNonEmptySerialized(localVal) && !recentlyWrittenLocally) {
-          toPushBack[k] = localVal;
+          if (!ADMIN_AUTHORITATIVE_KEYS.has(k) || isCurrentUserAdmin) {
+            toPushBack[k] = localVal;
+          }
         }
         continue;
+      }
+
+      // REGRA DE AUTORIDADE PARA CONCURSOS, LOTES E FAQs:
+      if (ADMIN_AUTHORITATIVE_KEYS.has(k)) {
+        if (isCurrentUserAdmin) {
+          // Se o Admin já tem dados locais para esta chave, o Admin é a fonte da verdade
+          if (isNonEmptySerialized(localVal)) {
+            if (localVal !== serverVal) {
+              toForcePushAdmin[k] = localVal;
+            }
+            if (srvVer) knownServerVersions.set(k, srvVer);
+            continue;
+          }
+          // Se o Admin está em um navegador novo sem dados locais, adota os do servidor
+          memoryStore.set(k, serverVal);
+          safeLocalStorageSet(k, serverVal);
+          if (srvVer) knownServerVersions.set(k, srvVer);
+          changedKeys.push(k);
+          continue;
+        } else {
+          // Usuário comum ou visitante: adota 100% a lista oficial do servidor (nunca mantém lixo antigo do localStorage)
+          if (localVal !== serverVal) {
+            memoryStore.set(k, serverVal);
+            safeLocalStorageSet(k, serverVal);
+            changedKeys.push(k);
+          }
+          if (srvVer) knownServerVersions.set(k, srvVer);
+          continue;
+        }
       }
 
       if (recentlyWrittenLocally && isNonEmptySerialized(localVal)) {
@@ -769,14 +944,11 @@ async function executePullFromServer(): Promise<boolean> {
                   }
                 } else {
                   const srvItem = map.get(itemKey);
-                  const mergedItem = mergeKeyedObjectItems(srvItem, item);
-                  // Preserva dados do servidor, mas respeita status resolvido pelo admin
                   const finalItem = mergeKeyedObjectItems(item, srvItem);
                   if (JSON.stringify(finalItem) !== JSON.stringify(srvItem)) {
                     localHadExtraOrUpdatedItems = true;
                   }
                   map.set(itemKey, finalItem);
-                  void mergedItem;
                 }
               });
 
@@ -862,6 +1034,10 @@ async function executePullFromServer(): Promise<boolean> {
       dispatchUpdateEvents(changedKeys);
     }
 
+    if (Object.keys(toForcePushAdmin).length > 0) {
+      void sendEntriesBatch(toForcePushAdmin, true);
+    }
+
     if (Object.keys(toPushBack).length > 0) {
       void sendEntriesBatch(toPushBack, false);
     }
@@ -876,16 +1052,15 @@ export const cloudSync = {
   getItem(key: string): string | null {
     const canonicalKey = LEGACY_KEY_MIGRATIONS[key] || key;
     if (memoryStore.has(canonicalKey)) {
-      return memoryStore.get(canonicalKey) ?? null;
+      return sanitizeSyncValue(canonicalKey, memoryStore.get(canonicalKey) ?? null);
     }
     if (typeof window === 'undefined') return null;
     try {
-      let val = localStorage.getItem(canonicalKey);
+      let val = sanitizeSyncValue(canonicalKey, localStorage.getItem(canonicalKey));
       if (!isNonEmptySerialized(val)) {
-        // Verifica se existe dado em alguma chave legada correspondente
         for (const [oldKey, mappedKey] of Object.entries(LEGACY_KEY_MIGRATIONS)) {
           if (mappedKey === canonicalKey) {
-            const legacyVal = localStorage.getItem(oldKey);
+            const legacyVal = sanitizeSyncValue(canonicalKey, localStorage.getItem(oldKey));
             if (isNonEmptySerialized(legacyVal)) {
               val = legacyVal;
               safeLocalStorageSet(canonicalKey, legacyVal);
@@ -906,7 +1081,8 @@ export const cloudSync = {
 
   setItem(key: string, value: any, forceReplace?: boolean): void {
     const canonicalKey = LEGACY_KEY_MIGRATIONS[key] || key;
-    const strValue = typeof value === 'string' ? value : JSON.stringify(value);
+    const rawStr = typeof value === 'string' ? value : JSON.stringify(value);
+    const strValue = sanitizeSyncValue(canonicalKey, rawStr) || rawStr;
     memoryStore.set(canonicalKey, strValue);
     lastLocalWriteAt.set(canonicalKey, Date.now());
     safeLocalStorageSet(canonicalKey, strValue);
@@ -916,7 +1092,8 @@ export const cloudSync = {
   async pushKey(key: string, value: any, forceReplace?: string | boolean): Promise<void> {
     if (typeof window === 'undefined') return;
     const canonicalKey = LEGACY_KEY_MIGRATIONS[key] || key;
-    const strValue = typeof value === 'string' ? value : JSON.stringify(value);
+    const rawStr = typeof value === 'string' ? value : JSON.stringify(value);
+    const strValue = sanitizeSyncValue(canonicalKey, rawStr) || rawStr;
     memoryStore.set(canonicalKey, strValue);
     lastLocalWriteAt.set(canonicalKey, Date.now());
 
@@ -926,7 +1103,7 @@ export const cloudSync = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           entries: { [canonicalKey]: strValue },
-          forceReplace: Boolean(forceReplace),
+          forceReplace: Boolean(forceReplace) || ADMIN_AUTHORITATIVE_KEYS.has(canonicalKey),
         }),
       });
       if (res.ok) {
@@ -950,14 +1127,18 @@ export const cloudSync = {
     if (typeof window === 'undefined') return;
     try {
       migrateAndCleanupLegacyLocalStorage();
+      const isCurrentUserAdmin = isAdminSession();
       const allLocal = getAllLocalSyncEntries();
       const nonEmpty: Record<string, string> = {};
       for (const [k, val] of Object.entries(allLocal)) {
-        if (isNonEmptySerialized(val)) {
-          nonEmpty[k] = val;
+        if (!isNonEmptySerialized(val)) continue;
+        // Usuários comuns nunca sobem chaves exclusivas da administração (Concursos, Lotes, FAQ)
+        if (!isCurrentUserAdmin && ADMIN_AUTHORITATIVE_KEYS.has(k)) {
+          continue;
         }
+        nonEmpty[k] = val;
       }
-      await sendEntriesBatch(nonEmpty, forceReplace);
+      await sendEntriesBatch(nonEmpty, forceReplace || isCurrentUserAdmin);
     } catch {
       // Ignore network errors
     }

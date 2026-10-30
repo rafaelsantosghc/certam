@@ -1,0 +1,8 @@
+{
+  "entries": {
+    "certam_concursos_cargos_v6": "[{\"id\":\"tjrs_2025\",\"nome\":\"Concurso TJRS - Tribunal de Justiça do Rio Grande do Sul\",\"orgao\":\"TJRS\",\"ano\":\"2025\",\"edital\":\"Edital 01/2025\",\"status\":\"Homologado\",\"homologado\":true,\"regiao\":\"Sul\",\"esfera\":\"Estadual\",\"estado\":\"RS\",\"descricao\":\"Tribunal de Justiça do Estado do Rio Grande do Sul\",\"tipo_lotacao\":\"Comarca\",\"cargos\":[{\"id\":\"analista_judici_rio___rea_judici\",\"nome\":\"Analista Judiciário - Área Judiciária\",\"nivel\":\"Superior\",\"vagas_imediatas\":0,\"tem_cr\":true,\"ativo\":true},{\"id\":\"analista_judici_rio___rea_admini\",\"nome\":\"Analista Judiciário - Área Administrativa\",\"nivel\":\"Superior\",\"vagas_imediatas\":0,\"tem_cr\":true,\"ativo\":true},{\"id\":\"t_cnico_judici_rio___rea_adminis\",\"nome\":\"Técnico Judiciário - Área Administrativa\",\"nivel\":\"Médio\",\"vagas_imediatas\":0,\"tem_cr\":true,\"ativo\":true}]},{\"id\":\"test_2025\",\"nome\":\"TEST - 2025\",\"orgao\":\"TEST\",\"ano\":\"2025\",\"edital\":\"Edital 01/2025\",\"status\":\"Homologado\",\"homologado\":true,\"regiao\":\"Sul\",\"esfera\":\"Estadual\",\"estado\":\"RS\",\"descricao\":\"\",\"tipo_lotacao\":\"Lotação\",\"cargos\":[{\"id\":\"geral\",\"nome\":\"Cargo Geral\",\"nivel\":\"Superior\",\"vagas_imediatas\":0,\"tem_cr\":true,\"ativo\":true}]}]"
+  },
+  "versions": {
+    "certam_concursos_cargos_v6": 1793400000000
+  }
+}

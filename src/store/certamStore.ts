@@ -2,8 +2,84 @@ import { Concurso, Cargo, CronogramaItem, DocumentoItem, QuadroVagas, Comunicado
 import { cloudSync } from './cloudSync';
 
 const STORAGE_KEY = 'certam_concursos_cargos_v6';
+const BANNED_LEGACY_IDS = new Set(['tjrs_2024', 'tjrs_analista_2024', 'mprs_2024']);
 
-export const DEFAULT_CONCURSOS: Concurso[] = [];
+function isLegacyBannedConcurso(c: any): boolean {
+  if (!c || typeof c !== 'object') return true;
+  const id = String(c.id || '').toLowerCase();
+  if (BANNED_LEGACY_IDS.has(id)) return true;
+  if (String(c.orgao || '').toUpperCase() === 'TJRS' && String(c.ano || '') === '2024') {
+    return true;
+  }
+  return false;
+}
+
+export const DEFAULT_CONCURSOS: Concurso[] = [
+  {
+    id: 'tjrs_2025',
+    nome: 'Concurso TJRS - Tribunal de Justiça do Rio Grande do Sul',
+    orgao: 'TJRS',
+    ano: '2025',
+    edital: 'Edital 01/2025',
+    status: 'Homologado',
+    homologado: true,
+    regiao: 'Sul',
+    esfera: 'Estadual',
+    estado: 'RS',
+    descricao: 'Tribunal de Justiça do Estado do Rio Grande do Sul',
+    tipo_lotacao: 'Comarca',
+    cargos: [
+      {
+        id: 'analista_judici_rio___rea_judici',
+        nome: 'Analista Judiciário - Área Judiciária',
+        nivel: 'Superior',
+        vagas_imediatas: 0,
+        tem_cr: true,
+        ativo: true,
+      },
+      {
+        id: 'analista_judici_rio___rea_admini',
+        nome: 'Analista Judiciário - Área Administrativa',
+        nivel: 'Superior',
+        vagas_imediatas: 0,
+        tem_cr: true,
+        ativo: true,
+      },
+      {
+        id: 't_cnico_judici_rio___rea_adminis',
+        nome: 'Técnico Judiciário - Área Administrativa',
+        nivel: 'Médio',
+        vagas_imediatas: 0,
+        tem_cr: true,
+        ativo: true,
+      },
+    ],
+  },
+  {
+    id: 'test_2025',
+    nome: 'TEST - 2025',
+    orgao: 'TEST',
+    ano: '2025',
+    edital: 'Edital 01/2025',
+    status: 'Homologado',
+    homologado: true,
+    regiao: 'Sul',
+    esfera: 'Estadual',
+    estado: 'RS',
+    descricao: '',
+    tipo_lotacao: 'Lotação',
+    cargos: [
+      {
+        id: 'geral',
+        nome: 'Cargo Geral',
+        nivel: 'Superior',
+        vagas_imediatas: 0,
+        tem_cr: true,
+        ativo: true,
+      },
+    ],
+  },
+];
 
 export const certamStore = {
   getConcursos(): Concurso[] {
@@ -12,7 +88,17 @@ export const certamStore = {
       if (stored) {
         const parsed = JSON.parse(stored);
         if (Array.isArray(parsed)) {
-          return parsed;
+          const filtered = parsed.filter((c) => !isLegacyBannedConcurso(c));
+          if (filtered.length !== parsed.length) {
+            // Remove permanentemente o tjrs_2024 legado do armazenamento local
+            if (filtered.length > 0) {
+              cloudSync.setItem(STORAGE_KEY, filtered, true);
+              return filtered;
+            }
+          }
+          if (filtered.length > 0) {
+            return filtered;
+          }
         }
       }
     } catch {
@@ -33,15 +119,15 @@ export const certamStore = {
     return conc.cargos.find((cg) => cg.id === cargoId) || conc.cargos[0] || null;
   },
 
-  salvarConcurso(concurso: Concurso, forceReplace = false): boolean {
+  salvarConcurso(concurso: Concurso, forceReplace = true): boolean {
     if (!concurso || !concurso.id) return false;
-    const list = [...this.getConcursos()];
+    const list = [...this.getConcursos()].filter((c) => !isLegacyBannedConcurso(c));
     const index = list.findIndex((c) => c.id === concurso.id);
     if (!Array.isArray(concurso.cargos) || concurso.cargos.length === 0) {
       concurso.cargos = [
         {
           id: 'geral',
-          nome: 'Geral / Lista Única',
+          nome: 'Cargo Geral',
           nivel: 'Superior',
           vagas_imediatas: 0,
           tem_cr: true,
@@ -79,15 +165,18 @@ export const certamStore = {
   },
 
   removerConcurso(concursoId: string): boolean {
-    const list = this.getConcursos().filter((c) => c.id !== concursoId);
+    const list = this.getConcursos().filter(
+      (c) => c.id !== concursoId && !isLegacyBannedConcurso(c)
+    );
     this.salvarTodos(list, true);
     return true;
   },
 
-  salvarTodos(concursos: Concurso[], forceReplace = false) {
-    cloudSync.setItem(STORAGE_KEY, concursos, forceReplace);
+  salvarTodos(concursos: Concurso[], forceReplace = true) {
+    const cleanList = concursos.filter((c) => !isLegacyBannedConcurso(c));
+    cloudSync.setItem(STORAGE_KEY, cleanList, forceReplace);
     if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('certam_concursos_updated', { detail: concursos }));
+      window.dispatchEvent(new CustomEvent('certam_concursos_updated', { detail: cleanList }));
     }
   },
 
