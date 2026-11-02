@@ -84,6 +84,7 @@ const SYNC_PREFIXES = [
 const PRIORITY_PREFIXES = [
   'certam_concursos_',
   'certam_lotes_',
+  'certam_candidatos_',
   'certam_perfil_audit_',
   'certam_audit_',
   'certam_vinculacao_',
@@ -142,6 +143,12 @@ const ADMIN_AUTHORITATIVE_KEYS = new Set([
   'certam_lotes_data_v6',
   'certam_faq_items_v6',
 ]);
+
+function isAdminAuthoritativeKey(key: string): boolean {
+  if (ADMIN_AUTHORITATIVE_KEYS.has(key)) return true;
+  if (key.startsWith('certam_candidatos_data_')) return true;
+  return false;
+}
 
 function isAdminSession(): boolean {
   if (typeof window === 'undefined') return false;
@@ -390,7 +397,15 @@ function safeLocalStorageSet(key: string, value: string): boolean {
           const bulkKeys: { k: string; len: number }[] = [];
           for (let i = 0; i < localStorage.length; i++) {
             const k = localStorage.key(i);
-            if (k && (k.startsWith('certam_candidatos_') || k.startsWith('certam_users_'))) {
+            // Nunca descarta concursos, lotes, candidatos ou auditoria para liberar espaço
+            if (
+              k &&
+              !k.startsWith('certam_concursos_') &&
+              !k.startsWith('certam_candidatos_') &&
+              !k.startsWith('certam_lotes_') &&
+              !k.startsWith('certam_perfil_audit_') &&
+              !k.startsWith('certam_auth_')
+            ) {
               const v = localStorage.getItem(k) || '';
               memoryStore.set(k, v);
               bulkKeys.push({ k, len: v.length });
@@ -820,10 +835,10 @@ async function executePullFromServer(): Promise<boolean> {
     const toForcePushAdmin: Record<string, string> = {};
     const allLocal = getAllLocalSyncEntries();
 
-    // 1. Se o usuário conectado for o ADMIN, suas bases autoritativas locais (Concursos, Lotes, FAQs) prevalecem e são publicadas para todos!
+    // 1. Se o usuário conectado for o ADMIN, suas bases autoritativas locais (Concursos, Lotes, Candidatos, FAQs) prevalecem e são publicadas para todos!
     for (const [localKey, localVal] of Object.entries(allLocal)) {
       if (!isNonEmptySerialized(localVal)) continue;
-      if (ADMIN_AUTHORITATIVE_KEYS.has(localKey)) {
+      if (isAdminAuthoritativeKey(localKey)) {
         if (isCurrentUserAdmin) {
           const srvVal = entries[localKey];
           if (srvVal !== localVal) {
@@ -855,15 +870,15 @@ async function executePullFromServer(): Promise<boolean> {
 
       if (!isNonEmptySerialized(serverVal)) {
         if (isNonEmptySerialized(localVal) && !recentlyWrittenLocally) {
-          if (!ADMIN_AUTHORITATIVE_KEYS.has(k) || isCurrentUserAdmin) {
+          if (!isAdminAuthoritativeKey(k) || isCurrentUserAdmin) {
             toPushBack[k] = localVal;
           }
         }
         continue;
       }
 
-      // REGRA DE AUTORIDADE PARA CONCURSOS, LOTES E FAQs:
-      if (ADMIN_AUTHORITATIVE_KEYS.has(k)) {
+      // REGRA DE AUTORIDADE PARA CONCURSOS, LOTES, CANDIDATOS E FAQs:
+      if (isAdminAuthoritativeKey(k)) {
         if (isCurrentUserAdmin) {
           // Se o Admin já tem dados locais para esta chave, o Admin é a fonte da verdade
           if (isNonEmptySerialized(localVal)) {
@@ -1103,7 +1118,7 @@ export const cloudSync = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           entries: { [canonicalKey]: strValue },
-          forceReplace: Boolean(forceReplace) || ADMIN_AUTHORITATIVE_KEYS.has(canonicalKey),
+          forceReplace: Boolean(forceReplace) || isAdminAuthoritativeKey(canonicalKey),
         }),
       });
       if (res.ok) {
@@ -1132,8 +1147,8 @@ export const cloudSync = {
       const nonEmpty: Record<string, string> = {};
       for (const [k, val] of Object.entries(allLocal)) {
         if (!isNonEmptySerialized(val)) continue;
-        // Usuários comuns nunca sobem chaves exclusivas da administração (Concursos, Lotes, FAQ)
-        if (!isCurrentUserAdmin && ADMIN_AUTHORITATIVE_KEYS.has(k)) {
+        // Usuários comuns nunca sobem chaves exclusivas da administração (Concursos, Lotes, Candidatos, FAQ)
+        if (!isCurrentUserAdmin && isAdminAuthoritativeKey(k)) {
           continue;
         }
         nonEmpty[k] = val;

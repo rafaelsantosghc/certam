@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { certamStore } from '../store/certamStore';
 import { lotesStore } from '../store/lotesStore';
 import { userRegistryStore } from '../store/userRegistryStore';
+import { cloudSync } from '../store/cloudSync';
 import { useAuth } from '../store/authContext';
 import { podeEditarConcurso, podeEditarCargo, podeEditarLote } from '../utils/permissions';
 import { ModalEditarConcurso } from '../components/ModalEditarConcurso';
@@ -105,11 +106,16 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
       setLotes(lotesStore.getLotes());
     };
     syncData();
+    void cloudSync.pullFromServer().then(syncData);
     window.addEventListener('storage', syncData);
     window.addEventListener('certam_concursos_updated', syncData);
     window.addEventListener('certam_lotes_updated', syncData);
     window.addEventListener('certam_candidatos_updated', syncData);
+
+    const interval = window.setInterval(syncData, 3500);
+
     return () => {
+      window.clearInterval(interval);
       window.removeEventListener('storage', syncData);
       window.removeEventListener('certam_concursos_updated', syncData);
       window.removeEventListener('certam_lotes_updated', syncData);

@@ -172,7 +172,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     window.addEventListener('certam_lotes_updated', handleLotes);
     window.addEventListener('storage', handleStorage);
 
+    const refreshInterval = window.setInterval(() => {
+      setAuditRequests(auditStore.getAuditRequests());
+      setVinculacoes(auditStore.getVinculacoes());
+      setContatos(contactStore.getMensagens());
+      setNotificacoes(notificationStore.getNotificacoes());
+      setUsuariosGerais(userRegistryStore.getAllUsers());
+      setConcursos(certamStore.getConcursos());
+      setLotesLista(lotesStore.getLotes());
+    }, 3500);
+
     return () => {
+      window.clearInterval(refreshInterval);
       window.removeEventListener('certam_audit_updated', handleAudit);
       window.removeEventListener('certam_vinculacoes_updated', handleVinc);
       window.removeEventListener('certam_contact_updated', handleCont);

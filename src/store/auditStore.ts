@@ -11,7 +11,13 @@ export const auditStore = {
         cloudSync.getItem(AUDIT_STORAGE_KEY) || cloudSync.getItem('certam_audit_requests_v5');
       if (stored) {
         const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed)) return parsed;
+        if (Array.isArray(parsed)) {
+          return [...parsed].sort((a, b) => {
+            if (a.status === 'pendente' && b.status !== 'pendente') return -1;
+            if (a.status !== 'pendente' && b.status === 'pendente') return 1;
+            return (b.id || '').localeCompare(a.id || '');
+          });
+        }
       }
     } catch {
       // ignore
@@ -44,6 +50,7 @@ export const auditStore = {
     };
     list.unshift(nova);
     this.salvarAuditRequests(list, false);
+    void cloudSync.pushKey(AUDIT_STORAGE_KEY, list, false);
     return nova;
   },
 
@@ -54,6 +61,7 @@ export const auditStore = {
     item.status = 'aprovado';
     item.data_resposta = new Date().toLocaleString('pt-BR');
     this.salvarAuditRequests(list, false);
+    void cloudSync.pushKey(AUDIT_STORAGE_KEY, list, false);
     return item;
   },
 
@@ -65,6 +73,7 @@ export const auditStore = {
     item.motivo_rejeicao = motivo || 'Dados divergentes do cadastro oficial.';
     item.data_resposta = new Date().toLocaleString('pt-BR');
     this.salvarAuditRequests(list, false);
+    void cloudSync.pushKey(AUDIT_STORAGE_KEY, list, false);
     return item;
   },
 
@@ -76,7 +85,13 @@ export const auditStore = {
       const stored = cloudSync.getItem(VINCULACOES_STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed)) return parsed;
+        if (Array.isArray(parsed)) {
+          return [...parsed].sort((a, b) => {
+            if (a.status === 'pendente' && b.status !== 'pendente') return -1;
+            if (a.status !== 'pendente' && b.status === 'pendente') return 1;
+            return (b.id || '').localeCompare(a.id || '');
+          });
+        }
       }
     } catch {
       // ignore
@@ -103,6 +118,7 @@ export const auditStore = {
     };
     list.unshift(nova);
     this.salvarVinculacoes(list);
+    void cloudSync.pushKey(VINCULACOES_STORAGE_KEY, list, false);
     return nova;
   },
 

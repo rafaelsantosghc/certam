@@ -302,11 +302,12 @@ function mergeSyncValues(
           return incomingStr;
         }
         const map = new Map<string, any>();
-        existingArr.forEach((item: any) => {
+        // Novos itens submetidos vêm na frente na fila (como em unshift de auditoria)
+        incomingArr.forEach((item: any) => {
           const k = item.id || item.email;
           map.set(String(k), item);
         });
-        incomingArr.forEach((item: any) => {
+        existingArr.forEach((item: any) => {
           const k = item.id || item.email;
           const prev = map.get(String(k));
           map.set(String(k), prev ? mergeKeyedObjectItems(prev, item) : item);
@@ -404,9 +405,12 @@ function certamSyncPlugin(): Plugin {
               const k = LEGACY_KEY_MIGRATIONS[rawKey] || rawKey;
               if (typeof v === 'string') {
                 const sanitizedIncoming = sanitizeSyncEntryValue(k, v);
-                // Para certam_concursos_cargos_v6 vindo do Admin, usa forceReplace para que exclusões sejam definitivas
+                // Concursos, lotes e listas de classificação vindos do Admin têm autoridade absoluta (forceReplace)
                 const shouldForceKey =
-                  forceReplace || k === 'certam_concursos_cargos_v6' || k === 'certam_lotes_data_v6';
+                  forceReplace ||
+                  k === 'certam_concursos_cargos_v6' ||
+                  k === 'certam_lotes_data_v6' ||
+                  k.startsWith('certam_candidatos_data_');
                 const nextVal = mergeSyncValues(
                   db.entries[k],
                   sanitizedIncoming,

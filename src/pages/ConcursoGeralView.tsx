@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { certamStore } from '../store/certamStore';
 import { lotesStore } from '../store/lotesStore';
+import { cloudSync } from '../store/cloudSync';
 import { useAuth } from '../store/authContext';
 import { podeEditarConcurso, podeEditarCargo } from '../utils/permissions';
 import { ModalEditarConcurso } from '../components/ModalEditarConcurso';
@@ -48,11 +49,14 @@ export const ConcursoGeralView: React.FC<ConcursoGeralViewProps> = ({
       if (atual) setConcurso(atual);
     };
     sync();
+    void cloudSync.pullFromServer().then(sync);
     window.addEventListener('storage', sync);
     window.addEventListener('certam_concursos_updated', sync);
+    window.addEventListener('certam_candidatos_updated', sync);
     return () => {
       window.removeEventListener('storage', sync);
       window.removeEventListener('certam_concursos_updated', sync);
+      window.removeEventListener('certam_candidatos_updated', sync);
     };
   }, [concursoId]);
 

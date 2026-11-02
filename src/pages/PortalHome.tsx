@@ -75,10 +75,12 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
     };
     window.addEventListener('certam_concursos_updated', handleUpdate);
     window.addEventListener('certam_lotes_updated', handleUpdate);
+    window.addEventListener('certam_candidatos_updated', handleUpdate);
     window.addEventListener('storage', handleUpdate);
     return () => {
       window.removeEventListener('certam_concursos_updated', handleUpdate);
       window.removeEventListener('certam_lotes_updated', handleUpdate);
+      window.removeEventListener('certam_candidatos_updated', handleUpdate);
       window.removeEventListener('storage', handleUpdate);
     };
   }, []);
