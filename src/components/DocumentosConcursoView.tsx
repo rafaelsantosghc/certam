@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Concurso, DocumentoItem, TipoDocumento } from '../types';
-import { FileText, Download, Search, Filter, ExternalLink, Calendar } from 'lucide-react';
+import { FileText, Download, Search, Filter, ExternalLink, Calendar, Eye } from 'lucide-react';
+import { DocumentViewerModal } from './DocumentViewerModal';
 
 interface DocumentosConcursoViewProps {
   concurso: Concurso;
@@ -10,6 +11,7 @@ export const DocumentosConcursoView: React.FC<DocumentosConcursoViewProps> = ({ 
   const docs: DocumentoItem[] = concurso.documentos || [];
   const [busca, setBusca] = useState('');
   const [tipoFiltro, setTipoFiltro] = useState<string>('todos');
+  const [docSelecionado, setDocSelecionado] = useState<DocumentoItem | null>(null);
 
   const docsFiltrados = docs.filter((d) => {
     const matchBusca =
@@ -31,7 +33,7 @@ export const DocumentosConcursoView: React.FC<DocumentosConcursoViewProps> = ({ 
             <span>Documentos Oficiais do Concurso</span>
           </h3>
           <p className="text-xs text-slate-500 mt-0.5">
-            Editais de abertura, retificações, termos de homologação e convocações para download
+            Visualização integrada de editais de abertura, retificações e termos de convocação em PDF
           </p>
         </div>
 
@@ -102,20 +104,38 @@ export const DocumentosConcursoView: React.FC<DocumentosConcursoViewProps> = ({ 
                   {doc.tamanho || 'PDF Oficial'}
                 </span>
 
-                <a
-                  href={doc.url_ou_arquivo}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 text-xs font-bold text-slate-900 hover:text-teal-700 bg-white hover:bg-teal-50 px-3 py-1.5 rounded-lg border border-slate-200 transition-all cursor-pointer shadow-2xs"
-                >
-                  <Download className="w-3.5 h-3.5 text-teal-600" />
-                  <span>Acessar / Download</span>
-                </a>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setDocSelecionado(doc)}
+                    className="flex items-center gap-1.5 text-xs font-bold text-teal-900 bg-teal-50 hover:bg-teal-100 px-3 py-1.5 rounded-lg border border-teal-200 transition-all cursor-pointer shadow-2xs"
+                  >
+                    <Eye className="w-3.5 h-3.5 text-teal-700" />
+                    <span>Visualizar PDF</span>
+                  </button>
+
+                  <a
+                    href={doc.url_ou_arquivo}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 text-xs font-bold text-slate-700 hover:text-slate-900 bg-white hover:bg-slate-100 px-2.5 py-1.5 rounded-lg border border-slate-200 transition-all cursor-pointer shadow-2xs"
+                    title="Baixar arquivo"
+                  >
+                    <Download className="w-3.5 h-3.5 text-slate-600" />
+                  </a>
+                </div>
               </div>
             </div>
           ))}
         </div>
       )}
+
+      {/* Modal Visualizador de Documentos PDF */}
+      <DocumentViewerModal
+        aberto={Boolean(docSelecionado)}
+        onClose={() => setDocSelecionado(null)}
+        documento={docSelecionado}
+      />
     </div>
   );
 };

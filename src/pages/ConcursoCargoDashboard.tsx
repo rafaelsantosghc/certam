@@ -14,6 +14,7 @@ import { calcularOrdemNomeacao, ItemOrdemNomeacao } from '../utils/ordemNomeacao
 import { Concurso, Cargo, Candidato, Lote, ConfigCotas } from '../types';
 import { COMARCAS_RS } from '../data/comarcas';
 import { normalizarTexto } from '../data/defaultCandidates';
+import { matchFonético } from '../utils/phoneticSearch';
 import { RegionalMapSvg } from '../components/RegionalMapSvg';
 import { CommunityForum } from '../components/CommunityForum';
 import { FaqSection } from '../components/FaqSection';
@@ -306,9 +307,10 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
     return candidatos.filter((c) => {
       const matchBusca =
         !filtroBusca.trim() ||
-        c.nome.toLowerCase().includes(filtroBusca.toLowerCase()) ||
+        matchFonético(c.nome, filtroBusca) ||
         c.posicao.toString() === filtroBusca.trim() ||
-        (c.comarca_desejada_1 && c.comarca_desejada_1.toLowerCase().includes(filtroBusca.toLowerCase()));
+        (c.comarca_desejada_1 && matchFonético(c.comarca_desejada_1, filtroBusca)) ||
+        (c.comarca_definitiva && matchFonético(c.comarca_definitiva, filtroBusca));
 
       const cotasDoCand = c.cotas && c.cotas.length > 0 ? c.cotas : [c.cota];
       const matchCota =

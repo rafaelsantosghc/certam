@@ -6,6 +6,7 @@ import { PerfilCandidatoModal } from './PerfilCandidatoModal';
 import { ContatoAdminModal } from './ContatoAdminModal';
 import { MensagensPrivadasDrawer } from './MensagensPrivadasDrawer';
 import { GoogleAuthModal } from './GoogleAuthModal';
+import { matchFonético } from '../utils/phoneticSearch';
 import {
   Menu,
   Share2,
@@ -85,12 +86,12 @@ export const Header: React.FC<HeaderProps> = ({
 
   const resultadosBuscaGlobal = useMemo(() => {
     if (!termoBuscaGlobal.trim() || termoBuscaGlobal.length < 2) return [];
-    const termo = termoBuscaGlobal.toLowerCase().trim();
+    const termo = termoBuscaGlobal.trim();
     const concursos = certamStore.getConcursos();
     const resultados: { concursoId: string; concursoNome: string; cargoId?: string; cargoNome?: string; tipo: 'concurso' | 'cargo' }[] = [];
 
     concursos.forEach((conc) => {
-      const matchConc = conc.nome.toLowerCase().includes(termo) || conc.orgao.toLowerCase().includes(termo);
+      const matchConc = matchFonético(conc.nome, termo) || matchFonético(conc.orgao, termo);
       if (matchConc) {
         resultados.push({
           concursoId: conc.id,
@@ -99,7 +100,7 @@ export const Header: React.FC<HeaderProps> = ({
         });
       }
       conc.cargos?.forEach((cg) => {
-        const matchCargo = cg.nome.toLowerCase().includes(termo);
+        const matchCargo = matchFonético(cg.nome, termo);
         if (matchCargo) {
           resultados.push({
             concursoId: conc.id,
