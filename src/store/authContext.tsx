@@ -64,6 +64,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (stored) {
         const parsed = JSON.parse(stored);
         if (parsed && typeof parsed === 'object') {
+          try {
+            const fromRegistry =
+              (parsed.id && userRegistryStore.getUserById(parsed.id)) ||
+              (parsed.candidato_id && userRegistryStore.getUserById(parsed.candidato_id)) ||
+              (parsed.email && userRegistryStore.getUserByEmail(parsed.email)) ||
+              (parsed.cpf && userRegistryStore.getUserByCpf(parsed.cpf));
+            if (fromRegistry) {
+              return {
+                ...parsed,
+                ...fromRegistry,
+                nome: fromRegistry.nome || parsed.nome,
+                cpf: fromRegistry.cpf || parsed.cpf,
+                data_nascimento: fromRegistry.data_nascimento || parsed.data_nascimento,
+                whatsapp: fromRegistry.whatsapp || parsed.whatsapp,
+                telefone: fromRegistry.telefone || parsed.telefone,
+                email_contato: fromRegistry.email_contato || parsed.email_contato,
+                status_cadastro: fromRegistry.status_cadastro || parsed.status_cadastro,
+                bloqueado: Boolean(fromRegistry.bloqueado),
+              };
+            }
+          } catch {
+            // ignore
+          }
           return parsed;
         }
       }
@@ -83,7 +106,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       if (usuario) {
         localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(usuario));
-        userRegistryStore.vincularOuRegistrarUsuarioLogin(usuario);
+        const vinculado = userRegistryStore.vincularOuRegistrarUsuarioLogin(usuario);
+        if (vinculado && (vinculado.nome !== usuario.nome || vinculado.cpf !== usuario.cpf)) {
+          setUsuario((prev) => (prev ? { ...prev, ...vinculado } : null));
+        }
         if (usuario.is_admin || usuario.email?.toLowerCase() === 'rafasms0@hotmail.com') {
           void cloudSync.pushAllLocal(true).then(() => cloudSync.pullFromServer());
         } else {
@@ -215,6 +241,94 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
     window.addEventListener('certam_audit_approved', handleAuditApproved);
     return () => window.removeEventListener('certam_audit_approved', handleAuditApproved);
+  }, []);
+
+  // Listener em tempo real para sincronizar o perfil ativo quando qualquer edição cadastral for efetuada no painel admin
+  useEffect(() => {
+    const handleSyncFromRegistry = () => {
+      setUsuario((prev) => {
+        if (!prev) return null;
+        const fromRegistry =
+          (prev.id && userRegistryStore.getUserById(prev.id)) ||
+          (prev.candidato_id && userRegistryStore.getUserById(prev.candidato_id)) ||
+          (prev.email && userRegistryStore.getUserByEmail(prev.email)) ||
+          (prev.cpf && userRegistryStore.getUserByCpf(prev.cpf));
+
+        if (
+          fromRegistry &&
+          (fromRegistry.nome !== prev.nome ||
+            fromRegistry.cpf !== prev.cpf ||
+            fromRegistry.whatsapp !== prev.whatsapp ||
+            fromRegistry.telefone !== prev.telefone ||
+            fromRegistry.email_contato !== prev.email_contato ||
+            fromRegistry.status_cadastro !== prev.status_cadastro ||
+            Boolean(fromRegistry.bloqueado) !== Boolean(prev.bloqueado))
+        ) {
+          const atualizado: Usuario = {
+            ...prev,
+            ...fromRegistry,
+            nome: fromRegistry.nome || prev.nome,
+            cpf: fromRegistry.cpf || prev.cpf,
+            email: fromRegistry.email || prev.email,
+            email_contato: fromRegistry.email_contato || prev.email_contato,
+            whatsapp: fromRegistry.whatsapp || prev.whatsapp,
+            telefone: fromRegistry.telefone || prev.telefone,
+            status_cadastro: fromRegistry.status_cadastro || prev.status_cadastro,
+            bloqueado: Boolean(fromRegistry.bloqueado),
+          };
+          try {
+            localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(atualizado));
+          } catch {
+            // ignore
+          }
+          return atualizado;
+        }
+        return prev;
+      });
+    };
+
+    const handleProfileDirectUpdate = (e: any) => {
+      const updated = e.detail;
+      if (!updated) return;
+      setUsuario((prev) => {
+        if (!prev) return null;
+        const prevCpf = prev.cpf ? prev.cpf.replace(/\D/g, '') : '';
+        const updCpf = updated.cpf ? updated.cpf.replace(/\D/g, '') : '';
+        const isMatch =
+          (prev.id && updated.id && prev.id === updated.id) ||
+          (prev.candidato_id && updated.candidato_id && prev.candidato_id === updated.candidato_id) ||
+          (prev.email && updated.email && prev.email.toLowerCase().trim() === updated.email.toLowerCase().trim()) ||
+          (prevCpf.length >= 7 && updCpf.length >= 7 && prevCpf === updCpf);
+
+        if (isMatch) {
+          const atualizado: Usuario = {
+            ...prev,
+            ...updated,
+            nome: updated.nome || prev.nome,
+          };
+          try {
+            localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(atualizado));
+          } catch {
+            // ignore
+          }
+          return atualizado;
+        }
+        return prev;
+      });
+    };
+
+    window.addEventListener('certam_users_updated', handleSyncFromRegistry);
+    window.addEventListener('certam_registry_updated', handleSyncFromRegistry);
+    window.addEventListener('certam_profile_updated', handleProfileDirectUpdate);
+    window.addEventListener('certam_user_profile_updated', handleProfileDirectUpdate);
+    window.addEventListener('storage', handleSyncFromRegistry);
+    return () => {
+      window.removeEventListener('certam_users_updated', handleSyncFromRegistry);
+      window.removeEventListener('certam_registry_updated', handleSyncFromRegistry);
+      window.removeEventListener('certam_profile_updated', handleProfileDirectUpdate);
+      window.removeEventListener('certam_user_profile_updated', handleProfileDirectUpdate);
+      window.removeEventListener('storage', handleSyncFromRegistry);
+    };
   }, []);
 
   // Login administrativo exclusivo para e-mails homologados como administradores

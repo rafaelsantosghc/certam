@@ -1188,11 +1188,25 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       status_cadastro: userFormStatus,
       bloqueado: userFormBloqueado,
     };
-    userRegistryStore.salvarUsuario(atualizado);
+    const salvo = userRegistryStore.salvarUsuario(atualizado);
     setUsuariosGerais(userRegistryStore.getAllUsers());
     setModalEditarUsuarioAberto(false);
     setUsuarioEditando(null);
-    showToast(`Cadastro de ${atualizado.nome} atualizado com sucesso!`);
+
+    // Se o usuário ativo for o alterado (por email, cpf ou id), atualiza imediatamente na sessão atual
+    const activeCpfLimpo = usuario?.cpf ? limparCpf(usuario.cpf) : '';
+    const updCpfLimpo = salvo.cpf ? limparCpf(salvo.cpf) : '';
+    const isCurrentActive =
+      (usuario?.id && salvo.id && usuario.id === salvo.id) ||
+      (usuario?.candidato_id && salvo.candidato_id && usuario.candidato_id === salvo.candidato_id) ||
+      (usuario?.email && salvo.email && usuario.email.toLowerCase().trim() === salvo.email.toLowerCase().trim()) ||
+      (activeCpfLimpo.length >= 7 && updCpfLimpo.length >= 7 && activeCpfLimpo === updCpfLimpo);
+
+    if (isCurrentActive) {
+      atualizarDadosUsuario(salvo);
+    }
+
+    showToast(`Cadastro de ${salvo.nome} atualizado com sucesso!`);
   };
 
   const handleToggleBloquearUsuario = (id: string) => {

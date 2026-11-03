@@ -122,6 +122,94 @@ function findImportedCandidateMatch(criteria: {
   return { ...firstMatch, inscricoes };
 }
 
+function sincronizarUsuarioComSessaoEListas(usuarioAtualizado: Usuario) {
+  if (!usuarioAtualizado) return;
+
+  // 1. Sincronizar com a sessão ativa no localStorage (certam_auth_user_v8)
+  try {
+    const authKey = 'certam_auth_user_v8';
+    const authStored = localStorage.getItem(authKey);
+    if (authStored) {
+      const activeUser = JSON.parse(authStored);
+      if (activeUser && typeof activeUser === 'object') {
+        const activeCpfLimpo = activeUser.cpf ? limparCpf(activeUser.cpf) : '';
+        const userCpfLimpo = usuarioAtualizado.cpf ? limparCpf(usuarioAtualizado.cpf) : '';
+        const isMatch =
+          (activeUser.id && usuarioAtualizado.id && activeUser.id === usuarioAtualizado.id) ||
+          (activeUser.candidato_id &&
+            usuarioAtualizado.candidato_id &&
+            activeUser.candidato_id === usuarioAtualizado.candidato_id) ||
+          (activeUser.email &&
+            usuarioAtualizado.email &&
+            activeUser.email.toLowerCase().trim() === usuarioAtualizado.email.toLowerCase().trim()) ||
+          (activeCpfLimpo.length >= 7 && userCpfLimpo.length >= 7 && activeCpfLimpo === userCpfLimpo);
+
+        if (isMatch) {
+          const merged = {
+            ...activeUser,
+            ...usuarioAtualizado,
+            nome: usuarioAtualizado.nome || activeUser.nome,
+            cpf: usuarioAtualizado.cpf || activeUser.cpf,
+            whatsapp: usuarioAtualizado.whatsapp || activeUser.whatsapp,
+            telefone: usuarioAtualizado.telefone || activeUser.telefone,
+            email_contato: usuarioAtualizado.email_contato || activeUser.email_contato,
+          };
+          localStorage.setItem(authKey, JSON.stringify(merged));
+        }
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  // 2. Sincronizar ocorrências nas listas de candidatos de todos os concursos/cargos (lotesStore)
+  try {
+    const concursos = certamStore.getConcursos();
+    const userCpfLimpo = usuarioAtualizado.cpf ? limparCpf(usuarioAtualizado.cpf) : '';
+    const userEmailLimpo = usuarioAtualizado.email ? usuarioAtualizado.email.toLowerCase().trim() : '';
+
+    concursos.forEach((c) => {
+      c.cargos?.forEach((cg) => {
+        const cands = lotesStore.getCandidatos(c.id, cg.id);
+        let alterou = false;
+        const novosCands = cands.map((cand) => {
+          const candCpfLimpo = cand.cpf ? limparCpf(cand.cpf) : '';
+          const candEmailLimpo = cand.email ? cand.email.toLowerCase().trim() : '';
+          const isMatchCand =
+            (cand.id &&
+              (cand.id === usuarioAtualizado.id || cand.id === usuarioAtualizado.candidato_id)) ||
+            (candCpfLimpo.length >= 7 && userCpfLimpo.length >= 7 && candCpfLimpo === userCpfLimpo) ||
+            (candEmailLimpo && userEmailLimpo && candEmailLimpo === userEmailLimpo);
+
+          if (isMatchCand) {
+            alterou = true;
+            return {
+              ...cand,
+              nome: usuarioAtualizado.nome || cand.nome,
+              cpf: usuarioAtualizado.cpf || cand.cpf,
+              email: usuarioAtualizado.email || cand.email,
+              whatsapp: usuarioAtualizado.whatsapp || cand.whatsapp,
+            };
+          }
+          return cand;
+        });
+
+        if (alterou) {
+          lotesStore.salvarCandidatos(c.id, cg.id, novosCands);
+        }
+      });
+    });
+  } catch {
+    // ignore
+  }
+
+  // 3. Notificar toda a aplicação via eventos customizados
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('certam_profile_updated', { detail: usuarioAtualizado }));
+    window.dispatchEvent(new CustomEvent('certam_user_profile_updated', { detail: usuarioAtualizado }));
+  }
+}
+
 export const userRegistryStore = {
   getRegistry(): Record<string, Usuario> {
     try {
@@ -365,6 +453,7 @@ export const userRegistryStore = {
     const existingKey =
       (usuario.id && this.findRegistryKey(usuario.id)) ||
       (usuario.email && !isFakeEmail(usuario.email) && this.findRegistryKey(usuario.email)) ||
+      (usuario.cpf && this.findRegistryKey(usuario.cpf)) ||
       null;
 
     const finalId = usuario.id || existingKey || `user-${Date.now().toString(36)}`;
@@ -388,6 +477,7 @@ export const userRegistryStore = {
 
     reg[dictKey] = finalUser;
     this.salvarRegistry(reg);
+    sincronizarUsuarioComSessaoEListas(finalUser);
     return finalUser;
   },
 
@@ -454,6 +544,7 @@ export const userRegistryStore = {
 
     reg[targetKey] = atualizado;
     this.salvarRegistry(reg);
+    sincronizarUsuarioComSessaoEListas(atualizado);
     return atualizado;
   },
 
