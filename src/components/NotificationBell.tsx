@@ -34,42 +34,43 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ onNavigate, 
     const handleUpdate = () => {
       const allNotifs = notificationStore.getNotificacoes();
       setNotificacoes(allNotifs);
+    };
 
-      const visiveis = allNotifs.filter((n) => {
-        if (isAdmin && (
-          n.tipo === 'aprovacao_perfil' ||
-          n.tipo === 'indeferimento_perfil' ||
-          n.tipo === 'validacao_aprovada' ||
-          n.tipo === 'validacao_indeferida'
-        )) {
-          return false;
-        }
-        if (n.destinatario_email) {
-          if (!usuario) return false;
-          const emailUser = usuario.email?.toLowerCase().trim();
-          const emailDest = n.destinatario_email.toLowerCase().trim();
-          return emailUser === emailDest;
-        }
-        return true;
-      });
+    const handleNewNotif = (e: any) => {
+      const allNotifs = notificationStore.getNotificacoes();
+      setNotificacoes(allNotifs);
 
-      if (visiveis.length > 0) {
-        const topNotif = visiveis[0];
-        if (prevLatestIdRef.current === null) {
-          prevLatestIdRef.current = topNotif.id;
-        } else if (prevLatestIdRef.current !== topNotif.id) {
-          prevLatestIdRef.current = topNotif.id;
-          setToastNotif(topNotif);
-          const t = setTimeout(() => {
-            setToastNotif(null);
-          }, 5000);
-          return () => clearTimeout(t);
-        }
+      const nova = e.detail as NotificacaoItem;
+      if (!nova) return;
+
+      if (isAdmin && (
+        nova.tipo === 'aprovacao_perfil' ||
+        nova.tipo === 'indeferimento_perfil' ||
+        nova.tipo === 'validacao_aprovada' ||
+        nova.tipo === 'validacao_indeferida'
+      )) {
+        return;
       }
+      if (nova.destinatario_email) {
+        if (!usuario) return;
+        const emailUser = usuario.email?.toLowerCase().trim();
+        const emailDest = nova.destinatario_email.toLowerCase().trim();
+        if (emailUser !== emailDest) return;
+      }
+
+      setToastNotif(nova);
+      const t = setTimeout(() => {
+        setToastNotif(null);
+      }, 5000);
+      return () => clearTimeout(t);
     };
 
     window.addEventListener('certam_notifications_updated', handleUpdate);
-    return () => window.removeEventListener('certam_notifications_updated', handleUpdate);
+    window.addEventListener('certam_new_notification', handleNewNotif as EventListener);
+    return () => {
+      window.removeEventListener('certam_notifications_updated', handleUpdate);
+      window.removeEventListener('certam_new_notification', handleNewNotif as EventListener);
+    };
   }, [usuario, isAdmin]);
 
   // Fechar ao clicar fora

@@ -40,6 +40,9 @@ export const notificationStore = {
     };
     list.unshift(nova);
     this.salvarNotificacoes(list, false);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('certam_new_notification', { detail: nova }));
+    }
     return nova;
   },
 

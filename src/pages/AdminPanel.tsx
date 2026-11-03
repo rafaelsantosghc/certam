@@ -19,6 +19,8 @@ import {
   NotificacaoItem,
   TipoNotificacao,
   Lote,
+  DocumentoItem,
+  TipoDocumento,
 } from '../types';
 import { sanitizeInput, sanitizeFileName } from '../utils/security';
 import { normalizarCota } from '../utils/ordemNomeacao';
@@ -29,6 +31,7 @@ import {
   Search,
   CheckCircle2,
   FileSpreadsheet,
+  FileText,
   Users,
   Building,
   Pencil,
@@ -85,6 +88,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     | 'importar'
     | 'faq'
     | 'supabase'
+    | 'documentos_admin'
+    | 'classificacao_admin'
+    | 'vagas_admin'
   >((initialTab as any) || 'concursos');
 
   const [diagReport, setDiagReport] = useState<FullSyncDiagnosticsReport | null>(null);
@@ -105,6 +111,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [loteConcursoAlvoId, setLoteConcursoAlvoId] = useState<string>('');
   const [loteCargoAlvoId, setLoteCargoAlvoId] = useState<string>('');
   const [busca, setBusca] = useState('');
+
+  // Estados para Gestão Administrativa (Documentos, Classificação, Vagas)
+  const [docAdminConcursoId, setDocAdminConcursoId] = useState<string>(concursos[0]?.id || '');
+  const [docAdminTitulo, setDocAdminTitulo] = useState('');
+  const [docAdminTipo, setDocAdminTipo] = useState<TipoDocumento>('Edital de Abertura');
+  const [docAdminUrl, setDocAdminUrl] = useState('');
+  const [docAdminDesc, setDocAdminDesc] = useState('');
+  const [docAdminEditandoId, setDocAdminEditandoId] = useState<string | null>(null);
+
+  const [classifAdminConcursoId, setClassifAdminConcursoId] = useState<string>(concursos[0]?.id || '');
+  const [classifAdminCargoId, setClassifAdminCargoId] = useState<string>(concursos[0]?.cargos?.[0]?.id || '');
+  const [novoOpcaoDropdown, setNovoOpcaoDropdown] = useState('');
+
+  const [vagasAdminConcursoId, setVagasAdminConcursoId] = useState<string>(concursos[0]?.id || '');
+  const [vagasAdminCargoId, setVagasAdminCargoId] = useState<string>(concursos[0]?.cargos?.[0]?.id || '');
 
   // -------------------------------------------------------------
   // CADASTRO GERAL DE USUÁRIOS (Item 18)
@@ -1424,6 +1445,45 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           >
             <Sparkles className="w-4 h-4 text-emerald-500" />
             <span>Supabase & Sincronização</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setAbaAdmin('documentos_admin')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+              abaAdmin === 'documentos_admin'
+                ? 'bg-[#0C2640] text-[#2DD4AA]'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            <FileText className="w-4 h-4" />
+            <span>Documentos Oficiais</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setAbaAdmin('classificacao_admin')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+              abaAdmin === 'classificacao_admin'
+                ? 'bg-[#0C2640] text-[#2DD4AA]'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            <Users className="w-4 h-4" />
+            <span>Editor de Classificação</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setAbaAdmin('vagas_admin')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+              abaAdmin === 'vagas_admin'
+                ? 'bg-[#0C2640] text-[#2DD4AA]'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            <Briefcase className="w-4 h-4" />
+            <span>Quadro de Vagas</span>
           </button>
         </div>
       </div>
@@ -3662,6 +3722,641 @@ NOTIFY pgrst, 'reload schema';`;
               </div>
             </div>
           )}
+        </section>
+      )}
+
+      {/* ============================================================== */}
+      {/* ABA: DOCUMENTOS OFICIAIS (ADMIN)                                */}
+      {/* ============================================================== */}
+      {abaAdmin === 'documentos_admin' && (
+        <section className="space-y-6 bg-white rounded-2xl p-6 sm:p-8 border border-slate-200 card-shadow">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-4">
+            <div>
+              <h2 className="text-xl font-bold font-serif text-slate-900 flex items-center gap-2">
+                <FileText className="w-5 h-5 text-teal-600" />
+                <span>Gestão de Documentos Oficiais e Editais</span>
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Adicione, edite ou remova editais, termos de convocação e avisos oficiais para cada concurso.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <select
+                value={docAdminConcursoId}
+                onChange={(e) => setDocAdminConcursoId(e.target.value)}
+                className="px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold"
+              >
+                {concursos.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.nome} ({c.orgao})
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Formulário Adicionar / Editar Documento */}
+          <div className="p-5 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
+            <h3 className="font-bold text-xs text-slate-900 uppercase tracking-wider">
+              {docAdminEditandoId ? 'Editar Documento Oficial' : 'Adicionar Novo Documento Oficial'}
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Título do Documento:</label>
+                <input
+                  type="text"
+                  placeholder="Ex: Edital de Abertura nº 01/2025"
+                  value={docAdminTitulo}
+                  onChange={(e) => setDocAdminTitulo(e.target.value)}
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl"
+                />
+              </div>
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Tipo de Documento:</label>
+                <select
+                  value={docAdminTipo}
+                  onChange={(e) => setDocAdminTipo(e.target.value as TipoDocumento)}
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl"
+                >
+                  <option value="Edital de Abertura">Edital de Abertura</option>
+                  <option value="Retificação">Retificação</option>
+                  <option value="Convocação">Convocação</option>
+                  <option value="Resultado Final">Resultado Final</option>
+                  <option value="Homologação">Homologação</option>
+                </select>
+              </div>
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">URL / Link do PDF:</label>
+                <input
+                  type="text"
+                  placeholder="https://... ou arquivo.pdf"
+                  value={docAdminUrl}
+                  onChange={(e) => setDocAdminUrl(e.target.value)}
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl"
+                />
+              </div>
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Descrição / Observação:</label>
+                <input
+                  type="text"
+                  placeholder="Detalhes adicionais..."
+                  value={docAdminDesc}
+                  onChange={(e) => setDocAdminDesc(e.target.value)}
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              {docAdminEditandoId && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDocAdminEditandoId(null);
+                    setDocAdminTitulo('');
+                    setDocAdminUrl('');
+                    setDocAdminDesc('');
+                  }}
+                  className="px-3.5 py-2 text-xs text-slate-600 hover:text-slate-900 font-semibold"
+                >
+                  Cancelar Edição
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  if (!docAdminTitulo.trim() || !docAdminUrl.trim()) {
+                    showToast('Preencha o título e o link/URL do documento.');
+                    return;
+                  }
+                  const conc = certamStore.getConcurso(docAdminConcursoId);
+                  if (!conc) return;
+                  conc.documentos = conc.documentos || [];
+
+                  if (docAdminEditandoId) {
+                    conc.documentos = conc.documentos.map((d) =>
+                      d.id === docAdminEditandoId
+                        ? { ...d, titulo: docAdminTitulo, tipo: docAdminTipo, url_ou_arquivo: docAdminUrl, descricao: docAdminDesc }
+                        : d
+                    );
+                    certamStore.salvarConcurso(conc, true);
+                    showToast('Documento atualizado com sucesso!');
+                  } else {
+                    const novoDoc: DocumentoItem = {
+                      id: `doc-${Date.now().toString(36)}`,
+                      concurso_id: docAdminConcursoId,
+                      titulo: docAdminTitulo,
+                      tipo: docAdminTipo,
+                      url_ou_arquivo: docAdminUrl,
+                      descricao: docAdminDesc,
+                      data_publicacao: new Date().toLocaleDateString('pt-BR'),
+                      tamanho: 'PDF Oficial',
+                    };
+                    conc.documentos.unshift(novoDoc);
+                    certamStore.salvarConcurso(conc, true);
+                    showToast('Documento oficial adicionado com sucesso!');
+                  }
+
+                  setDocAdminEditandoId(null);
+                  setDocAdminTitulo('');
+                  setDocAdminUrl('');
+                  setDocAdminDesc('');
+                  reloadData();
+                }}
+                className="px-5 py-2 bg-[#07192B] text-[#2DD4AA] text-xs font-bold rounded-xl cursor-pointer shadow-sm"
+              >
+                {docAdminEditandoId ? 'Salvar Alterações' : 'Adicionar Documento Oficial'}
+              </button>
+            </div>
+          </div>
+
+          {/* Lista de Documentos Atuais */}
+          <div className="space-y-3">
+            <h3 className="font-bold text-xs text-slate-900 uppercase tracking-wider">
+              Documentos Cadastrados no Concurso
+            </h3>
+            {(() => {
+              const conc = certamStore.getConcurso(docAdminConcursoId);
+              const docs = conc?.documentos || [];
+              if (docs.length === 0) {
+                return <p className="text-xs text-slate-400 py-6 text-center">Nenhum documento cadastrado para este concurso.</p>;
+              }
+              return (
+                <div className="divide-y divide-slate-100 border border-slate-200 rounded-2xl overflow-hidden bg-white">
+                  {docs.map((d) => (
+                    <div key={d.id} className="p-4 flex items-center justify-between gap-4 hover:bg-slate-50">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-8 h-8 rounded-lg bg-teal-50 text-teal-700 flex items-center justify-center shrink-0">
+                          <FileText className="w-4 h-4" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-teal-100 text-teal-800">
+                              {d.tipo}
+                            </span>
+                            <span className="text-2xs font-mono text-slate-400">{d.data_publicacao}</span>
+                          </div>
+                          <h4 className="font-bold text-xs text-slate-900 truncate mt-0.5">{d.titulo}</h4>
+                          {d.descricao && <p className="text-2xs text-slate-500 truncate">{d.descricao}</p>}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDocAdminEditandoId(d.id);
+                            setDocAdminTitulo(d.titulo);
+                            setDocAdminTipo(d.tipo);
+                            setDocAdminUrl(d.url_ou_arquivo);
+                            setDocAdminDesc(d.descricao || '');
+                          }}
+                          className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg text-xs font-semibold flex items-center gap-1 cursor-pointer"
+                        >
+                          <Pencil className="w-3 h-3" />
+                          <span>Editar</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (window.confirm(`Deseja remover o documento "${d.titulo}"?`)) {
+                              const targetConc = certamStore.getConcurso(docAdminConcursoId);
+                              if (targetConc) {
+                                targetConc.documentos = (targetConc.documentos || []).filter((item) => item.id !== d.id);
+                                certamStore.salvarConcurso(targetConc, true);
+                                reloadData();
+                                showToast('Documento removido com sucesso.');
+                              }
+                            }
+                          }}
+                          className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg cursor-pointer"
+                          title="Remover Documento"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+          </div>
+        </section>
+      )}
+
+      {/* ============================================================== */}
+      {/* ABA: EDITOR DE CLASSIFICAÇÃO & LISTAS SUSPENSAS (ADMIN)         */}
+      {/* ============================================================== */}
+      {abaAdmin === 'classificacao_admin' && (
+        <section className="space-y-6 bg-white rounded-2xl p-6 sm:p-8 border border-slate-200 card-shadow">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-4">
+            <div>
+              <h2 className="text-xl font-bold font-serif text-slate-900 flex items-center gap-2">
+                <Users className="w-5 h-5 text-teal-600" />
+                <span>Editor Manual de Lista de Classificação & Listas Suspensas</span>
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Edite manualmente campos de candidatos e gerencie opções das listas suspensas (como Comarcas/Lotações e Cotas).
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                value={classifAdminConcursoId}
+                onChange={(e) => {
+                  setClassifAdminConcursoId(e.target.value);
+                  const c = concursos.find((x) => x.id === e.target.value);
+                  if (c?.cargos?.[0]) setClassifAdminCargoId(c.cargos[0].id);
+                }}
+                className="px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold"
+              >
+                {concursos.map((c) => (
+                  <option key={c.id} value={c.id}>{c.nome}</option>
+                ))}
+              </select>
+              <select
+                value={classifAdminCargoId}
+                onChange={(e) => setClassifAdminCargoId(e.target.value)}
+                className="px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold"
+              >
+                {concursos
+                  .find((c) => c.id === classifAdminConcursoId)
+                  ?.cargos?.map((cg) => (
+                    <option key={cg.id} value={cg.id}>{cg.nome}</option>
+                  ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Gestão de Listas Suspensas (Catálogo de Lotações/Comarcas) */}
+          <div className="p-5 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
+            <h3 className="font-bold text-xs text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+              <Layers className="w-4 h-4 text-teal-600" />
+              <span>Gerenciar Opções da Lista Suspensiva (Catálogo de Comarcas / Lotações)</span>
+            </h3>
+            <div className="flex flex-col sm:flex-row items-center gap-2">
+              <input
+                type="text"
+                placeholder="Nome da Nova Comarca / Lotação (ex: Porto Alegre, Santa Maria...)"
+                value={novoOpcaoDropdown}
+                onChange={(e) => setNovoOpcaoDropdown(e.target.value)}
+                className="flex-1 w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  if (!novoOpcaoDropdown.trim()) return;
+                  const added = certamStore.adicionarLotacaoAoCatalogo(classifAdminConcursoId, novoOpcaoDropdown);
+                  if (added) {
+                    showToast(`Comarca "${novoOpcaoDropdown}" adicionada à lista suspensa!`);
+                    setNovoOpcaoDropdown('');
+                    reloadData();
+                  } else {
+                    showToast('Essa comarca já consta na lista suspensa.');
+                  }
+                }}
+                className="px-4 py-2 bg-[#07192B] text-[#2DD4AA] text-xs font-bold rounded-xl cursor-pointer whitespace-nowrap shadow-xs"
+              >
+                + Adicionar Opção à Lista
+              </button>
+            </div>
+
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              {(() => {
+                const conc = certamStore.getConcurso(classifAdminConcursoId);
+                const lotacoes = conc?.catalogo_lotacoes || [];
+                if (lotacoes.length === 0) {
+                  return <span className="text-xs text-slate-400">Nenhuma comarca cadastrada no catálogo.</span>;
+                }
+                return lotacoes.map((lot) => (
+                  <span
+                    key={lot.id}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 shadow-2xs"
+                  >
+                    <span>{lot.nome}</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        certamStore.removerLotacaoDoCatalogo(classifAdminConcursoId, lot.id);
+                        reloadData();
+                        showToast(`Comarca "${lot.nome}" removida da lista suspensa.`);
+                      }}
+                      className="text-rose-500 hover:text-rose-700 ml-1 font-bold cursor-pointer"
+                      title="Remover opção"
+                    >
+                      ×
+                    </button>
+                  </span>
+                ));
+              })()}
+            </div>
+          </div>
+
+          {/* Tabela de Candidatos com Edição Manual de Cada Campo */}
+          <div className="space-y-3">
+            <h3 className="font-bold text-xs text-slate-900 uppercase tracking-wider">
+              Edição Manual de Candidatos e Campos da Lista
+            </h3>
+            {(() => {
+              const cands = lotesStore.getCandidatos(classifAdminConcursoId, classifAdminCargoId);
+              if (cands.length === 0) {
+                return (
+                  <div className="p-8 text-center text-xs text-slate-400 bg-slate-50 rounded-2xl border border-slate-200">
+                    Nenhum candidato cadastrado para este cargo. Use a aba <strong>Importar XLSX</strong> para carregar a lista ou adicione manualmente.
+                  </div>
+                );
+              }
+              return (
+                <div className="border border-slate-200 rounded-2xl overflow-x-auto max-h-[500px]">
+                  <table className="w-full text-left text-xs divide-y divide-slate-100">
+                    <thead className="bg-[#07192B] text-white text-[11px] uppercase tracking-wider sticky top-0 z-10">
+                      <tr>
+                        <th className="py-2.5 px-2 w-16">Pos.</th>
+                        <th className="py-2.5 px-2 min-w-[200px]">Nome do Candidato</th>
+                        <th className="py-2.5 px-2 w-28">Nota</th>
+                        <th className="py-2.5 px-2 w-32">Cota</th>
+                        <th className="py-2.5 px-2 w-32">Status</th>
+                        <th className="py-2.5 px-2 w-36">Lotação Definitiva</th>
+                        <th className="py-2.5 px-2 w-20 text-center">Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 bg-white">
+                      {cands.map((cand, idx) => (
+                        <tr key={cand.id} className="hover:bg-slate-50">
+                          <td className="py-2 px-2">
+                            <input
+                              type="number"
+                              value={cand.posicao}
+                              onChange={(e) => {
+                                cand.posicao = parseInt(e.target.value, 10) || 1;
+                                lotesStore.salvarCandidato(classifAdminConcursoId, classifAdminCargoId, cand);
+                                reloadData();
+                              }}
+                              className="w-14 px-1.5 py-1 bg-slate-50 border border-slate-300 rounded font-mono font-bold text-xs"
+                            />
+                          </td>
+                          <td className="py-2 px-2">
+                            <input
+                              type="text"
+                              value={cand.nome}
+                              onChange={(e) => {
+                                cand.nome = e.target.value;
+                                lotesStore.salvarCandidato(classifAdminConcursoId, classifAdminCargoId, cand);
+                              }}
+                              onBlur={() => reloadData()}
+                              className="w-full px-2 py-1 bg-slate-50 border border-slate-300 rounded font-semibold text-xs"
+                            />
+                          </td>
+                          <td className="py-2 px-2">
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={cand.nota_final}
+                              onChange={(e) => {
+                                cand.nota_final = parseFloat(e.target.value) || 0;
+                                lotesStore.salvarCandidato(classifAdminConcursoId, classifAdminCargoId, cand);
+                                reloadData();
+                              }}
+                              className="w-20 px-2 py-1 bg-slate-50 border border-slate-300 rounded font-mono font-bold text-teal-700 text-xs"
+                            />
+                          </td>
+                          <td className="py-2 px-2">
+                            <select
+                              value={cand.cota || 'Ampla'}
+                              onChange={(e) => {
+                                cand.cota = e.target.value as any;
+                                lotesStore.salvarCandidato(classifAdminConcursoId, classifAdminCargoId, cand);
+                                reloadData();
+                              }}
+                              className="w-full px-2 py-1 bg-slate-50 border border-slate-300 rounded text-xs font-semibold"
+                            >
+                              <option value="Ampla">Ampla</option>
+                              <option value="PCD">PCD</option>
+                              <option value="PPP">PPP</option>
+                              <option value="Indígena">Indígena</option>
+                              <option value="Trans">Trans</option>
+                            </select>
+                          </td>
+                          <td className="py-2 px-2">
+                            <select
+                              value={cand.status || 'Aguardando Convocação'}
+                              onChange={(e) => {
+                                cand.status = e.target.value as any;
+                                lotesStore.salvarCandidato(classifAdminConcursoId, classifAdminCargoId, cand);
+                                reloadData();
+                              }}
+                              className="w-full px-2 py-1 bg-slate-50 border border-slate-300 rounded text-xs"
+                            >
+                              <option value="Aguardando Convocação">Aguardando Convocação</option>
+                              <option value="Convocado titular">Convocado titular</option>
+                              <option value="Convocado suplente">Convocado suplente</option>
+                              <option value="Nomeado">Nomeado</option>
+                            </select>
+                          </td>
+                          <td className="py-2 px-2">
+                            <input
+                              type="text"
+                              value={cand.comarca_definitiva || ''}
+                              onChange={(e) => {
+                                cand.comarca_definitiva = e.target.value;
+                                lotesStore.salvarCandidato(classifAdminConcursoId, classifAdminCargoId, cand);
+                                reloadData();
+                              }}
+                              placeholder="Lotação..."
+                              className="w-full px-2 py-1 bg-slate-50 border border-slate-300 rounded text-xs"
+                            />
+                          </td>
+                          <td className="py-2 px-2 text-center">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (window.confirm(`Remover candidato ${cand.nome}?`)) {
+                                  const novaLista = cands.filter((c) => c.id !== cand.id);
+                                  lotesStore.salvarCandidatos(classifAdminConcursoId, classifAdminCargoId, novaLista, true);
+                                  reloadData();
+                                  showToast('Candidato removido.');
+                                }
+                              }}
+                              className="p-1 text-rose-500 hover:bg-rose-50 rounded cursor-pointer"
+                              title="Remover candidato"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })()}
+          </div>
+        </section>
+      )}
+
+      {/* ============================================================== */}
+      {/* ABA: QUADRO DE VAGAS & QUANTITATIVOS (ADMIN)                    */}
+      {/* ============================================================== */}
+      {abaAdmin === 'vagas_admin' && (
+        <section className="space-y-6 bg-white rounded-2xl p-6 sm:p-8 border border-slate-200 card-shadow">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-4">
+            <div>
+              <h2 className="text-xl font-bold font-serif text-slate-900 flex items-center gap-2">
+                <Briefcase className="w-5 h-5 text-teal-600" />
+                <span>Gestão de Quadro de Vagas e Quantitativos</span>
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Edite os quantitativos de vagas imediatas, cadastro de reserva e reorganize a ordem dos quadros.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                value={vagasAdminConcursoId}
+                onChange={(e) => {
+                  setVagasAdminConcursoId(e.target.value);
+                  const c = concursos.find((x) => x.id === e.target.value);
+                  if (c?.cargos?.[0]) setVagasAdminCargoId(c.cargos[0].id);
+                }}
+                className="px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold"
+              >
+                {concursos.map((c) => (
+                  <option key={c.id} value={c.id}>{c.nome}</option>
+                ))}
+              </select>
+              <select
+                value={vagasAdminCargoId}
+                onChange={(e) => setVagasAdminCargoId(e.target.value)}
+                className="px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold"
+              >
+                {concursos
+                  .find((c) => c.id === vagasAdminConcursoId)
+                  ?.cargos?.map((cg) => (
+                    <option key={cg.id} value={cg.id}>{cg.nome}</option>
+                  ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Editar Quantitativos Gerais do Cargo */}
+          {(() => {
+            const conc = certamStore.getConcurso(vagasAdminConcursoId);
+            const cargo = conc?.cargos?.find((cg) => cg.id === vagasAdminCargoId);
+            if (!cargo) return <p className="text-xs text-slate-400">Selecione um cargo válido.</p>;
+
+            return (
+              <div className="space-y-6">
+                <div className="p-5 bg-slate-50 border border-slate-200 rounded-2xl space-y-4">
+                  <h3 className="font-bold text-xs text-slate-900 uppercase tracking-wider">
+                    Quantitativo Oficial do Cargo: {cargo.nome}
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">Vagas Imediatas:</label>
+                      <input
+                        type="number"
+                        value={cargo.vagas_imediatas || 0}
+                        onChange={(e) => {
+                          cargo.vagas_imediatas = parseInt(e.target.value, 10) || 0;
+                          certamStore.salvarCargo(vagasAdminConcursoId, cargo);
+                          reloadData();
+                        }}
+                        className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-mono font-bold"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">Quantitativo Total:</label>
+                      <input
+                        type="number"
+                        value={cargo.quantitativo_total || 0}
+                        onChange={(e) => {
+                          cargo.quantitativo_total = parseInt(e.target.value, 10) || 0;
+                          certamStore.salvarCargo(vagasAdminConcursoId, cargo);
+                          reloadData();
+                        }}
+                        className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-mono font-bold text-teal-700"
+                      />
+                    </div>
+                    <div className="flex items-center pt-5">
+                      <label className="flex items-center gap-2 cursor-pointer font-bold text-slate-800">
+                        <input
+                          type="checkbox"
+                          checked={cargo.tem_cr}
+                          onChange={(e) => {
+                            cargo.tem_cr = e.target.checked;
+                            certamStore.salvarCargo(vagasAdminConcursoId, cargo);
+                            reloadData();
+                          }}
+                          className="w-4 h-4 text-teal-600 rounded"
+                        />
+                        <span>Possui Cadastro de Reserva (CR)</span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Organização e Reordenação de Lotações / Quadros de Vagas */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-bold text-xs text-slate-900 uppercase tracking-wider">
+                      Reorganizar e Mover Quadros de Lotação
+                    </h3>
+                  </div>
+                  {(!conc?.catalogo_lotacoes || conc.catalogo_lotacoes.length === 0) ? (
+                    <p className="text-xs text-slate-400 py-4">Nenhuma comarca cadastrada no quadro de vagas.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {conc.catalogo_lotacoes.map((lot, idx) => (
+                        <div key={lot.id} className="p-3 bg-white border border-slate-200 rounded-xl flex items-center justify-between gap-3 card-shadow">
+                          <div className="flex items-center gap-3">
+                            <span className="w-6 h-6 rounded-lg bg-slate-100 text-slate-600 font-mono font-bold text-xs flex items-center justify-center">
+                              {idx + 1}
+                            </span>
+                            <span className="font-bold text-xs text-slate-900">{lot.nome}</span>
+                          </div>
+
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              disabled={idx === 0}
+                              onClick={() => {
+                                const list = [...conc.catalogo_lotacoes!];
+                                const temp = list[idx];
+                                list[idx] = list[idx - 1];
+                                list[idx - 1] = temp;
+                                conc.catalogo_lotacoes = list;
+                                certamStore.salvarConcurso(conc, true);
+                                reloadData();
+                              }}
+                              className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold disabled:opacity-30 cursor-pointer"
+                              title="Mover para cima"
+                            >
+                              ↑ Mover Cima
+                            </button>
+                            <button
+                              type="button"
+                              disabled={idx === conc.catalogo_lotacoes!.length - 1}
+                              onClick={() => {
+                                const list = [...conc.catalogo_lotacoes!];
+                                const temp = list[idx];
+                                list[idx] = list[idx + 1];
+                                list[idx + 1] = temp;
+                                conc.catalogo_lotacoes = list;
+                                certamStore.salvarConcurso(conc, true);
+                                reloadData();
+                              }}
+                              className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold disabled:opacity-30 cursor-pointer"
+                              title="Mover para baixo"
+                            >
+                              ↓ Mover Baixo
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
         </section>
       )}
 
