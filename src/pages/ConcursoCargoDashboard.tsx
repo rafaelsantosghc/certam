@@ -5,6 +5,7 @@ import { userRegistryStore } from '../store/userRegistryStore';
 import { cloudSync } from '../store/cloudSync';
 import { useAuth } from '../store/authContext';
 import { podeEditarConcurso, podeEditarCargo, podeEditarLote } from '../utils/permissions';
+import { classificationCache } from '../utils/classificationCache';
 import { ModalEditarConcurso } from '../components/ModalEditarConcurso';
 import { ModalEditarCargo } from '../components/ModalEditarCargo';
 import { ModalEditarLote } from '../components/ModalEditarLote';
@@ -175,8 +176,29 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
   );
 
   useEffect(() => {
-    setCandidatos(lotesStore.getCandidatos(concurso.id, cargo.id));
+    let isMounted = true;
+    async function loadCachedCandidates() {
+      const cached = await classificationCache.get(concurso.id, cargo.id);
+      if (cached && cached.length > 0 && isMounted) {
+        setCandidatos(cached);
+      }
+      const fresh = lotesStore.getCandidatos(concurso.id, cargo.id);
+      if (fresh && fresh.length > 0 && isMounted) {
+        setCandidatos(fresh);
+        void classificationCache.set(concurso.id, cargo.id, fresh);
+      }
+    }
+    void loadCachedCandidates();
+    return () => {
+      isMounted = false;
+    };
   }, [concurso.id, cargo.id]);
+
+  useEffect(() => {
+    if (candidatos && candidatos.length > 0) {
+      void classificationCache.set(concurso.id, cargo.id, candidatos);
+    }
+  }, [candidatos, concurso.id, cargo.id]);
 
   // Publica automaticamente o concurso e a lista de classificação para todos os usuários sempre que o Admin visualizar o cargo
   useEffect(() => {
