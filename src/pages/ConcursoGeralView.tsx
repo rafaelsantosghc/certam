@@ -120,9 +120,11 @@ export const ConcursoGeralView: React.FC<ConcursoGeralViewProps> = ({
           <span>Voltar para Concursos</span>
         </button>
 
-        <span className="text-2xs text-slate-400 font-mono">
-          CERTAM • Visão Geral do Certame
-        </span>
+        <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-slate-100 border border-slate-200 text-xs font-mono text-slate-700 shadow-2xs">
+          <span className="font-bold text-[#0C2640]">CERTAM</span>
+          <span className="text-slate-400">•</span>
+          <span className="font-semibold text-teal-800">Visão Geral do Certame</span>
+        </div>
       </div>
 
       {/* HEADER PRINCIPAL DO CONCURSO */}

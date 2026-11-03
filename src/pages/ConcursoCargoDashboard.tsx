@@ -372,46 +372,46 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
     switch (status) {
       case 'Nomeado':
         return (
-          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-teal-100 text-teal-900 border border-teal-300 font-mono inline-block">
+          <span className="inline-flex flex-wrap items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-teal-100 text-teal-900 border border-teal-300 font-mono leading-tight">
             Nomeado
           </span>
         );
       case 'Convocado titular':
       case 'Convocado Titular':
         return (
-          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 inline-block">
+          <span className="inline-flex flex-wrap items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 leading-tight">
             Convocado titular
           </span>
         );
       case 'Convocado suplente':
         return (
-          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-cyan-50 text-cyan-800 border border-cyan-200 inline-block">
+          <span className="inline-flex flex-wrap items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-cyan-50 text-cyan-800 border border-cyan-200 leading-tight">
             Convocado suplente
           </span>
         );
       case 'Próximo (previsão)':
         return (
-          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-800 border border-indigo-200 inline-block">
+          <span className="inline-flex flex-wrap items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-800 border border-indigo-200 leading-tight">
             Próximo (previsão)
           </span>
         );
       case 'Final de lista':
       case 'Fim de Fila':
         return (
-          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200 inline-block">
+          <span className="inline-flex flex-wrap items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200 leading-tight">
             Final de lista
           </span>
         );
       case 'Desistente':
       case 'Desistência':
         return (
-          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-rose-800 border border-rose-200 inline-block">
+          <span className="inline-flex flex-wrap items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-rose-800 border border-rose-200 leading-tight">
             Desistente
           </span>
         );
       default:
         return (
-          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700 inline-block">
+          <span className="inline-flex flex-wrap items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700 leading-tight">
             {status || 'Aguardando'}
           </span>
         );
@@ -492,9 +492,13 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
           <span>Voltar para o Concurso Geral</span>
         </button>
 
-        <span className="text-2xs text-slate-400 font-mono">
-          CERTAM • {concurso.orgao} • {cargo.nome}
-        </span>
+        <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-slate-100 border border-slate-200 text-xs font-mono text-slate-700 shadow-2xs">
+          <span className="font-bold text-[#0C2640]">CERTAM</span>
+          <span className="text-slate-400">•</span>
+          <span className="font-semibold text-teal-800">{concurso.orgao}</span>
+          <span className="text-slate-400">•</span>
+          <span className="text-slate-600">{cargo.nome}</span>
+        </div>
       </div>
 
       {/* Toast Feedback (Item 4: XCircle para erro e CheckCircle2 para sucesso) */}
@@ -516,7 +520,7 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
       )}
 
       {/* TOP BANNER INSTITUCIONAL DO CONCURSO & SELETOR DE CARGO (Item 14: Cabeçalho sempre visível e compacto) */}
-      <div className="sticky top-0 z-30 bg-[#07192B]/95 backdrop-blur-md text-white rounded-2xl border border-[#0F2942] p-3.5 sm:p-4 card-shadow flex flex-col md:flex-row md:items-center justify-between gap-3 transition-all">
+      <div className="sticky top-0 z-20 bg-[#07192B]/95 backdrop-blur-md text-white rounded-2xl border border-[#0F2942] p-3.5 sm:p-4 card-shadow flex flex-col md:flex-row md:items-center justify-between gap-3 transition-all">
         <div className="space-y-1">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="px-2 py-0.5 rounded-md bg-[#2DD4AA]/20 text-[#2DD4AA] text-[11px] font-bold font-mono uppercase">
