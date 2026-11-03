@@ -906,7 +906,7 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
             </select>
 
             {/* Filtros por Status */}
-            <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-xl border border-slate-200/60 overflow-x-auto shrink-0">
+            <div className="flex items-center flex-wrap gap-1 p-1 bg-slate-100 rounded-xl border border-slate-200/60">
               <button
                 type="button"
                 onClick={() => setFiltroStatus('todos')}
@@ -1024,7 +1024,7 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
             Nenhum concurso encontrado para os filtros selecionados.
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
             {concursosFiltrados.map((conc) => {
               const cargosAtivos = conc.cargos?.filter((cg) => cg.ativo) || [];
 
