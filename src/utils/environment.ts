@@ -31,3 +31,5 @@ export const isAiStudioPreview = (): boolean => {
     return false;
   }
 };
+
+export const isInternalPreview = isAiStudioPreview;

@@ -214,8 +214,14 @@ export const lotesStore = {
 
   salvarCandidato(concursoId: string, cargoId: string, candidato: Candidato) {
     const list = [...this.getCandidatos(concursoId, cargoId)];
+    const candCpfLimpo = candidato.cpf ? candidato.cpf.replace(/\D/g, '') : '';
+    const candEmailNorm = candidato.email ? candidato.email.toLowerCase().trim() : '';
+
     const index = list.findIndex(
-      (c) => c.id === candidato.id || (candidato.email && c.email === candidato.email)
+      (c) =>
+        (candidato.id && c.id === candidato.id) ||
+        (candCpfLimpo.length >= 7 && c.cpf && c.cpf.replace(/\D/g, '') === candCpfLimpo) ||
+        (candEmailNorm && c.email && c.email.toLowerCase().trim() === candEmailNorm)
     );
     if (index >= 0) {
       list[index] = { ...list[index], ...candidato };

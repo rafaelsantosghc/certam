@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { createPortal } from 'react-dom';
 import { useAuth } from '../store/authContext';
 import { notificationStore } from '../store/notificationStore';
 import { NotificacaoItem } from '../types';
@@ -28,26 +27,6 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ onNavigate, 
   );
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const [toastNotif, setToastNotif] = useState<NotificacaoItem | null>(null);
-  const prevLatestIdRef = useRef<string | null>(null);
-  const toastTimerRef = useRef<any>(null);
-
-  const exibirToast = (nova: NotificacaoItem) => {
-    if (!nova) return;
-    if (toastTimerRef.current) {
-      clearTimeout(toastTimerRef.current);
-    }
-    try {
-      sessionStorage.setItem(`certam_toast_shown_${nova.id}`, 'true');
-    } catch {
-      // ignore
-    }
-    setToastNotif(nova);
-    toastTimerRef.current = setTimeout(() => {
-      setToastNotif(null);
-    }, 7500);
-  };
-
   // Filtrar notificações para o usuário logado
   const filtrarVisiveis = (list: NotificacaoItem[]) => {
     return list.filter((n) => {
@@ -73,75 +52,20 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ onNavigate, 
   };
 
   useEffect(() => {
-    const all = notificationStore.getNotificacoes();
-    const visiveis = filtrarVisiveis(all);
-    const readIds = usuario?.read_notification_ids || [];
-
-    if (visiveis.length > 0) {
-      const top = visiveis[0];
-      const isNaoLida = !readIds.includes(top.id);
-      const jaExibidaNestaSessao = sessionStorage.getItem(`certam_toast_shown_${top.id}`) === 'true';
-
-      prevLatestIdRef.current = top.id;
-
-      // Se há notificação não lida mais recente que ainda não foi exibida nesta sessão, exibe o resumo no topo
-      if (isNaoLida && !jaExibidaNestaSessao) {
-        exibirToast(top);
-      }
-    }
-
     const handleUpdate = () => {
-      const allNotifs = notificationStore.getNotificacoes();
-      setNotificacoes(allNotifs);
-
-      const vis = filtrarVisiveis(allNotifs);
-      if (vis.length > 0) {
-        const top = vis[0];
-        const rIds = usuario?.read_notification_ids || [];
-        const isNaoLida = !rIds.includes(top.id);
-        const jaExibida = sessionStorage.getItem(`certam_toast_shown_${top.id}`) === 'true';
-
-        if (prevLatestIdRef.current !== top.id || (isNaoLida && !jaExibida)) {
-          prevLatestIdRef.current = top.id;
-          exibirToast(top);
-        }
-      }
-    };
-
-    const handleNewNotif = (e: any) => {
-      const allNotifs = notificationStore.getNotificacoes();
-      setNotificacoes(allNotifs);
-
-      const nova = e.detail as NotificacaoItem;
-      if (!nova) return;
-
-      const vis = filtrarVisiveis([nova]);
-      if (vis.length > 0) {
-        prevLatestIdRef.current = nova.id;
-        exibirToast(nova);
-      }
-    };
-
-    const handleTestNotif = (e: any) => {
-      const testItem = e.detail as NotificacaoItem;
-      if (testItem) {
-        exibirToast(testItem);
-      }
+      setNotificacoes(notificationStore.getNotificacoes());
     };
 
     window.addEventListener('certam_notifications_updated', handleUpdate);
-    window.addEventListener('certam_new_notification', handleNewNotif as EventListener);
-    window.addEventListener('certam_test_notification', handleTestNotif as EventListener);
+    window.addEventListener('certam_new_notification', handleUpdate);
     window.addEventListener('storage', handleUpdate);
 
     return () => {
-      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
       window.removeEventListener('certam_notifications_updated', handleUpdate);
-      window.removeEventListener('certam_new_notification', handleNewNotif as EventListener);
-      window.removeEventListener('certam_test_notification', handleTestNotif as EventListener);
+      window.removeEventListener('certam_new_notification', handleUpdate);
       window.removeEventListener('storage', handleUpdate);
     };
-  }, [usuario, isAdmin]);
+  }, []);
 
   // Fechar ao clicar fora
   useEffect(() => {
@@ -331,83 +255,6 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ onNavigate, 
             )}
           </div>
         </div>
-      )}
-
-      {/* Toast Banner de Nova Notificação no Topo da Tela com Animação e Severidade */}
-      {toastNotif && typeof document !== 'undefined' && createPortal(
-        (() => {
-          const isSuccess = toastNotif.tipo === 'aprovacao_perfil' || toastNotif.tipo === 'validacao_aprovada';
-          const isAlert = toastNotif.tipo === 'indeferimento_perfil' || toastNotif.tipo === 'validacao_indeferida' || toastNotif.urgente;
-          const style = isSuccess
-            ? { wrapper: 'bg-emerald-50/98 border-emerald-400 text-emerald-950 ring-4 ring-emerald-500/10', icon: 'bg-emerald-100 text-emerald-700 border-emerald-300', tag: 'text-emerald-800' }
-            : isAlert
-            ? { wrapper: 'bg-rose-50/98 border-rose-400 text-rose-950 ring-4 ring-rose-500/10', icon: 'bg-rose-100 text-rose-700 border-rose-300', tag: 'text-rose-800' }
-            : { wrapper: 'bg-white/98 border-teal-400 text-slate-900 ring-4 ring-teal-500/10', icon: 'bg-teal-50 text-teal-700 border-teal-200', tag: 'text-teal-800' };
-
-          return (
-            <aside 
-              aria-live="polite"
-              className={`fixed top-5 left-1/2 -translate-x-1/2 z-[999999] border shadow-2xl rounded-2xl p-4 max-w-lg w-[92%] sm:w-full notif-toast-animated backdrop-blur-md transition-all ${style.wrapper}`}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 shadow-xs ${style.icon}`}>
-                    <Bell className="w-4 h-4 animate-bounce" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className={`text-[10px] font-mono uppercase font-bold tracking-wider ${style.tag}`}>
-                        {isSuccess ? 'Sucesso / Deferido' : isAlert ? 'Alerta Importante' : 'Nova Notificação'}
-                      </span>
-                      <span className="text-[10px] text-slate-400 font-mono">({toastNotif.data_hora})</span>
-                    </div>
-                    <h4 className="font-bold text-xs sm:text-sm leading-snug text-slate-950 mt-0.5">{toastNotif.titulo}</h4>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setToastNotif(null)}
-                  className="p-1 rounded-lg text-slate-400 hover:text-slate-800 hover:bg-black/5 cursor-pointer text-sm leading-none"
-                  aria-label="Fechar notificação"
-                >
-                  ✕
-                </button>
-              </div>
-
-              <p className="text-xs text-slate-700 mt-2 leading-relaxed bg-white/70 p-2.5 rounded-xl border border-black/5">
-                {toastNotif.mensagem}
-              </p>
-
-              <div className="mt-3 pt-2 border-t border-slate-200/80 flex items-center justify-between text-xs">
-                <span className="text-2xs text-slate-400 font-medium">Exibindo por alguns segundos no topo</span>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setAberto(true);
-                      setToastNotif(null);
-                    }}
-                    className="font-semibold text-slate-600 hover:text-slate-900 cursor-pointer text-2xs"
-                  >
-                    Ver todas
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      handleItemClick(toastNotif);
-                      setToastNotif(null);
-                    }}
-                    className="font-bold text-teal-700 hover:text-teal-900 bg-teal-50 hover:bg-teal-100 border border-teal-200 px-3 py-1 rounded-lg cursor-pointer flex items-center gap-1 shadow-2xs"
-                  >
-                    <span>Acessar</span>
-                    <ExternalLink className="w-3 h-3" />
-                  </button>
-                </div>
-              </div>
-            </aside>
-          );
-        })(),
-        document.body
       )}
     </div>
   );

@@ -11,6 +11,8 @@ import { PrivacyPolicy } from './pages/PrivacyPolicy';
 import { certamStore } from './store/certamStore';
 import { useAuth } from './store/authContext';
 import { PerfilCandidatoModal } from './components/PerfilCandidatoModal';
+import { NotificationToast } from './components/NotificationToast';
+import { AdminOverlay } from './components/AdminOverlay';
 
 interface ErrorBoundaryState {
   hasError: boolean;
@@ -386,6 +388,16 @@ export const AppContent: React.FC = () => {
             </div>
           </div>
         </footer>
+
+        {/* Resumo Flutuante de Novas Notificações (Toast 5s no Topo da Tela) */}
+        <NotificationToast onNavigate={handleNavigate} />
+
+        {/* Overlay Flutuante do Administrador Exclusivo do Ambiente de Preview do AI Studio */}
+        <AdminOverlay
+          onNavigate={handleNavigate}
+          concursoAtualId={concursoId}
+          cargoAtualId={cargoId}
+        />
       </div>
     </div>
   );

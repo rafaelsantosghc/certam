@@ -265,11 +265,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  // Login de candidato com e-mail/dados próprios via Google
   const loginCandidato = (email: string, nome?: string, cpf?: string) => {
     const emailLimpo = email.trim().toLowerCase();
+    const existingInRegistry =
+      userRegistryStore.getUserByEmail(emailLimpo) ||
+      (cpf ? userRegistryStore.getUserByCpf(cpf) : null);
+
     const matchEmail = MASTER_CADASTRO_GERAL.find((c) => c.email?.toLowerCase() === emailLimpo);
-    const nomeLimpo = nome?.trim() || matchEmail?.nome || emailLimpo.split('@')[0];
+    const nomeLimpo =
+      existingInRegistry?.nome ||
+      nome?.trim() ||
+      matchEmail?.nome ||
+      emailLimpo.split('@')[0];
+
     const match =
       (cpf ? identificarCandidatoMaster(nomeLimpo, cpf) : null) ||
       matchEmail ||
@@ -278,32 +286,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const isAdminUser = ADMIN_EMAILS.some((adm) => adm.toLowerCase() === emailLimpo);
 
     const baseCandidato: Usuario = {
-      nome: match ? match.nome : nomeLimpo,
+      ...(existingInRegistry || {}),
+      nome: existingInRegistry?.nome || (match ? match.nome : nomeLimpo),
       email: emailLimpo,
-      email_contato: match?.email || emailLimpo,
+      email_contato: existingInRegistry?.email_contato || match?.email || emailLimpo,
       is_admin: isAdminUser,
-      tipo_usuario: isAdminUser ? 'admin' : 'candidato',
-      status_cadastro: 'ativo',
-      candidato_id: match ? match.id : `cand-${Date.now().toString(36)}`,
-      cpf: cpf || match?.cpf || '',
-      cpf_verificado: !!match,
-      data_nascimento: match?.data_nascimento || '',
-      telefone: match?.whatsapp || '',
-      whatsapp: match?.whatsapp || '',
-      read_notification_ids: [],
-      outros_concursos: [],
-      concursos_inscritos: match?.concurso_id && match?.cargo_id
-        ? [
-            {
-              concurso_id: match.concurso_id,
-              cargo_id: match.cargo_id,
-              data_inscricao: new Date().toLocaleDateString('pt-BR'),
-            },
-          ]
-        : [],
+      tipo_usuario: isAdminUser ? 'admin' : (existingInRegistry?.tipo_usuario || 'candidato'),
+      status_cadastro: existingInRegistry?.status_cadastro || 'ativo',
+      candidato_id: existingInRegistry?.candidato_id || (match ? match.id : `cand-${Date.now().toString(36)}`),
+      cpf: existingInRegistry?.cpf || cpf || match?.cpf || '',
+      cpf_verificado: !!(existingInRegistry?.cpf || match),
+      data_nascimento: existingInRegistry?.data_nascimento || match?.data_nascimento || '',
+      telefone: existingInRegistry?.telefone || match?.whatsapp || '',
+      whatsapp: existingInRegistry?.whatsapp || match?.whatsapp || '',
+      read_notification_ids: existingInRegistry?.read_notification_ids || [],
+      outros_concursos: existingInRegistry?.outros_concursos || [],
+      concursos_inscritos:
+        existingInRegistry?.concursos_inscritos ||
+        (match?.concurso_id && match?.cargo_id
+          ? [
+              {
+                concurso_id: match.concurso_id,
+                cargo_id: match.cargo_id,
+                data_inscricao: new Date().toLocaleDateString('pt-BR'),
+              },
+            ]
+          : []),
     };
 
-    // Vincula automaticamente no Cadastro Geral de Usuários (Item 18)
+    // Vincula automaticamente no Cadastro Geral de Usuários
     const vinculado = userRegistryStore.vincularOuRegistrarUsuarioLogin(baseCandidato);
     setUsuario(vinculado);
 

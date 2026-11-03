@@ -57,6 +57,7 @@ import {
   Briefcase,
 } from 'lucide-react';
 import { userRegistryStore } from '../store/userRegistryStore';
+import { MASTER_CADASTRO_GERAL, normalizarTexto, limparCpf } from '../data/defaultCandidates';
 import { ModalEditarConcurso } from '../components/ModalEditarConcurso';
 import { ModalEditarCargo } from '../components/ModalEditarCargo';
 import { ModalEditarLote } from '../components/ModalEditarLote';
@@ -859,20 +860,31 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         mudancas.whatsapp = alt.valor_novo;
         mudancas.telefone = alt.valor_novo;
       }
-      if (alt.campo === 'email_contato') mudancas.email_contato = alt.valor_novo;
+      if (alt.campo === 'email_contato') {
+        mudancas.email_contato = alt.valor_novo;
+        mudancas.email = alt.valor_novo;
+      }
     });
 
-    // 2. Aplicar diretamente no perfil ativo se for o usuário conectado (ex: admin ou candidato)
+    // 2. Atualizar no repositório persistente de perfis cadastrados do CERTAM (por email, por CPF e por ID)
+    if (req.usuario_email) {
+      userRegistryStore.atualizarCamposUsuario(req.usuario_email, mudancas);
+    }
+    if (req.cpf) {
+      userRegistryStore.atualizarCamposUsuario(req.cpf, mudancas);
+    }
+
+    // 3. Aplicar diretamente no perfil ativo se for o usuário conectado (ex: admin ou candidato)
+    const reqCpfLimpo = req.cpf ? limparCpf(req.cpf) : '';
+    const userCpfLimpo = usuario?.cpf ? limparCpf(usuario.cpf) : '';
     const isCurrentActiveUser =
-      (usuario?.email && usuario.email.toLowerCase() === req.usuario_email.toLowerCase()) ||
-      (usuario?.cpf && req.cpf && usuario.cpf.replace(/\D/g, '') === req.cpf.replace(/\D/g, ''));
+      (usuario?.email && req.usuario_email && usuario.email.toLowerCase().trim() === req.usuario_email.toLowerCase().trim()) ||
+      (userCpfLimpo.length >= 7 && reqCpfLimpo.length >= 7 && userCpfLimpo === reqCpfLimpo) ||
+      (usuario?.nome && req.usuario_nome && normalizarTexto(usuario.nome) === normalizarTexto(req.usuario_nome));
 
     if (isCurrentActiveUser) {
       atualizarDadosUsuario(mudancas);
     }
-
-    // 3. Atualizar no repositório persistente de perfis cadastrados do CERTAM
-    userRegistryStore.atualizarCamposUsuario(req.usuario_email, mudancas);
 
     // 4. Atualizar também na chave de persistência do localStorage
     try {
@@ -880,10 +892,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       const storedStr = localStorage.getItem(storedKey);
       if (storedStr) {
         const storedUser = JSON.parse(storedStr);
+        const storedCpfLimpo = storedUser?.cpf ? limparCpf(storedUser.cpf) : '';
         if (
           storedUser &&
-          (storedUser.email?.toLowerCase() === req.usuario_email.toLowerCase() ||
-            (storedUser.cpf && req.cpf && storedUser.cpf.replace(/\D/g, '') === req.cpf.replace(/\D/g, '')))
+          ((storedUser.email && req.usuario_email && storedUser.email.toLowerCase().trim() === req.usuario_email.toLowerCase().trim()) ||
+            (storedCpfLimpo.length >= 7 && reqCpfLimpo.length >= 7 && storedCpfLimpo === reqCpfLimpo) ||
+            (storedUser.nome && req.usuario_nome && normalizarTexto(storedUser.nome) === normalizarTexto(req.usuario_nome)))
         ) {
           const atualizado = { ...storedUser, ...mudancas };
           localStorage.setItem(storedKey, JSON.stringify(atualizado));
@@ -893,15 +907,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       // ignore
     }
 
-    // 4. Aplicar alterações nas listas de candidatos do lote/master list
+    // 5. Aplicar alterações nas listas de candidatos de todos os concursos/cargos
     concursos.forEach((c) => {
       c.cargos?.forEach((cg) => {
         const cands = lotesStore.getCandidatos(c.id, cg.id);
-        const matchIndex = cands.findIndex(
-          (cand) =>
-            (req.cpf && cand.cpf && cand.cpf.replace(/\D/g, '') === req.cpf.replace(/\D/g, '')) ||
-            (req.usuario_email && cand.email?.toLowerCase() === req.usuario_email.toLowerCase())
-        );
+        const matchIndex = cands.findIndex((cand) => {
+          const candCpfLimpo = cand.cpf ? limparCpf(cand.cpf) : '';
+          return (
+            (reqCpfLimpo.length >= 7 && candCpfLimpo.length >= 7 && candCpfLimpo === reqCpfLimpo) ||
+            (req.usuario_email && cand.email && cand.email.toLowerCase().trim() === req.usuario_email.toLowerCase().trim()) ||
+            (req.usuario_nome && cand.nome && normalizarTexto(cand.nome) === normalizarTexto(req.usuario_nome))
+          );
+        });
         if (matchIndex >= 0) {
           const mod = { ...cands[matchIndex] };
           req.alteracoes.forEach((alt) => {
@@ -916,10 +933,33 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       });
     });
 
-    // 5. Disparar evento global para atualizar qualquer tela aberta
-    window.dispatchEvent(new CustomEvent('certam_audit_approved', { detail: { req, mudancas } }));
+    // 6. Atualizar no MASTER_CADASTRO_GERAL para garantir consistência de cruzamentos em memória
+    const masterIdx = MASTER_CADASTRO_GERAL.findIndex((cand) => {
+      const candCpfLimpo = cand.cpf ? limparCpf(cand.cpf) : '';
+      return (
+        (reqCpfLimpo.length >= 7 && candCpfLimpo.length >= 7 && candCpfLimpo === reqCpfLimpo) ||
+        (req.usuario_email && cand.email && cand.email.toLowerCase().trim() === req.usuario_email.toLowerCase().trim()) ||
+        (req.usuario_nome && cand.nome && normalizarTexto(cand.nome) === normalizarTexto(req.usuario_nome))
+      );
+    });
+    if (masterIdx >= 0) {
+      req.alteracoes.forEach((alt) => {
+        if (alt.campo === 'nome') MASTER_CADASTRO_GERAL[masterIdx].nome = alt.valor_novo;
+        if (alt.campo === 'cpf') MASTER_CADASTRO_GERAL[masterIdx].cpf = alt.valor_novo;
+        if (alt.campo === 'data_nascimento') MASTER_CADASTRO_GERAL[masterIdx].data_nascimento = alt.valor_novo;
+        if (alt.campo === 'whatsapp') MASTER_CADASTRO_GERAL[masterIdx].whatsapp = alt.valor_novo;
+        if (alt.campo === 'email_contato') MASTER_CADASTRO_GERAL[masterIdx].email = alt.valor_novo;
+      });
+    }
 
-    // 6. Notificar o candidato sobre o deferimento das alterações
+    // 7. Atualizar a listagem de usuários do painel administrativo
+    setUsuariosGerais(userRegistryStore.getAllUsers());
+
+    // 8. Disparar eventos globais para sincronização de abas e telas abertas
+    window.dispatchEvent(new CustomEvent('certam_audit_approved', { detail: { req, mudancas } }));
+    window.dispatchEvent(new CustomEvent('certam_profile_updated', { detail: { req, mudancas } }));
+
+    // 9. Notificar o candidato sobre o deferimento das alterações
     const camposAlteradosStr = req.alteracoes.map((a) => a.campo_label).join(', ');
     notificationStore.criarNotificacao({
       destinatario_email: req.usuario_email,
@@ -930,7 +970,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       urgente: false,
     });
 
-    showToast(`Alterações de ${req.usuario_nome} aprovadas e candidato notificado!`);
+    showToast(`Alterações de ${req.usuario_nome} aprovadas e cadastro consolidado com sucesso!`);
   };
 
   const handleAbrirIndeferirAuditoria = (req: PerfilAuditRequest) => {

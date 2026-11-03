@@ -328,17 +328,29 @@ export const userRegistryStore = {
     );
   },
 
+  getUserByCpf(cpf: string): Usuario | null {
+    if (!cpf) return null;
+    const cpfLimpo = limparCpf(cpf);
+    if (cpfLimpo.length < 7) return null;
+    const reg = this.getRegistry();
+    return Object.values(reg).find((u) => u.cpf && limparCpf(u.cpf) === cpfLimpo) || null;
+  },
+
   findRegistryKey(chave: string): string | null {
     if (!chave) return null;
     const reg = this.getRegistry();
     const chaveNorm = chave.toLowerCase().trim();
     if (reg[chaveNorm]) return chaveNorm;
 
+    const chaveCpfLimpo = limparCpf(chave);
+
     for (const [k, u] of Object.entries(reg)) {
       if (
         u.id?.toLowerCase().trim() === chaveNorm ||
         u.candidato_id?.toLowerCase().trim() === chaveNorm ||
-        (u.email && u.email.toLowerCase().trim() === chaveNorm)
+        (u.email && u.email.toLowerCase().trim() === chaveNorm) ||
+        (u.email_contato && u.email_contato.toLowerCase().trim() === chaveNorm) ||
+        (chaveCpfLimpo.length >= 7 && u.cpf && limparCpf(u.cpf) === chaveCpfLimpo)
       ) {
         return k;
       }
@@ -380,23 +392,39 @@ export const userRegistryStore = {
   },
 
   atualizarCamposUsuario(chave: string, campos: Partial<Usuario>): Usuario | null {
-    if (!chave) return null;
+    if (!chave && !campos.cpf && !campos.email) return null;
     const reg = { ...this.getRegistry() };
-    let targetKey = this.findRegistryKey(chave);
+    let targetKey = chave ? this.findRegistryKey(chave) : null;
+
+    if (!targetKey && campos.cpf) {
+      targetKey = this.findRegistryKey(campos.cpf);
+    }
+    if (!targetKey && campos.email) {
+      targetKey = this.findRegistryKey(campos.email);
+    }
 
     if (!targetKey || !reg[targetKey]) {
-      const imp = findImportedCandidateMatch({ id: chave, email: chave, nome: campos.nome, cpf: campos.cpf });
+      const imp = findImportedCandidateMatch({
+        id: chave,
+        email: chave || campos.email,
+        nome: campos.nome,
+        cpf: campos.cpf || chave,
+      });
       if (imp) {
-        const promotedKey = (imp.cand.id || chave).toLowerCase().trim();
+        const promotedKey = (imp.cand.id || chave || campos.cpf || 'cand').toLowerCase().trim();
         reg[promotedKey] = {
-          id: imp.cand.id || chave,
-          nome: imp.cand.nome,
-          email: imp.cand.email && !isFakeEmail(imp.cand.email) ? imp.cand.email : '',
-          cpf: imp.cand.cpf || '',
-          cpf_verificado: Boolean(imp.cand.cpf),
+          id: imp.cand.id || chave || `user-${Date.now().toString(36)}`,
+          nome: campos.nome || imp.cand.nome,
+          email:
+            campos.email || (imp.cand.email && !isFakeEmail(imp.cand.email) ? imp.cand.email : ''),
+          cpf: campos.cpf || imp.cand.cpf || '',
+          cpf_verificado: Boolean(campos.cpf || imp.cand.cpf),
+          data_nascimento: campos.data_nascimento || imp.cand.data_nascimento || '',
+          whatsapp: campos.whatsapp || imp.cand.whatsapp || '',
+          telefone: campos.telefone || campos.whatsapp || imp.cand.whatsapp || '',
           is_admin: false,
           tipo_usuario: 'candidato',
-          status_cadastro: 'primeiro_acesso',
+          status_cadastro: 'ativo',
           candidato_id: imp.cand.id,
           concurso_id: imp.concursoId,
           cargo_id: imp.cargoId,
@@ -579,12 +607,13 @@ export const userRegistryStore = {
         candidato_id:
           matchFromLotes?.cand.id || existingUser.candidato_id || usuario.candidato_id,
         email: emailReal || existingUser.email || '',
-        cpf: usuario.cpf || matchFromLotes?.cand.cpf || existingUser.cpf || '',
-        data_nascimento: usuario.data_nascimento || existingUser.data_nascimento || '',
-        whatsapp: usuario.whatsapp || existingUser.whatsapp || '',
-        telefone: usuario.telefone || usuario.whatsapp || existingUser.telefone || '',
+        nome: existingUser.nome || usuario.nome,
+        cpf: existingUser.cpf || usuario.cpf || matchFromLotes?.cand.cpf || '',
+        data_nascimento: existingUser.data_nascimento || usuario.data_nascimento || '',
+        whatsapp: existingUser.whatsapp || usuario.whatsapp || '',
+        telefone: existingUser.telefone || usuario.telefone || usuario.whatsapp || '',
         cpf_verificado: Boolean(
-          usuario.cpf || matchFromLotes?.cand.cpf || existingUser.cpf_verificado
+          existingUser.cpf || usuario.cpf || matchFromLotes?.cand.cpf || existingUser.cpf_verificado
         ),
         status_cadastro: existingUser.bloqueado ? 'bloqueado' : 'ativo',
         concursos_inscritos: inscricoesUnificadas,
