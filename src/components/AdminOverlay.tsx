@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { isAiStudioPreview } from '../utils/environment';
 import { useAuth } from '../store/authContext';
 import { auditStore } from '../store/auditStore';
@@ -43,7 +44,38 @@ export const AdminOverlay: React.FC<AdminOverlayProps> = ({
   }
 
   const { usuario, isAdmin, alternarModoAdminPreview, loginAdminPreview } = useAuth();
-  const [expandido, setExpandido] = useState(false);
+  
+  // Aberto por padrão no preview para que o usuário localize o painel imediatamente
+  const [expandido, setExpandido] = useState(() => {
+    try {
+      return sessionStorage.getItem('certam_admin_overlay_minimized') !== 'true';
+    } catch {
+      return true;
+    }
+  });
+
+  // Escuta evento global para abrir o painel de testes pelo cabeçalho
+  useEffect(() => {
+    const handleAbrir = () => {
+      setExpandido(true);
+      try {
+        sessionStorage.removeItem('certam_admin_overlay_minimized');
+      } catch {}
+    };
+    window.addEventListener('certam_abrir_admin_overlay', handleAbrir);
+    return () => window.removeEventListener('certam_abrir_admin_overlay', handleAbrir);
+  }, []);
+
+  const alternarMinimizar = (novoEstado: boolean) => {
+    setExpandido(novoEstado);
+    try {
+      if (!novoEstado) {
+        sessionStorage.setItem('certam_admin_overlay_minimized', 'true');
+      } else {
+        sessionStorage.removeItem('certam_admin_overlay_minimized');
+      }
+    } catch {}
+  };
 
   // Modais administrativos rápidos acessíveis via overlay
   const [modalAdicionarCandidato, setModalAdicionarCandidato] = useState(false);
@@ -108,14 +140,16 @@ export const AdminOverlay: React.FC<AdminOverlayProps> = ({
     }
   };
 
-  return (
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
     <>
-      <div className="fixed bottom-4 right-4 z-[99990] select-none font-sans no-print">
+      <div className="fixed bottom-5 right-5 z-[999999] select-none font-sans no-print">
         {/* Painel Lateral Retrátil Flutuante */}
         {expandido ? (
           <aside 
             aria-label="Painel de Testes do Administrador"
-            className="w-80 sm:w-96 bg-[#07192B]/98 text-white rounded-2xl border-2 border-teal-500/50 shadow-2xl backdrop-blur-xl overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-200"
+            className="w-80 sm:w-96 bg-[#07192B]/98 text-white rounded-2xl border-2 border-teal-500/60 shadow-2xl backdrop-blur-xl overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-200 ring-4 ring-teal-500/10"
           >
             {/* Header do Overlay */}
             <div className="p-3.5 bg-[#0C2640] border-b border-teal-500/20 flex items-center justify-between">
@@ -135,7 +169,7 @@ export const AdminOverlay: React.FC<AdminOverlayProps> = ({
 
               <button
                 type="button"
-                onClick={() => setExpandido(false)}
+                onClick={() => alternarMinimizar(false)}
                 className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
                 title="Minimizar painel de testes"
               >
@@ -412,6 +446,7 @@ export const AdminOverlay: React.FC<AdminOverlayProps> = ({
           onFechar={() => setModalDropdowns(false)}
         />
       )}
-    </>
+    </>,
+    document.body
   );
 };

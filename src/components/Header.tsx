@@ -21,6 +21,7 @@ import {
   LogOut,
   Search,
   Bell,
+  SlidersHorizontal,
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -278,6 +279,17 @@ export const Header: React.FC<HeaderProps> = ({
               >
                 <Bell className="w-3 h-3 text-teal-600 animate-bounce" />
                 <span className="hidden xl:inline">Testar Notif</span>
+              </button>
+
+              {/* Botão para Abrir Painel Retrátil de Testes */}
+              <button
+                type="button"
+                onClick={() => window.dispatchEvent(new CustomEvent('certam_abrir_admin_overlay'))}
+                className="flex items-center gap-1 px-2 py-1 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold rounded-lg text-[10px] cursor-pointer transition-colors shadow-2xs"
+                title="Abrir o painel retrátil flutuante de testes do administrador"
+              >
+                <SlidersHorizontal className="w-3 h-3" />
+                <span className="hidden lg:inline">Painel de Testes</span>
               </button>
             </div>
           )}
