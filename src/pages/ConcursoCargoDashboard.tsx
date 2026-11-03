@@ -372,46 +372,46 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
     switch (status) {
       case 'Nomeado':
         return (
-          <span className="inline-flex flex-wrap items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-teal-100 text-teal-900 border border-teal-300 font-mono leading-tight">
+          <span className="inline-flex items-center whitespace-nowrap gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-teal-100 text-teal-900 border border-teal-300 font-mono">
             Nomeado
           </span>
         );
       case 'Convocado titular':
       case 'Convocado Titular':
         return (
-          <span className="inline-flex flex-wrap items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 leading-tight">
+          <span className="inline-flex items-center whitespace-nowrap gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
             Convocado titular
           </span>
         );
       case 'Convocado suplente':
         return (
-          <span className="inline-flex flex-wrap items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-cyan-50 text-cyan-800 border border-cyan-200 leading-tight">
+          <span className="inline-flex items-center whitespace-nowrap gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-cyan-50 text-cyan-800 border border-cyan-200">
             Convocado suplente
           </span>
         );
       case 'Próximo (previsão)':
         return (
-          <span className="inline-flex flex-wrap items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-800 border border-indigo-200 leading-tight">
+          <span className="inline-flex items-center whitespace-nowrap gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-800 border border-indigo-200">
             Próximo (previsão)
           </span>
         );
       case 'Final de lista':
       case 'Fim de Fila':
         return (
-          <span className="inline-flex flex-wrap items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200 leading-tight">
+          <span className="inline-flex items-center whitespace-nowrap gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
             Final de lista
           </span>
         );
       case 'Desistente':
       case 'Desistência':
         return (
-          <span className="inline-flex flex-wrap items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-rose-800 border border-rose-200 leading-tight">
+          <span className="inline-flex items-center whitespace-nowrap gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-rose-800 border border-rose-200">
             Desistente
           </span>
         );
       default:
         return (
-          <span className="inline-flex flex-wrap items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700 leading-tight">
+          <span className="inline-flex items-center whitespace-nowrap gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700">
             {status || 'Aguardando'}
           </span>
         );
