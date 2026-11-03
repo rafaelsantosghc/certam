@@ -19,6 +19,7 @@ import {
   HelpCircle,
   LogOut,
   Search,
+  Bell,
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -38,7 +39,7 @@ export const Header: React.FC<HeaderProps> = ({
   onNavigate,
   concursoAtualId,
 }) => {
-  const { usuario, isAdmin, loginGoogle, redirecionarGoogleOAuth, logout } = useAuth();
+  const { usuario, isAdmin, loginGoogle, redirecionarGoogleOAuth, logout, alternarModoAdminPreview } = useAuth();
   const [copiado, setCopiado] = useState(false);
 
   // Modais do Cabeçalho
@@ -237,7 +238,48 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
           )}
 
-          {/* Botão Admin (Apenas para Administrador Autenticado) */}
+          {/* Modo Administrador no Preview e Botão de Teste de Notificação */}
+          <div className="flex items-center gap-1.5 bg-amber-50/80 border border-amber-300 rounded-xl px-2 py-1 shadow-2xs">
+            <button
+              type="button"
+              onClick={() => alternarModoAdminPreview()}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold cursor-pointer transition-all shadow-2xs ${
+                isAdmin
+                  ? 'bg-amber-600 text-white hover:bg-amber-700'
+                  : 'bg-white text-slate-800 hover:bg-amber-100/70 border border-amber-300'
+              }`}
+              title={isAdmin ? 'Desativar modo administrador para testar como candidato/visitante' : 'Ativar modo administrador para testar todos os botões de edição'}
+            >
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span>{isAdmin ? '👑 Admin Ativo' : 'Ativar Modo Admin (Teste)'}</span>
+            </button>
+
+            {/* Botão de Testar Resumo Flutuante de Notificação */}
+            <button
+              type="button"
+              onClick={() => {
+                window.dispatchEvent(
+                  new CustomEvent('certam_test_notification', {
+                    detail: {
+                      id: `notif-teste-${Date.now()}`,
+                      titulo: 'Novo Comunicado de Convocação (Teste)',
+                      mensagem: 'Publicada lista preliminar com 25 novos chamamentos e escolha de comarcas.',
+                      tipo: 'convocacao',
+                      data_hora: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+                      urgente: true,
+                    },
+                  })
+                );
+              }}
+              className="flex items-center gap-1 px-2 py-1 bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 rounded-lg text-[10px] font-bold cursor-pointer transition-colors"
+              title="Dispara um resumo de notificação flutuante no topo para testar instantaneamente"
+            >
+              <Bell className="w-3 h-3 text-teal-600 animate-bounce" />
+              <span className="hidden xl:inline">Testar Notif</span>
+            </button>
+          </div>
+
+          {/* Botão Painel Admin (Apenas se Admin Ativo) */}
           {isAdmin && showAdminShortcut && (
             <button
               type="button"

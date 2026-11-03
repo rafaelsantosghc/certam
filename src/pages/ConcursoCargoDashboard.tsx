@@ -24,6 +24,9 @@ import { DocumentosConcursoView } from '../components/DocumentosConcursoView';
 import { ComunicadosConcursoView } from '../components/ComunicadosConcursoView';
 import { SolicitarVinculacaoModal } from '../components/SolicitarVinculacaoModal';
 import { MensagensPrivadasDrawer } from '../components/MensagensPrivadasDrawer';
+import { ModalEditarCandidatoAdmin } from '../components/ModalEditarCandidatoAdmin';
+import { ModalGerenciarDropdowns } from '../components/ModalGerenciarDropdowns';
+import { ModalAdicionarCandidatoAdmin } from '../components/ModalAdicionarCandidatoAdmin';
 import {
   BarChart3,
   ListOrdered,
@@ -229,11 +232,46 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
   const [dmDestinatarioEmail, setDmDestinatarioEmail] = useState<string | undefined>(undefined);
   const [dmDestinatarioNome, setDmDestinatarioNome] = useState<string | undefined>(undefined);
 
-  // Toast alert (Item 4)
+  // Toast alert
   const [toastData, setToastData] = useState<{ msg: string; tipo: 'sucesso' | 'erro' } | null>(null);
   const showToast = (msg: string, tipo: 'sucesso' | 'erro' = 'sucesso') => {
     setToastData({ msg, tipo });
     setTimeout(() => setToastData(null), 3500);
+  };
+
+  // Modais de Edição e Gestão de Candidatos pelo Admin (Item Reestruturação Admin)
+  const [modalEditarCandidatoAdminAberto, setModalEditarCandidatoAdminAberto] = useState(false);
+  const [candidatoEditandoAdmin, setCandidatoEditandoAdmin] = useState<Candidato | null>(null);
+  const [modalGerenciarDropdownsAberto, setModalGerenciarDropdownsAberto] = useState(false);
+  const [modalAdicionarCandidatoAdminAberto, setModalAdicionarCandidatoAdminAberto] = useState(false);
+
+  const handleSalvarCandidatoAdmin = (candidatoAtualizado: Candidato) => {
+    lotesStore.salvarCandidato(concurso.id, cargo.id, candidatoAtualizado);
+    const atualizados = lotesStore.getCandidatos(concurso.id, cargo.id);
+    setCandidatos(atualizados);
+    void classificationCache.set(concurso.id, cargo.id, atualizados);
+    setModalEditarCandidatoAdminAberto(false);
+    setCandidatoEditandoAdmin(null);
+    showToast(`Candidato "${candidatoAtualizado.nome}" atualizado com sucesso!`);
+  };
+
+  const handleAdicionarCandidatoAdmin = (novo: Candidato) => {
+    lotesStore.salvarCandidato(concurso.id, cargo.id, novo);
+    const atualizados = lotesStore.getCandidatos(concurso.id, cargo.id);
+    setCandidatos(atualizados);
+    void classificationCache.set(concurso.id, cargo.id, atualizados);
+    setModalAdicionarCandidatoAdminAberto(false);
+    showToast(`Candidato "${novo.nome}" adicionado com sucesso!`);
+  };
+
+  const handleExcluirCandidato = (cand: Candidato) => {
+    if (window.confirm(`Deseja realmente excluir o candidato "${cand.nome}" (Posição ${cand.posicao}º)?`)) {
+      lotesStore.removerCandidato(concurso.id, cargo.id, cand.id);
+      const atualizados = lotesStore.getCandidatos(concurso.id, cargo.id);
+      setCandidatos(atualizados);
+      void classificationCache.set(concurso.id, cargo.id, atualizados);
+      showToast(`Candidato "${cand.nome}" removido da lista.`);
+    }
   };
 
   // Candidato logado vinculado nesta lista (se houver)
@@ -1299,6 +1337,48 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
 
             return (
               <>
+                {/* BARRA DE GESTÃO DE CLASSIFICAÇÃO PARA ADMIN */}
+                {isAdmin && (
+                  <div className="bg-amber-50/90 border border-amber-300 rounded-2xl p-3 sm:p-4 flex flex-wrap items-center justify-between gap-3 shadow-xs">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center font-bold text-sm shadow-2xs">
+                        👑
+                      </div>
+                      <div>
+                        <div className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                          <span>Gestão de Classificação (Modo Administrador)</span>
+                          <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-amber-200 text-amber-900 font-mono font-bold">Ativo</span>
+                        </div>
+                        <p className="text-2xs text-slate-600">
+                          Edite manualmente qualquer campo de cada candidato, adicione novos ou configure as opções das listas suspensas.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => setModalAdicionarCandidatoAdminAberto(true)}
+                        className="px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+                        title="Adicionar novo candidato manualmente a esta lista"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>+ Adicionar Candidato</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setModalGerenciarDropdownsAberto(true)}
+                        className="px-3 py-1.5 bg-white hover:bg-amber-100 text-slate-800 border border-amber-300 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+                        title="Gerenciar opções de listas suspensas (Status, Cotas, Lotações)"
+                      >
+                        <Sliders className="w-3.5 h-3.5 text-amber-600" />
+                        <span>Gerenciar Listas Suspensas</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 {/* TABELA: CLASSIFICAÇÃO GERAL POR NOTA */}
                 {subAbaClassificacao === 'geral' && (
                   <div className="bg-white rounded-2xl border border-slate-200 card-shadow overflow-hidden">
@@ -1464,6 +1544,29 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
                               </div>
                               <div className="text-center">
                                 <div className="flex items-center justify-center gap-1">
+                                  {isAdmin && (
+                                    <>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setCandidatoEditandoAdmin(cand);
+                                          setModalEditarCandidatoAdminAberto(true);
+                                        }}
+                                        className="p-1 text-amber-700 hover:text-amber-950 bg-amber-50 hover:bg-amber-100 rounded border border-amber-300 cursor-pointer transition-colors shadow-2xs"
+                                        title="Editar manualmente campos deste candidato (Admin)"
+                                      >
+                                        <Pencil className="w-3.5 h-3.5" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleExcluirCandidato(cand)}
+                                        className="p-1 text-rose-600 hover:text-rose-950 bg-rose-50 hover:bg-rose-100 rounded border border-rose-300 cursor-pointer transition-colors shadow-2xs"
+                                        title="Excluir este candidato da lista (Admin)"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    </>
+                                  )}
                                   {isCandidatoAprovado && (
                                     <>
                                       <button
@@ -2559,6 +2662,39 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
           }}
         />
       )}
+
+      {/* Modal Admin Editar Candidato Manualmente */}
+      <ModalEditarCandidatoAdmin
+        aberto={modalEditarCandidatoAdminAberto}
+        candidato={candidatoEditandoAdmin}
+        tipoLotacao={tipoLotacao}
+        onFechar={() => {
+          setModalEditarCandidatoAdminAberto(false);
+          setCandidatoEditandoAdmin(null);
+        }}
+        onSalvar={handleSalvarCandidatoAdmin}
+      />
+
+      {/* Modal Admin Adicionar Candidato Manualmente */}
+      <ModalAdicionarCandidatoAdmin
+        aberto={modalAdicionarCandidatoAdminAberto}
+        concursoId={concurso.id}
+        cargoId={cargo.id}
+        proximaPosicao={candidatos.length + 1}
+        tipoLotacao={tipoLotacao}
+        onFechar={() => setModalAdicionarCandidatoAdminAberto(false)}
+        onAdicionar={handleAdicionarCandidatoAdmin}
+      />
+
+      {/* Modal Admin Gerenciar Opções de Listas Suspensas */}
+      <ModalGerenciarDropdowns
+        aberto={modalGerenciarDropdownsAberto}
+        onFechar={() => setModalGerenciarDropdownsAberto(false)}
+        onSalvo={() => {
+          reloadData();
+          showToast('Opções de listas suspensas atualizadas!');
+        }}
+      />
     </div>
   );
 };

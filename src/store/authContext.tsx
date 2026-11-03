@@ -11,6 +11,7 @@ interface AuthContextType {
   redirecionarGoogleOAuth: () => boolean;
   loginAdmin: (senha: string) => boolean;
   loginAdminPreview: () => void;
+  alternarModoAdminPreview: () => void;
   loginCandidato: (email: string, nome?: string, cpf?: string) => void;
   simularEmailCandidato: (email: string, nome: string) => void;
   atualizarDadosUsuario: (dados: Partial<Usuario>) => void;
@@ -34,6 +35,7 @@ const AuthContext = createContext<AuthContextType>({
   redirecionarGoogleOAuth: () => false,
   loginAdmin: () => false,
   loginAdminPreview: () => {},
+  alternarModoAdminPreview: () => {},
   loginCandidato: () => {},
   simularEmailCandidato: () => {},
   atualizarDadosUsuario: () => {},
@@ -224,9 +226,42 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const loginAdminPreview = () => {
-    // Acesso direto concedido se o usuário for o administrador oficial
-    if (usuario && ADMIN_EMAILS.some((adm) => adm.toLowerCase() === usuario.email?.toLowerCase())) {
-      setUsuario((prev) => (prev ? { ...prev, is_admin: true } : null));
+    const adminUser: Usuario = {
+      nome: 'Rafael Administrador',
+      email: 'rafasms0@hotmail.com',
+      email_contato: 'rafasms0@hotmail.com',
+      is_admin: true,
+      tipo_usuario: 'admin',
+      status_cadastro: 'ativo',
+      candidato_id: 'admin-preview-master',
+      cpf: '000.000.000-00',
+      cpf_verificado: true,
+      data_nascimento: '01/01/1990',
+      telefone: '(51) 99999-9999',
+      whatsapp: '(51) 99999-9999',
+      read_notification_ids: [],
+      outros_concursos: [],
+      concursos_inscritos: [],
+    };
+    setUsuario(adminUser);
+    try {
+      localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(adminUser));
+    } catch {
+      // ignore
+    }
+    userRegistryStore.vincularOuRegistrarUsuarioLogin(adminUser);
+  };
+
+  const alternarModoAdminPreview = () => {
+    if (usuario && usuario.is_admin) {
+      setUsuario(null);
+      try {
+        localStorage.removeItem(AUTH_STORAGE_KEY);
+      } catch {
+        // ignore
+      }
+    } else {
+      loginAdminPreview();
     }
   };
 
@@ -402,6 +437,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         redirecionarGoogleOAuth,
         loginAdmin,
         loginAdminPreview,
+        alternarModoAdminPreview,
         loginCandidato,
         simularEmailCandidato,
         atualizarDadosUsuario,

@@ -225,6 +225,11 @@ export const lotesStore = {
     this.salvarCandidatos(concursoId, cargoId, list, false);
   },
 
+  removerCandidato(concursoId: string, cargoId: string, candidatoId: string) {
+    const list = this.getCandidatos(concursoId, cargoId).filter((c) => c.id !== candidatoId);
+    this.salvarCandidatos(concursoId, cargoId, list, true);
+  },
+
   getLote(loteId: string): Lote | null {
     const lotes = this.getLotes();
     return lotes.find((l) => l.id === loteId) || lotes[0] || null;

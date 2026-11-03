@@ -35,6 +35,21 @@ body {
   box-shadow: 0 10px 25px -3px rgba(15, 23, 42, 0.08), 0 4px 10px -2px rgba(15, 23, 42, 0.04);
 }
 
+@keyframes notifToastEntrance {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -24px) scale(0.96);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+}
+
+.notif-toast-animated {
+  animation: notifToastEntrance 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
 /* Custom scrollbars */
 ::-webkit-scrollbar {
   width: 6px;
