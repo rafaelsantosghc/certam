@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { certamStore } from '../store/certamStore';
 import { lotesStore } from '../store/lotesStore';
 import { userRegistryStore } from '../store/userRegistryStore';
@@ -130,6 +130,11 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
   const [loteEditando, setLoteEditando] = useState<Lote | null>(null);
   const [lotesExpandidosComarcas, setLotesExpandidosComarcas] = useState<Record<string, boolean>>({});
   const [lotesExpandidosConvocados, setLotesExpandidosConvocados] = useState<Record<string, boolean>>({});
+
+  const topScrollRef1 = useRef<HTMLDivElement>(null);
+  const bottomScrollRef1 = useRef<HTMLDivElement>(null);
+  const topScrollRef2 = useRef<HTMLDivElement>(null);
+  const bottomScrollRef2 = useRef<HTMLDivElement>(null);
 
   const podeEditarEsteConcurso = podeEditarConcurso(usuario, concurso.id);
   const podeEditarEsteCargo = podeEditarCargo(usuario, concurso.id, cargo.id);
@@ -1303,7 +1308,27 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
                       (p) => setPaginaAtual(p)
                     )}
 
-                    <div className="overflow-x-auto">
+                    {/* Barra de rolagem superior sincronizada */}
+                    <div
+                      ref={topScrollRef1}
+                      onScroll={() => {
+                        if (topScrollRef1.current && bottomScrollRef1.current) {
+                          bottomScrollRef1.current.scrollLeft = topScrollRef1.current.scrollLeft;
+                        }
+                      }}
+                      className="overflow-x-auto h-3.5 bg-slate-100 border-b border-slate-200"
+                    >
+                      <div style={{ width: '1100px', height: '1px' }} />
+                    </div>
+                    <div
+                      ref={bottomScrollRef1}
+                      onScroll={() => {
+                        if (topScrollRef1.current && bottomScrollRef1.current) {
+                          topScrollRef1.current.scrollLeft = bottomScrollRef1.current.scrollLeft;
+                        }
+                      }}
+                      className="overflow-x-auto"
+                    >
                       <div className="grid grid-cols-[fit-content(70px)_minmax(200px,1fr)_fit-content(90px)_fit-content(90px)_fit-content(90px)_fit-content(110px)_minmax(140px,1fr)_minmax(160px,1fr)_fit-content(130px)_fit-content(80px)] min-w-[1100px] text-xs divide-y divide-slate-100">
                         {/* Header da Grid */}
                         <div className="bg-[#07192B] text-white font-serif text-[11px] uppercase tracking-wider py-2.5 px-3 col-span-10 grid grid-cols-subgrid items-center">
@@ -1488,7 +1513,27 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
                       (p) => setPaginaAtual(p)
                     )}
 
-                    <div className="overflow-x-auto">
+                    {/* Barra de rolagem superior sincronizada */}
+                    <div
+                      ref={topScrollRef2}
+                      onScroll={() => {
+                        if (topScrollRef2.current && bottomScrollRef2.current) {
+                          bottomScrollRef2.current.scrollLeft = topScrollRef2.current.scrollLeft;
+                        }
+                      }}
+                      className="overflow-x-auto h-3.5 bg-slate-100 border-b border-slate-200"
+                    >
+                      <div style={{ width: '1100px', height: '1px' }} />
+                    </div>
+                    <div
+                      ref={bottomScrollRef2}
+                      onScroll={() => {
+                        if (topScrollRef2.current && bottomScrollRef2.current) {
+                          topScrollRef2.current.scrollLeft = topScrollRef2.current.scrollLeft;
+                        }
+                      }}
+                      className="overflow-x-auto"
+                    >
                       <div className="grid grid-cols-[fit-content(80px)_minmax(160px,1fr)_minmax(200px,1fr)_fit-content(110px)_fit-content(110px)_fit-content(90px)_fit-content(110px)_minmax(140px,1fr)_fit-content(130px)] min-w-[1100px] text-xs divide-y divide-slate-100">
                         {/* Header da Grid */}
                         <div className="bg-[#07192B] text-white font-serif text-[11px] uppercase tracking-wider py-2.5 px-3 col-span-9 grid grid-cols-subgrid items-center">
