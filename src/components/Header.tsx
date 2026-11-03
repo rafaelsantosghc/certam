@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useAuth } from '../store/authContext';
+import { certamStore } from '../store/certamStore';
 import { NotificationBell } from './NotificationBell';
 import { PerfilCandidatoModal } from './PerfilCandidatoModal';
 import { ContatoAdminModal } from './ContatoAdminModal';
@@ -16,6 +17,7 @@ import {
   ShieldCheck,
   HelpCircle,
   LogOut,
+  Search,
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -67,6 +69,52 @@ export const Header: React.FC<HeaderProps> = ({
     setModalContatoAberto(true);
   };
 
+  const [termoBuscaGlobal, setTermoBuscaGlobal] = useState('');
+  const [buscaAberta, setBuscaAberta] = useState(false);
+  const searchRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
+        setBuscaAberta(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const resultadosBuscaGlobal = useMemo(() => {
+    if (!termoBuscaGlobal.trim() || termoBuscaGlobal.length < 2) return [];
+    const termo = termoBuscaGlobal.toLowerCase().trim();
+    const concursos = certamStore.getConcursos();
+    const resultados: { concursoId: string; concursoNome: string; cargoId?: string; cargoNome?: string; tipo: 'concurso' | 'cargo' }[] = [];
+
+    concursos.forEach((conc) => {
+      const matchConc = conc.nome.toLowerCase().includes(termo) || conc.orgao.toLowerCase().includes(termo);
+      if (matchConc) {
+        resultados.push({
+          concursoId: conc.id,
+          concursoNome: conc.nome,
+          tipo: 'concurso',
+        });
+      }
+      conc.cargos?.forEach((cg) => {
+        const matchCargo = cg.nome.toLowerCase().includes(termo);
+        if (matchCargo) {
+          resultados.push({
+            concursoId: conc.id,
+            concursoNome: conc.nome,
+            cargoId: cg.id,
+            cargoNome: cg.nome,
+            tipo: 'cargo',
+          });
+        }
+      });
+    });
+
+    return resultados.slice(0, 8);
+  }, [termoBuscaGlobal]);
+
   return (
     <>
       <header className="h-[68px] sm:h-[76px] bg-white border-b border-slate-200 sticky top-0 z-40 card-shadow flex items-center justify-between px-4 sm:px-6 lg:px-8 shrink-0">
@@ -99,6 +147,54 @@ export const Header: React.FC<HeaderProps> = ({
               </React.Fragment>
             ))}
           </nav>
+        </div>
+
+        {/* Centro: Campo de Busca Global Instantânea */}
+        <div className="relative hidden lg:block w-64 xl:w-80" ref={searchRef}>
+          <div className="relative">
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
+            <input
+              type="text"
+              value={termoBuscaGlobal}
+              onChange={(e) => {
+                setTermoBuscaGlobal(e.target.value);
+                setBuscaAberta(true);
+              }}
+              onFocus={() => setBuscaAberta(true)}
+              placeholder="Pesquisar concurso, cargo..."
+              className="w-full pl-9 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:bg-white focus:border-teal-600 outline-hidden font-medium"
+            />
+          </div>
+
+          {buscaAberta && resultadosBuscaGlobal.length > 0 && (
+            <div className="absolute left-0 right-0 mt-2 bg-white rounded-2xl shadow-2xl border border-slate-200 z-[110] overflow-hidden divide-y divide-slate-100 max-h-80 overflow-y-auto">
+              {resultadosBuscaGlobal.map((res, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => {
+                    setBuscaAberta(false);
+                    setTermoBuscaGlobal('');
+                    if (onNavigate) {
+                      if (res.tipo === 'cargo' && res.cargoId) {
+                        onNavigate('concurso', { concursoId: res.concursoId, cargoId: res.cargoId, tab: 'dashboard' });
+                      } else {
+                        onNavigate('concurso_geral', { concursoId: res.concursoId });
+                      }
+                    }
+                  }}
+                  className="w-full p-2.5 text-left hover:bg-slate-50 transition-colors flex flex-col gap-0.5 cursor-pointer"
+                >
+                  <span className="text-xs font-bold text-slate-900 truncate">
+                    {res.cargoNome ? res.cargoNome : res.concursoNome}
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-mono truncate">
+                    {res.concursoNome}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Direita: Ações, Sininho de Notificações, Mensagens, Fale com Admin e Perfil */}
