@@ -11,7 +11,9 @@ export const notificationStore = {
       const stored = cloudSync.getItem(NOTIFICATIONS_STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed)) return parsed;
+        if (Array.isArray(parsed)) {
+          return [...parsed].sort((a, b) => (b.id || '').localeCompare(a.id || ''));
+        }
       }
     } catch {
       // ignore

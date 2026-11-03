@@ -27,13 +27,50 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ onNavigate, 
   );
   const containerRef = useRef<HTMLDivElement>(null);
 
+  const [toastNotif, setToastNotif] = useState<NotificacaoItem | null>(null);
+  const prevLatestIdRef = useRef<string | null>(null);
+
   useEffect(() => {
     const handleUpdate = () => {
-      setNotificacoes(notificationStore.getNotificacoes());
+      const allNotifs = notificationStore.getNotificacoes();
+      setNotificacoes(allNotifs);
+
+      const visiveis = allNotifs.filter((n) => {
+        if (isAdmin && (
+          n.tipo === 'aprovacao_perfil' ||
+          n.tipo === 'indeferimento_perfil' ||
+          n.tipo === 'validacao_aprovada' ||
+          n.tipo === 'validacao_indeferida'
+        )) {
+          return false;
+        }
+        if (n.destinatario_email) {
+          if (!usuario) return false;
+          const emailUser = usuario.email?.toLowerCase().trim();
+          const emailDest = n.destinatario_email.toLowerCase().trim();
+          return emailUser === emailDest;
+        }
+        return true;
+      });
+
+      if (visiveis.length > 0) {
+        const topNotif = visiveis[0];
+        if (prevLatestIdRef.current === null) {
+          prevLatestIdRef.current = topNotif.id;
+        } else if (prevLatestIdRef.current !== topNotif.id) {
+          prevLatestIdRef.current = topNotif.id;
+          setToastNotif(topNotif);
+          const t = setTimeout(() => {
+            setToastNotif(null);
+          }, 5000);
+          return () => clearTimeout(t);
+        }
+      }
     };
+
     window.addEventListener('certam_notifications_updated', handleUpdate);
     return () => window.removeEventListener('certam_notifications_updated', handleUpdate);
-  }, []);
+  }, [usuario, isAdmin]);
 
   // Fechar ao clicar fora
   useEffect(() => {
@@ -239,6 +276,48 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ onNavigate, 
                 );
               })
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Toast Banner de Nova Notificação no Topo da Tela */}
+      {toastNotif && (
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[200] bg-white border border-teal-300 shadow-2xl rounded-2xl p-4 max-w-md w-[90%] sm:w-full animate-in slide-in-from-top-4 duration-300">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-teal-50 border border-teal-200 text-teal-800 flex items-center justify-center shrink-0">
+                <Bell className="w-4 h-4 text-teal-600 animate-bounce" />
+              </div>
+              <div>
+                <span className="text-[10px] font-mono text-teal-800 uppercase font-bold tracking-wider">
+                  Nova Notificação Recebida
+                </span>
+                <h4 className="font-bold text-xs text-slate-900 leading-snug">{toastNotif.titulo}</h4>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setToastNotif(null)}
+              className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer text-xs"
+            >
+              ✕
+            </button>
+          </div>
+          <p className="text-xs text-slate-600 mt-2 leading-relaxed line-clamp-2">
+            {toastNotif.mensagem}
+          </p>
+          <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between text-[11px]">
+            <span className="text-slate-400 font-mono">{toastNotif.data_hora}</span>
+            <button
+              type="button"
+              onClick={() => {
+                handleItemClick(toastNotif);
+                setToastNotif(null);
+              }}
+              className="font-bold text-teal-700 hover:text-teal-900 cursor-pointer flex items-center gap-1"
+            >
+              <span>Ver detalhes</span>
+            </button>
           </div>
         </div>
       )}
