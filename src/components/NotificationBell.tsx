@@ -280,47 +280,57 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ onNavigate, 
         </div>
       )}
 
-      {/* Toast Banner de Nova Notificação no Topo da Tela */}
-      {toastNotif && (
-        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[200] bg-white border border-teal-300 shadow-2xl rounded-2xl p-4 max-w-md w-[90%] sm:w-full animate-in slide-in-from-top-4 duration-300">
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-teal-50 border border-teal-200 text-teal-800 flex items-center justify-center shrink-0">
-                <Bell className="w-4 h-4 text-teal-600 animate-bounce" />
+      {/* Toast Banner de Nova Notificação no Topo da Tela com Animação e Severidade */}
+      {toastNotif && (() => {
+        const isSuccess = toastNotif.tipo === 'aprovacao_perfil' || toastNotif.tipo === 'validacao_aprovada';
+        const isAlert = toastNotif.tipo === 'indeferimento_perfil' || toastNotif.tipo === 'validacao_indeferida' || toastNotif.urgente;
+        const style = isSuccess
+          ? { wrapper: 'bg-emerald-50/95 border-emerald-300 text-emerald-950', icon: 'bg-emerald-100 text-emerald-700 border-emerald-200', tag: 'text-emerald-800' }
+          : isAlert
+          ? { wrapper: 'bg-rose-50/95 border-rose-300 text-rose-950', icon: 'bg-rose-100 text-rose-700 border-rose-200', tag: 'text-rose-800' }
+          : { wrapper: 'bg-white border-teal-300 text-slate-900', icon: 'bg-teal-50 text-teal-700 border-teal-200', tag: 'text-teal-800' };
+
+        return (
+          <div className={`fixed top-20 left-1/2 -translate-x-1/2 z-[200] border shadow-2xl rounded-2xl p-4 max-w-md w-[90%] sm:w-full animate-in fade-in slide-in-from-top-6 duration-400 ease-out backdrop-blur-xs ${style.wrapper}`}>
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className={`w-8 h-8 rounded-xl border flex items-center justify-center shrink-0 ${style.icon}`}>
+                  <Bell className="w-4 h-4 animate-bounce" />
+                </div>
+                <div>
+                  <span className={`text-[10px] font-mono uppercase font-bold tracking-wider ${style.tag}`}>
+                    {isSuccess ? 'Sucesso / Deferido' : isAlert ? 'Alerta / Indeferido' : 'Nova Notificação'}
+                  </span>
+                  <h4 className="font-bold text-xs leading-snug">{toastNotif.titulo}</h4>
+                </div>
               </div>
-              <div>
-                <span className="text-[10px] font-mono text-teal-800 uppercase font-bold tracking-wider">
-                  Nova Notificação Recebida
-                </span>
-                <h4 className="font-bold text-xs text-slate-900 leading-snug">{toastNotif.titulo}</h4>
-              </div>
+              <button
+                type="button"
+                onClick={() => setToastNotif(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-black/5 cursor-pointer text-xs"
+              >
+                ✕
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={() => setToastNotif(null)}
-              className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer text-xs"
-            >
-              ✕
-            </button>
+            <p className="text-xs text-slate-600 mt-2 leading-relaxed line-clamp-2">
+              {toastNotif.mensagem}
+            </p>
+            <div className="mt-2.5 pt-2 border-t border-slate-200/60 flex items-center justify-between text-[11px]">
+              <span className="text-slate-400 font-mono">{toastNotif.data_hora}</span>
+              <button
+                type="button"
+                onClick={() => {
+                  handleItemClick(toastNotif);
+                  setToastNotif(null);
+                }}
+                className="font-bold text-teal-700 hover:text-teal-900 cursor-pointer flex items-center gap-1"
+              >
+                <span>Ver detalhes</span>
+              </button>
+            </div>
           </div>
-          <p className="text-xs text-slate-600 mt-2 leading-relaxed line-clamp-2">
-            {toastNotif.mensagem}
-          </p>
-          <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between text-[11px]">
-            <span className="text-slate-400 font-mono">{toastNotif.data_hora}</span>
-            <button
-              type="button"
-              onClick={() => {
-                handleItemClick(toastNotif);
-                setToastNotif(null);
-              }}
-              className="font-bold text-teal-700 hover:text-teal-900 cursor-pointer flex items-center gap-1"
-            >
-              <span>Ver detalhes</span>
-            </button>
-          </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 };
