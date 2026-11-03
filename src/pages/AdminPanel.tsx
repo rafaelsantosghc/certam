@@ -1061,10 +1061,23 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   // -------------------------------------------------------------
   const handleEnviarRespostaContato = (id: string) => {
     if (!respostaTexto.trim()) return;
+    const msg = contatos.find((c) => c.id === id);
     contactStore.responderMensagem(id, respostaTexto);
+
+    if (msg) {
+      notificationStore.criarNotificacao({
+        destinatario_email: msg.usuario_email,
+        destinatario_nome: msg.usuario_nome,
+        titulo: 'Resposta ao Contato / Solicitação',
+        mensagem: `Sua mensagem sobre "${msg.motivo_label}" foi respondida pela administração: "${respostaTexto.trim()}"`,
+        tipo: 'comunicado',
+        urgente: false,
+      });
+    }
+
     setRespostaContatoId(null);
     setRespostaTexto('');
-    showToast('Resposta enviada ao candidato!');
+    showToast('Resposta enviada e candidato notificado!');
   };
 
   const handleDispararNotificacao = (e: React.FormEvent) => {

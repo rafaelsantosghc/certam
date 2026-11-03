@@ -52,7 +52,7 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ onNavigate, 
       if (!usuario) return false;
       const emailUser = usuario.email?.toLowerCase().trim();
       const emailDest = n.destinatario_email.toLowerCase().trim();
-      return emailUser === emailDest || isAdmin;
+      return emailUser === emailDest;
     }
     return true; // Notificações globais do portal
   });
