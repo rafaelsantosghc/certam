@@ -3,6 +3,7 @@ import { Usuario } from '../types';
 import { identificarCandidatoMaster, MASTER_CADASTRO_GERAL } from '../data/defaultCandidates';
 import { userRegistryStore } from './userRegistryStore';
 import { cloudSync } from './cloudSync';
+import { isAiStudioPreview } from '../utils/environment';
 
 interface AuthContextType {
   usuario: Usuario | null;
@@ -226,6 +227,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const loginAdminPreview = () => {
+    // Bloqueio rigoroso: nunca funciona fora do preview do Google AI Studio
+    if (!isAiStudioPreview()) {
+      return;
+    }
+
     const adminUser: Usuario = {
       nome: 'Rafael Administrador',
       email: 'rafasms0@hotmail.com',
@@ -253,6 +259,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const alternarModoAdminPreview = () => {
+    // Bloqueio rigoroso: nunca funciona fora do preview do Google AI Studio
+    if (!isAiStudioPreview()) {
+      return;
+    }
+
     if (usuario && usuario.is_admin) {
       setUsuario(null);
       try {
