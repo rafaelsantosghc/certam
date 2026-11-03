@@ -1332,8 +1332,8 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
                       <div className="grid grid-cols-[fit-content(70px)_minmax(200px,1fr)_fit-content(90px)_fit-content(90px)_fit-content(90px)_fit-content(110px)_minmax(140px,1fr)_minmax(160px,1fr)_fit-content(130px)_fit-content(80px)] min-w-[1100px] text-xs divide-y divide-slate-100">
                         {/* Header da Grid */}
                         <div className="bg-[#07192B] text-white font-serif text-[11px] uppercase tracking-wider py-2.5 px-3 col-span-10 grid grid-cols-subgrid items-center">
-                          <div className="text-center font-semibold">Pos.</div>
-                          <div className="font-semibold">Candidato</div>
+                          <div className="text-center font-semibold sticky left-0 z-20 bg-[#07192B]">Pos.</div>
+                          <div className="font-semibold sticky left-[65px] sm:left-[75px] z-20 bg-[#07192B] shadow-[2px_0_5px_rgba(0,0,0,0.08)]">Candidato</div>
                           <div className="text-center font-semibold">Cota</div>
                           <div className="text-right font-semibold">Nota Final</div>
                           <div className="text-center font-semibold">Lote Convocado</div>
@@ -1352,12 +1352,12 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
                           candidatosPaginados.map((cand) => (
                             <div
                               key={cand.id}
-                              className="col-span-10 grid grid-cols-subgrid items-center hover:bg-slate-50 transition-colors py-2.5 px-3"
+                              className="col-span-10 grid grid-cols-subgrid items-center hover:bg-slate-50 transition-colors py-2.5 px-3 group"
                             >
-                              <div className="text-center font-mono font-bold text-slate-900">
+                              <div className="text-center font-mono font-bold text-slate-900 sticky left-0 z-10 bg-white group-hover:bg-slate-50 transition-colors">
                                 {cand.posicao}º
                               </div>
-                              <div className="font-bold text-slate-900 pr-2">
+                              <div className="font-bold text-slate-900 pr-2 sticky left-[65px] sm:left-[75px] z-10 bg-white group-hover:bg-slate-50 transition-colors shadow-[2px_0_5px_rgba(0,0,0,0.06)]">
                                 <div className="flex items-center gap-1.5 flex-wrap">
                                   <span>{cand.nome}</span>
                                   {(() => {
@@ -1534,12 +1534,12 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
                       }}
                       className="overflow-x-auto"
                     >
-                      <div className="grid grid-cols-[fit-content(80px)_minmax(160px,1fr)_minmax(200px,1fr)_fit-content(110px)_fit-content(110px)_fit-content(90px)_fit-content(110px)_minmax(140px,1fr)_fit-content(130px)] min-w-[1100px] text-xs divide-y divide-slate-100">
+                      <div className="grid grid-cols-[fit-content(80px)_minmax(200px,1fr)_minmax(160px,1fr)_fit-content(110px)_fit-content(110px)_fit-content(90px)_fit-content(110px)_minmax(140px,1fr)_fit-content(130px)] min-w-[1100px] text-xs divide-y divide-slate-100">
                         {/* Header da Grid */}
                         <div className="bg-[#07192B] text-white font-serif text-[11px] uppercase tracking-wider py-2.5 px-3 col-span-9 grid grid-cols-subgrid items-center">
-                          <div className="text-center font-semibold">Ordem</div>
+                          <div className="text-center font-semibold sticky left-0 z-20 bg-[#07192B]">Ordem</div>
+                          <div className="font-semibold sticky left-[65px] sm:left-[75px] z-20 bg-[#07192B] shadow-[2px_0_5px_rgba(0,0,0,0.08)]">Candidato</div>
                           <div className="font-semibold">Garantia / Tipo</div>
-                          <div className="font-semibold">Candidato</div>
                           <div className="text-center font-semibold">Cota do Candidato</div>
                           <div className="text-center font-semibold">Vaga Atribuída</div>
                           <div className="text-center font-semibold">Lote Convocado</div>
@@ -1556,14 +1556,21 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
                           ordemNomeacaoPaginada.map((item) => (
                             <div
                               key={`${item.ordem}-${item.candidatoId}`}
-                              className={`col-span-9 grid grid-cols-subgrid items-center transition-colors py-2.5 px-3 ${
+                              className={`col-span-9 grid grid-cols-subgrid items-center transition-colors py-2.5 px-3 group ${
                                 item.garantido
-                                  ? 'bg-emerald-50/20 hover:bg-emerald-50/40 border-l-4 border-l-emerald-600'
+                                  ? 'bg-emerald-50/25 hover:bg-emerald-50/40 border-l-4 border-l-emerald-600'
                                   : 'hover:bg-slate-50'
                               }`}
                             >
-                              <div className="text-center font-mono font-bold text-slate-900">
+                              <div className="text-center font-mono font-bold text-slate-900 sticky left-0 z-10 bg-white group-hover:bg-slate-50 transition-colors">
                                 {item.ordem}º
+                              </div>
+
+                              <div className="font-bold text-slate-900 pr-2 sticky left-[65px] sm:left-[75px] z-10 bg-white group-hover:bg-slate-50 transition-colors shadow-[2px_0_5px_rgba(0,0,0,0.06)]">
+                                <div>{item.nome}</div>
+                                <span className="text-[10px] font-mono text-slate-400 font-normal">
+                                  {item.posicaoOriginal}º lugar original
+                                </span>
                               </div>
 
                               <div className="pr-2">
@@ -1578,13 +1585,6 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
                                     <span>Previsão Especulativa</span>
                                   </span>
                                 )}
-                              </div>
-
-                              <div className="font-bold text-slate-900 pr-2">
-                                <div>{item.nome}</div>
-                                <span className="text-[10px] font-mono text-slate-400 font-normal">
-                                  {item.posicaoOriginal}º lugar original
-                                </span>
                               </div>
 
                               <div className="text-center font-mono">
