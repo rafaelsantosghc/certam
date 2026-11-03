@@ -526,7 +526,7 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
       {/* Toast Feedback (Item 4: XCircle para erro e CheckCircle2 para sucesso) */}
       {toastData && (
         <div
-          className={`fixed bottom-6 right-6 z-50 px-5 py-3 rounded-xl shadow-2xl flex items-center gap-3 animate-fade-in ${
+          className={`fixed bottom-6 right-6 z-[200] px-5 py-3 rounded-xl shadow-2xl flex items-center gap-3 animate-fade-in ${
             toastData.tipo === 'erro'
               ? 'bg-[#21090f] text-rose-200 border border-rose-500/70'
               : 'bg-[#07192B] text-white border border-[#2DD4AA]'
@@ -2343,7 +2343,7 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
 
       {/* MODAIS DA PÁGINA */}
       {candidatoModal && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5">
+        <div className="fixed inset-0 z-[150] overflow-y-auto bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5">
           <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-2xl w-full overflow-hidden flex flex-col max-h-[90vh]">
             <div className="bg-[#07192B] text-white p-5 border-b border-[#0F2942] flex items-center justify-between shrink-0">
               <div>

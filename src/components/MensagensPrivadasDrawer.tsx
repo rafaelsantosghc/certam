@@ -129,7 +129,7 @@ export const MensagensPrivadasDrawer: React.FC<MensagensPrivadasDrawerProps> = (
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/60 backdrop-blur-xs animate-in fade-in-50">
+    <div className="fixed inset-0 z-[150] flex justify-end bg-slate-950/60 backdrop-blur-xs animate-in fade-in-50">
       <div className="bg-white w-full max-w-2xl h-full shadow-2xl border-l border-slate-200 flex flex-col">
         {/* Header do Drawer */}
         <div className="p-4 bg-[#07192B] text-white flex items-center justify-between shrink-0">
