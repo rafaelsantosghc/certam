@@ -25,6 +25,13 @@ export function fonetizar(texto: string): string {
 
 export function matchFonético(textoAlvo: string, termoBusca: string): boolean {
   if (!textoAlvo || !termoBusca) return false;
+  const alvoLower = textoAlvo.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const termoLower = termoBusca.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+  // 1. Prioridade absoluta para correspondência exata ou substring exata
+  if (alvoLower.includes(termoLower)) return true;
+
+  // 2. Fallback para similaridade fonética / Levenshtein
   const alvoFonetico = fonetizar(textoAlvo);
   const termoFonetico = fonetizar(termoBusca);
 
