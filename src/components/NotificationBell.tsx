@@ -48,6 +48,15 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ onNavigate, 
 
   // Filtrar notificações para o usuário logado
   const notificacoesVisiveis = notificacoes.filter((n) => {
+    if (isAdmin && (
+      n.tipo === 'aprovacao_perfil' ||
+      n.tipo === 'indeferimento_perfil' ||
+      n.tipo === 'validacao_aprovada' ||
+      n.tipo === 'validacao_indeferida'
+    )) {
+      return false;
+    }
+
     if (n.destinatario_email) {
       if (!usuario) return false;
       const emailUser = usuario.email?.toLowerCase().trim();

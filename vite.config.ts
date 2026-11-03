@@ -532,7 +532,10 @@ export default defineConfig(({ mode }) => ({
     host: '0.0.0.0',
     port: 3000,
     strictPort: true,
-    hmr: false,
+    hmr: {
+      clientPort: 3000,
+      host: 'localhost',
+    },
     watch: {
       ignored: ['**/.certam_sync_db.json', '**/certam_sync_db.json'],
     },
