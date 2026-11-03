@@ -1273,7 +1273,7 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
                 {/* TABELA: CLASSIFICAÇÃO GERAL POR NOTA */}
                 {subAbaClassificacao === 'geral' && (
                   <div className="bg-white rounded-2xl border border-slate-200 card-shadow overflow-hidden">
-                    {/* Paginação Superior (Item 13) */}
+                    {/* Paginação Superior */}
                     {renderBarraPaginacao(
                       paginaAtual,
                       totalPaginas,
@@ -1282,173 +1282,170 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
                     )}
 
                     <div className="overflow-x-auto">
-                      <table className="w-full text-left text-xs divide-y divide-slate-100">
-                        <thead className="bg-[#07192B] text-white font-serif text-[11px] uppercase tracking-wider">
-                          <tr>
-                            <th className="py-2.5 px-3 text-center w-12 font-semibold">Pos.</th>
-                            <th className="py-2.5 px-3 font-semibold">Candidato</th>
-                            <th className="py-2.5 px-2.5 font-semibold text-center">Cota</th>
-                            <th className="py-2.5 px-2.5 font-semibold text-right">Nota Final</th>
-                            <th className="py-2.5 px-2.5 font-semibold text-center">Lote Convocado</th>
-                            <th className="py-2.5 px-2.5 font-semibold text-center">Data Convocação</th>
-                            <th className="py-2.5 px-3 font-semibold">{tipoLotacao} Definitiva</th>
-                            <th className="py-2.5 px-3 font-semibold">Preferências Informadas</th>
-                            <th className="py-2.5 px-3 font-semibold text-center">Status</th>
-                            <th className="py-2.5 px-2 text-center">Ações</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                          {candidatosPaginados.length === 0 ? (
-                            <tr>
-                              <td colSpan={10} className="py-10 text-center text-xs text-slate-400">
-                                Nenhum candidato localizado com os filtros selecionados.
-                              </td>
-                            </tr>
-                          ) : (
-                            candidatosPaginados.map((cand) => (
-                              <tr key={cand.id} className="hover:bg-slate-50 transition-colors">
-                                <td className="py-2.5 px-3 text-center font-mono font-bold text-slate-900">
-                                  {cand.posicao}º
-                                </td>
-                                <td className="py-2.5 px-3 font-bold text-slate-900">
-                                  <div className="flex items-center gap-1.5 flex-wrap">
-                                    <span>{cand.nome}</span>
+                      <div className="grid grid-cols-[fit-content(70px)_minmax(200px,1fr)_fit-content(90px)_fit-content(90px)_fit-content(90px)_fit-content(110px)_minmax(140px,1fr)_minmax(160px,1fr)_fit-content(130px)_fit-content(80px)] min-w-[1100px] text-xs divide-y divide-slate-100">
+                        {/* Header da Grid */}
+                        <div className="bg-[#07192B] text-white font-serif text-[11px] uppercase tracking-wider py-2.5 px-3 col-span-10 grid grid-cols-subgrid items-center">
+                          <div className="text-center font-semibold">Pos.</div>
+                          <div className="font-semibold">Candidato</div>
+                          <div className="text-center font-semibold">Cota</div>
+                          <div className="text-right font-semibold">Nota Final</div>
+                          <div className="text-center font-semibold">Lote Convocado</div>
+                          <div className="text-center font-semibold">Data Convocação</div>
+                          <div className="font-semibold">{tipoLotacao} Definitiva</div>
+                          <div className="font-semibold">Preferências Informadas</div>
+                          <div className="text-center font-semibold">Status</div>
+                          <div className="text-center font-semibold">Ações</div>
+                        </div>
+
+                        {candidatosPaginados.length === 0 ? (
+                          <div className="col-span-10 py-10 text-center text-xs text-slate-400">
+                            Nenhum candidato localizado com os filtros selecionados.
+                          </div>
+                        ) : (
+                          candidatosPaginados.map((cand) => (
+                            <div
+                              key={cand.id}
+                              className="col-span-10 grid grid-cols-subgrid items-center hover:bg-slate-50 transition-colors py-2.5 px-3"
+                            >
+                              <div className="text-center font-mono font-bold text-slate-900">
+                                {cand.posicao}º
+                              </div>
+                              <div className="font-bold text-slate-900 pr-2">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span>{cand.nome}</span>
+                                  {(() => {
+                                    const infoVinc = userRegistryStore.verificarVinculoCandidato(cand);
+                                    return infoVinc.vinculado ? (
+                                      <span
+                                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 whitespace-nowrap"
+                                        title="Candidato já acessou e vinculou conta no portal"
+                                      >
+                                        <UserCheck className="w-2.5 h-2.5 text-emerald-700" />
+                                        <span>Vinculado</span>
+                                      </span>
+                                    ) : null;
+                                  })()}
+                                </div>
+                                {isCandidatoAprovado && cand.cpf && (
+                                  <span className="text-[10px] font-mono text-slate-400 block font-normal">
+                                    CPF: {cand.cpf}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-center font-mono">
+                                {isCandidatoAprovado ? (
+                                  <div className="flex items-center justify-center gap-1 flex-wrap">
                                     {(() => {
-                                      const infoVinc = userRegistryStore.verificarVinculoCandidato(cand);
-                                      return infoVinc.vinculado ? (
+                                      const listaCotas =
+                                        cand.cotas && cand.cotas.length > 0
+                                          ? cand.cotas.filter((ct, _, arr) =>
+                                              arr.length > 1 ? ct !== 'Ampla' : true
+                                            )
+                                          : [cand.cota];
+                                      return listaCotas.map((ct, idxCt) => (
                                         <span
-                                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300"
-                                          title="Candidato já acessou e vinculou conta no portal"
+                                          key={idxCt}
+                                          className={`box-decoration-clone px-2 py-0.5 rounded text-[10px] font-bold whitespace-nowrap ${
+                                            ct === 'PCD'
+                                              ? 'bg-purple-100 text-purple-900 border border-purple-200'
+                                              : ct === 'PPP' || (ct as string) === 'CN'
+                                              ? 'bg-amber-100 text-amber-900 border border-amber-200'
+                                              : ct === 'Indígena'
+                                              ? 'bg-emerald-100 text-emerald-900 border border-emerald-200'
+                                              : ct === 'Trans'
+                                              ? 'bg-pink-100 text-pink-900 border border-pink-200'
+                                              : 'bg-slate-100 text-slate-700'
+                                          }`}
                                         >
-                                          <UserCheck className="w-2.5 h-2.5 text-emerald-700" />
-                                          <span>Vinculado</span>
+                                          {ct === 'PPP' || (ct as string) === 'CN' ? 'PPP / CN' : ct}
                                         </span>
-                                      ) : null;
+                                      ));
                                     })()}
                                   </div>
-                                  {isCandidatoAprovado && cand.cpf && (
-                                    <span className="text-[10px] font-mono text-slate-400 block font-normal">
-                                      CPF: {cand.cpf}
-                                    </span>
-                                  )}
-                                </td>
-                                <td className="py-2.5 px-2.5 text-center font-mono">
-                                  {isCandidatoAprovado ? (
-                                    <div className="flex items-center justify-center gap-1 flex-wrap">
-                                      {(() => {
-                                        const listaCotas =
-                                          cand.cotas && cand.cotas.length > 0
-                                            ? cand.cotas.filter((ct, _, arr) =>
-                                                arr.length > 1 ? ct !== 'Ampla' : true
-                                              )
-                                            : [cand.cota];
-                                        return listaCotas.map((ct, idxCt) => (
-                                          <span
-                                            key={idxCt}
-                                            className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                                              ct === 'PCD'
-                                                ? 'bg-purple-100 text-purple-900 border border-purple-200'
-                                                : ct === 'PPP' || (ct as string) === 'CN'
-                                                ? 'bg-amber-100 text-amber-900 border border-amber-200'
-                                                : ct === 'Indígena'
-                                                ? 'bg-emerald-100 text-emerald-900 border border-emerald-200'
-                                                : ct === 'Trans'
-                                                ? 'bg-pink-100 text-pink-900 border border-pink-200'
-                                                : 'bg-slate-100 text-slate-700'
-                                            }`}
-                                          >
-                                            {ct === 'PPP' || (ct as string) === 'CN' ? 'PPP / CN' : ct}
-                                          </span>
-                                        ));
-                                      })()}
-                                    </div>
-                                  ) : (
-                                    <span className="text-slate-400 text-2xs italic">Restrito</span>
-                                  )}
-                                </td>
-                                <td className="py-2.5 px-2.5 text-right font-mono font-bold text-slate-900">
-                                  {isCandidatoAprovado ? (
-                                    cand.nota_final.toFixed(2)
-                                  ) : (
-                                    <span className="text-slate-400 font-normal text-2xs italic">Restrito</span>
-                                  )}
-                                </td>
-                                <td className="py-2.5 px-2.5 text-center">
-                                  {cand.numero_lote_convocado ? (
-                                    <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-teal-50 text-teal-800 border border-teal-200">
-                                      {cand.numero_lote_convocado}
-                                    </span>
-                                  ) : (
-                                    <span className="text-slate-400 font-mono">-</span>
-                                  )}
-                                </td>
-                                <td className="py-2.5 px-2.5 text-center font-mono text-slate-700">
-                                  {cand.data_convocacao || cand.data_nomeacao || '-'}
-                                </td>
-                                {/* Item 16: Lotação Definitiva contém estritamente a lotação definida pós-lote */}
-                                <td className="py-2.5 px-3 text-slate-700">
-                                  {cand.comarca_definitiva ? (
-                                    <span className="font-semibold text-purple-950 bg-purple-50 px-2 py-0.5 rounded-md border border-purple-200 text-[11px]">
-                                      {cand.comarca_definitiva}
-                                    </span>
-                                  ) : (
-                                    <span className="text-slate-400 font-mono text-[11px]">-</span>
-                                  )}
-                                </td>
-                                {/* Item 16: Preferências do candidato em coluna separada */}
-                                <td className="py-2.5 px-3 text-slate-700">
-                                  {cand.escolhas_comarcas && cand.escolhas_comarcas.length > 0 ? (
-                                    <span
-                                      className="text-slate-700 text-[11px] truncate block max-w-[200px]"
-                                      title={cand.escolhas_comarcas.map((e, idx) => `${idx + 1}ª: ${e}`).join(' | ')}
-                                    >
-                                      {cand.escolhas_comarcas[0]} {cand.escolhas_comarcas.length > 1 && `(+${cand.escolhas_comarcas.length - 1})`}
-                                    </span>
-                                  ) : cand.comarca_desejada_1 ? (
-                                    <span className="text-slate-600 text-[11px]">
-                                      {cand.comarca_desejada_1}
-                                    </span>
-                                  ) : (
-                                    <span className="text-slate-400 text-2xs italic">Pendente</span>
-                                  )}
-                                </td>
-                                <td className="py-2.5 px-3 text-center">
-                                  {renderBadgeStatus(cand.status)}
-                                </td>
-                                <td className="py-2.5 px-2 text-center">
-                                  <div className="flex items-center justify-center gap-1">
-                                    {isCandidatoAprovado && (
-                                      <>
+                                ) : (
+                                  <span className="text-slate-400 text-2xs italic whitespace-nowrap">Restrito</span>
+                                )}
+                              </div>
+                              <div className="text-right font-mono font-bold text-slate-900">
+                                {isCandidatoAprovado ? (
+                                  cand.nota_final.toFixed(2)
+                                ) : (
+                                  <span className="text-slate-400 font-normal text-2xs italic">Restrito</span>
+                                )}
+                              </div>
+                              <div className="text-center">
+                                {cand.numero_lote_convocado ? (
+                                  <span className="box-decoration-clone px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-teal-50 text-teal-800 border border-teal-200 whitespace-nowrap">
+                                    {cand.numero_lote_convocado}
+                                  </span>
+                                ) : (
+                                  <span className="text-slate-400 font-mono">-</span>
+                                )}
+                              </div>
+                              <div className="text-center font-mono text-slate-700 whitespace-nowrap">
+                                {cand.data_convocacao || cand.data_nomeacao || '-'}
+                              </div>
+                              <div className="text-slate-700">
+                                {cand.comarca_definitiva ? (
+                                  <span className="box-decoration-clone inline-block font-semibold text-purple-950 bg-purple-50 px-2 py-0.5 rounded-md border border-purple-200 text-[11px]">
+                                    {cand.comarca_definitiva}
+                                  </span>
+                                ) : (
+                                  <span className="text-slate-400 font-mono text-[11px]">-</span>
+                                )}
+                              </div>
+                              <div className="text-slate-700 pr-2">
+                                {cand.escolhas_comarcas && cand.escolhas_comarcas.length > 0 ? (
+                                  <span
+                                    className="text-slate-700 text-[11px] truncate block"
+                                    title={cand.escolhas_comarcas.map((e, idx) => `${idx + 1}ª: ${e}`).join(' | ')}
+                                  >
+                                    {cand.escolhas_comarcas[0]} {cand.escolhas_comarcas.length > 1 && `(+${cand.escolhas_comarcas.length - 1})`}
+                                  </span>
+                                ) : cand.comarca_desejada_1 ? (
+                                  <span className="text-slate-600 text-[11px]">
+                                    {cand.comarca_desejada_1}
+                                  </span>
+                                ) : (
+                                  <span className="text-slate-400 text-2xs italic">Pendente</span>
+                                )}
+                              </div>
+                              <div className="text-center">
+                                {renderBadgeStatus(cand.status)}
+                              </div>
+                              <div className="text-center">
+                                <div className="flex items-center justify-center gap-1">
+                                  {isCandidatoAprovado && (
+                                    <>
+                                      <button
+                                        type="button"
+                                        onClick={() => setCandidatoModal(cand)}
+                                        className="p-1 text-slate-600 hover:text-teal-700 rounded hover:bg-slate-100 cursor-pointer"
+                                        title="Visualizar notas detalhadas"
+                                      >
+                                        <Eye className="w-3.5 h-3.5" />
+                                      </button>
+                                      {usuario && (
                                         <button
                                           type="button"
-                                          onClick={() => setCandidatoModal(cand)}
-                                          className="p-1 text-slate-600 hover:text-teal-700 rounded hover:bg-slate-100 cursor-pointer"
-                                          title="Visualizar notas detalhadas"
+                                          onClick={() => handleAbrirMensagemComCandidato(cand)}
+                                          className="p-1 text-slate-600 hover:text-[#135A7A] rounded hover:bg-slate-100 cursor-pointer"
+                                          title="Enviar mensagem privada 1 a 1"
                                         >
-                                          <Eye className="w-3.5 h-3.5" />
+                                          <MessageCircle className="w-3.5 h-3.5" />
                                         </button>
-                                        {usuario && (
-                                          <button
-                                            type="button"
-                                            onClick={() => handleAbrirMensagemComCandidato(cand)}
-                                            className="p-1 text-slate-600 hover:text-[#135A7A] rounded hover:bg-slate-100 cursor-pointer"
-                                            title="Enviar mensagem privada 1 a 1"
-                                          >
-                                            <MessageCircle className="w-3.5 h-3.5" />
-                                          </button>
-                                        )}
-                                      </>
-                                    )}
-                                  </div>
-                                </td>
-                              </tr>
-                            ))
-                          )}
-                        </tbody>
-                      </table>
+                                      )}
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
                     </div>
 
-                    {/* Paginação Inferior (Item 13) */}
+                    {/* Paginação Inferior */}
                     {renderBarraPaginacao(
                       paginaAtual,
                       totalPaginas,
@@ -1461,7 +1458,7 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
                 {/* TABELA: ORDEM DE NOMEAÇÃO (PREVISÃO COM COTAS) */}
                 {subAbaClassificacao === 'ordem_nomeacao' && (
                   <div className="bg-white rounded-2xl border border-slate-200 card-shadow overflow-hidden">
-                    {/* Paginação Superior (Item 13) */}
+                    {/* Paginação Superior */}
                     {renderBarraPaginacao(
                       paginaAtual,
                       totalPaginasOrdem,
@@ -1470,134 +1467,129 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
                     )}
 
                     <div className="overflow-x-auto">
-                      <table className="w-full text-left text-xs divide-y divide-slate-100">
-                        <thead className="bg-[#07192B] text-white font-serif text-[11px] uppercase tracking-wider">
-                          <tr>
-                            <th className="py-2.5 px-3 text-center w-16 font-semibold">Ordem</th>
-                            <th className="py-2.5 px-3 font-semibold">Garantia / Tipo</th>
-                            <th className="py-2.5 px-3 font-semibold">Candidato</th>
-                            <th className="py-2.5 px-2.5 font-semibold text-center">Cota do Candidato</th>
-                            <th className="py-2.5 px-2.5 font-semibold text-center">Vaga Atribuída</th>
-                            <th className="py-2.5 px-2.5 font-semibold text-center">Lote Convocado</th>
-                            <th className="py-2.5 px-2.5 font-semibold text-center">Data Convocação</th>
-                            <th className="py-2.5 px-3 font-semibold">{tipoLotacao} Definitiva</th>
-                            <th className="py-2.5 px-3 font-semibold text-center">Status</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                          {ordemNomeacaoPaginada.length === 0 ? (
-                            <tr>
-                              <td colSpan={9} className="py-10 text-center text-xs text-slate-400">
-                                Nenhum candidato localizado na simulação de ordem de nomeação.
-                              </td>
-                            </tr>
-                          ) : (
-                            ordemNomeacaoPaginada.map((item) => (
-                              <tr
-                                key={`${item.ordem}-${item.candidatoId}`}
-                                className={`transition-colors ${
-                                  item.garantido
-                                    ? 'bg-emerald-50/20 hover:bg-emerald-50/40 border-l-4 border-l-emerald-600'
-                                    : 'hover:bg-slate-50'
-                                }`}
-                              >
-                                <td className="py-2.5 px-3 text-center font-mono font-bold text-slate-900">
-                                  {item.ordem}º
-                                </td>
+                      <div className="grid grid-cols-[fit-content(80px)_minmax(160px,1fr)_minmax(200px,1fr)_fit-content(110px)_fit-content(110px)_fit-content(90px)_fit-content(110px)_minmax(140px,1fr)_fit-content(130px)] min-w-[1100px] text-xs divide-y divide-slate-100">
+                        {/* Header da Grid */}
+                        <div className="bg-[#07192B] text-white font-serif text-[11px] uppercase tracking-wider py-2.5 px-3 col-span-9 grid grid-cols-subgrid items-center">
+                          <div className="text-center font-semibold">Ordem</div>
+                          <div className="font-semibold">Garantia / Tipo</div>
+                          <div className="font-semibold">Candidato</div>
+                          <div className="text-center font-semibold">Cota do Candidato</div>
+                          <div className="text-center font-semibold">Vaga Atribuída</div>
+                          <div className="text-center font-semibold">Lote Convocado</div>
+                          <div className="text-center font-semibold">Data Convocação</div>
+                          <div className="font-semibold">{tipoLotacao} Definitiva</div>
+                          <div className="text-center font-semibold">Status</div>
+                        </div>
 
-                                {/* Tipo de Ordem: Garantida (Oficial) vs Previsão Especulativa */}
-                                <td className="py-2.5 px-3">
-                                  {item.garantido ? (
-                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-100 text-emerald-900 border border-emerald-300">
-                                      <CheckCircle2 className="w-3 h-3 text-emerald-700 shrink-0" />
-                                      <span>Ordem Garantida (Oficial)</span>
-                                    </span>
-                                  ) : (
-                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium bg-slate-100 text-slate-600 border border-slate-200">
-                                      <Sparkles className="w-3 h-3 text-indigo-500 shrink-0" />
-                                      <span>Previsão Especulativa</span>
-                                    </span>
-                                  )}
-                                </td>
+                        {ordemNomeacaoPaginada.length === 0 ? (
+                          <div className="col-span-9 py-10 text-center text-xs text-slate-400">
+                            Nenhum candidato localizado na simulação de ordem de nomeação.
+                          </div>
+                        ) : (
+                          ordemNomeacaoPaginada.map((item) => (
+                            <div
+                              key={`${item.ordem}-${item.candidatoId}`}
+                              className={`col-span-9 grid grid-cols-subgrid items-center transition-colors py-2.5 px-3 ${
+                                item.garantido
+                                  ? 'bg-emerald-50/20 hover:bg-emerald-50/40 border-l-4 border-l-emerald-600'
+                                  : 'hover:bg-slate-50'
+                              }`}
+                            >
+                              <div className="text-center font-mono font-bold text-slate-900">
+                                {item.ordem}º
+                              </div>
 
-                                <td className="py-2.5 px-3 font-bold text-slate-900">
-                                  <div>{item.nome}</div>
-                                  <span className="text-[10px] font-mono text-slate-400 font-normal">
-                                    {item.posicaoOriginal}º lugar original
+                              <div className="pr-2">
+                                {item.garantido ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-100 text-emerald-900 border border-emerald-300 whitespace-nowrap">
+                                    <CheckCircle2 className="w-3 h-3 text-emerald-700 shrink-0" />
+                                    <span>Ordem Garantida (Oficial)</span>
                                   </span>
-                                </td>
-
-                                <td className="py-2.5 px-2.5 text-center font-mono">
-                                  <span
-                                    className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                                      item.cotaCandidato === 'PCD'
-                                        ? 'bg-purple-100 text-purple-900 border border-purple-200'
-                                        : item.cotaCandidato === 'PPP' || item.cotaCandidato === 'CN'
-                                        ? 'bg-amber-100 text-amber-900 border border-amber-200'
-                                        : item.cotaCandidato === 'Indígena'
-                                        ? 'bg-emerald-100 text-emerald-900 border border-emerald-200'
-                                        : item.cotaCandidato === 'Trans'
-                                        ? 'bg-pink-100 text-pink-900 border border-pink-200'
-                                        : 'bg-slate-100 text-slate-700'
-                                    }`}
-                                  >
-                                    {item.cotaCandidato === 'PPP' || item.cotaCandidato === 'CN' ? 'PPP / CN' : item.cotaCandidato}
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium bg-slate-100 text-slate-600 border border-slate-200 whitespace-nowrap">
+                                    <Sparkles className="w-3 h-3 text-indigo-500 shrink-0" />
+                                    <span>Previsão Especulativa</span>
                                   </span>
-                                </td>
+                                )}
+                              </div>
 
-                                <td className="py-2.5 px-2.5 text-center font-mono">
-                                  <span
-                                    className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                                      item.vagaAtribuida === 'PCD'
-                                        ? 'bg-purple-100 text-purple-900 border border-purple-200'
-                                        : item.vagaAtribuida === 'PPP'
-                                        ? 'bg-amber-100 text-amber-900 border border-amber-200'
-                                        : item.vagaAtribuida === 'Indígena'
-                                        ? 'bg-emerald-100 text-emerald-900 border border-emerald-200'
-                                        : item.vagaAtribuida === 'Trans'
-                                        ? 'bg-pink-100 text-pink-900 border border-pink-200'
-                                        : 'bg-teal-50 text-teal-900 border border-teal-200'
-                                    }`}
-                                  >
-                                    Vaga {item.vagaAtribuida === 'PPP' ? 'PPP / CN' : item.vagaAtribuida}
+                              <div className="font-bold text-slate-900 pr-2">
+                                <div>{item.nome}</div>
+                                <span className="text-[10px] font-mono text-slate-400 font-normal">
+                                  {item.posicaoOriginal}º lugar original
+                                </span>
+                              </div>
+
+                              <div className="text-center font-mono">
+                                <span
+                                  className={`box-decoration-clone px-2 py-0.5 rounded text-[10px] font-bold whitespace-nowrap ${
+                                    item.cotaCandidato === 'PCD'
+                                      ? 'bg-purple-100 text-purple-900 border border-purple-200'
+                                      : item.cotaCandidato === 'PPP' || item.cotaCandidato === 'CN'
+                                      ? 'bg-amber-100 text-amber-900 border border-amber-200'
+                                      : item.cotaCandidato === 'Indígena'
+                                      ? 'bg-emerald-100 text-emerald-900 border border-emerald-200'
+                                      : item.cotaCandidato === 'Trans'
+                                      ? 'bg-pink-100 text-pink-900 border border-pink-200'
+                                      : 'bg-slate-100 text-slate-700'
+                                  }`}
+                                >
+                                  {item.cotaCandidato === 'PPP' || item.cotaCandidato === 'CN' ? 'PPP / CN' : item.cotaCandidato}
+                                </span>
+                              </div>
+
+                              <div className="text-center font-mono">
+                                <span
+                                  className={`box-decoration-clone px-2 py-0.5 rounded text-[10px] font-bold whitespace-nowrap ${
+                                    item.vagaAtribuida === 'PCD'
+                                      ? 'bg-purple-100 text-purple-900 border border-purple-200'
+                                      : item.vagaAtribuida === 'PPP'
+                                      ? 'bg-amber-100 text-amber-900 border border-amber-200'
+                                      : item.vagaAtribuida === 'Indígena'
+                                      ? 'bg-emerald-100 text-emerald-900 border border-emerald-200'
+                                      : item.vagaAtribuida === 'Trans'
+                                      ? 'bg-pink-100 text-pink-900 border border-pink-200'
+                                      : 'bg-teal-50 text-teal-900 border border-teal-200'
+                                  }`}
+                                >
+                                  Vaga {item.vagaAtribuida === 'PPP' ? 'PPP / CN' : item.vagaAtribuida}
+                                </span>
+                              </div>
+
+                              <div className="text-center">
+                                {item.loteNumero ? (
+                                  <span className="box-decoration-clone px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-teal-50 text-teal-800 border border-teal-200 whitespace-nowrap">
+                                    {item.loteNumero}
                                   </span>
-                                </td>
+                                ) : (
+                                  <span className="text-slate-400 font-mono">-</span>
+                                )}
+                              </div>
 
-                                <td className="py-2.5 px-2.5 text-center">
-                                  {item.loteNumero ? (
-                                    <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-teal-50 text-teal-800 border border-teal-200">
-                                      {item.loteNumero}
-                                    </span>
-                                  ) : (
-                                    <span className="text-slate-400 font-mono">-</span>
-                                  )}
-                                </td>
+                              <div className="text-center font-mono text-slate-700 whitespace-nowrap">
+                                {item.dataConvocacao || item.dataNomeacao || '-'}
+                              </div>
 
-                                <td className="py-2.5 px-2.5 text-center font-mono text-slate-700">
-                                  {item.dataConvocacao || item.dataNomeacao || '-'}
-                                </td>
+                              <div className="text-slate-700">
+                                {item.comarcaDefinitiva ? (
+                                  <span className="box-decoration-clone inline-block font-semibold text-purple-950 bg-purple-50 px-2 py-0.5 rounded-md border border-purple-200 text-[11px]">
+                                    {item.comarcaDefinitiva}
+                                  </span>
+                                ) : (
+                                  <span className="text-slate-400 font-mono">-</span>
+                                )}
+                              </div>
 
-                                <td className="py-2.5 px-3 text-slate-700">
-                                  {item.comarcaDefinitiva ? (
-                                    <span className="font-semibold text-purple-950 bg-purple-50 px-2 py-0.5 rounded-md border border-purple-200 text-[11px]">
-                                      {item.comarcaDefinitiva}
-                                    </span>
-                                  ) : (
-                                    <span className="text-slate-400 font-mono">-</span>
-                                  )}
-                                </td>
-
-                                <td className="py-2.5 px-3 text-center">
-                                  {renderBadgeStatus(item.status)}
-                                </td>
-                              </tr>
-                            ))
-                          )}
-                        </tbody>
-                      </table>
+                              <div className="text-center">
+                                {renderBadgeStatus(item.status)}
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
                     </div>
 
-                    {/* Paginação Inferior (Item 13) */}
+                    {/* Paginação Inferior */}
                     {renderBarraPaginacao(
                       paginaAtual,
                       totalPaginasOrdem,
