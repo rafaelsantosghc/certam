@@ -178,6 +178,18 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
     setCandidatos(lotesStore.getCandidatos(concurso.id, cargo.id));
   }, [concurso.id, cargo.id]);
 
+  // Publica automaticamente o concurso e a lista de classificação para todos os usuários sempre que o Admin visualizar o cargo
+  useEffect(() => {
+    if (isAdmin && concurso?.id && cargo?.id && candidatos.length > 0) {
+      void cloudSync.pushKey('certam_concursos_cargos_v6', certamStore.getConcursos(), true);
+      void cloudSync.pushKey(
+        `certam_candidatos_data_v6_${concurso.id}_${cargo.id}`,
+        candidatos,
+        true
+      );
+    }
+  }, [isAdmin, concurso?.id, cargo?.id, candidatos.length]);
+
   // Modal de detalhes do candidato
   const [candidatoModal, setCandidatoModal] = useState<Candidato | null>(null);
 

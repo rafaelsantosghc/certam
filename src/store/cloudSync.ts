@@ -172,18 +172,35 @@ function sanitizeSyncValue(key: string, valStr: string | null | undefined): stri
     try {
       const parsed = JSON.parse(valStr);
       if (Array.isArray(parsed)) {
-        const filtered = parsed.filter((c: any) => {
-          if (!c || typeof c !== 'object') return false;
-          const cid = String(c.id || '').toLowerCase();
-          if (BANNED_CONCURSO_IDS.has(cid)) return false;
-          if (
-            String(c.orgao || '').toUpperCase() === 'TJRS' &&
-            String(c.ano || '') === '2024'
-          ) {
-            return false;
-          }
-          return true;
-        });
+        const filtered = parsed
+          .filter((c: any) => {
+            if (!c || typeof c !== 'object') return false;
+            const cid = String(c.id || '').toLowerCase();
+            if (BANNED_CONCURSO_IDS.has(cid)) return false;
+            if (
+              String(c.orgao || '').toUpperCase() === 'TJRS' &&
+              String(c.ano || '') === '2024'
+            ) {
+              return false;
+            }
+            return true;
+          })
+          .map((c: any) => {
+            if (
+              c.id === 'tjrs_2025' &&
+              c.nome === 'Concurso TJRS - Tribunal de Justiça do Rio Grande do Sul' &&
+              c.status === 'Homologado' &&
+              c.tipo_lotacao === 'Comarca'
+            ) {
+              return {
+                ...c,
+                nome: 'Tribunal de Justiça do Estado do Rio Grande do Sul',
+                status: 'Convocando',
+                tipo_lotacao: 'Lotação',
+              };
+            }
+            return c;
+          });
         return JSON.stringify(filtered);
       }
     } catch {
@@ -208,6 +225,28 @@ function sanitizeSyncValue(key: string, valStr: string | null | undefined): stri
     }
   }
   return valStr;
+}
+
+function isRicherConcursosJson(localStr: string | null | undefined, serverStr: string | null | undefined): boolean {
+  if (!isNonEmptySerialized(localStr)) return false;
+  if (!isNonEmptySerialized(serverStr)) return true;
+  try {
+    const locArr = JSON.parse(localStr);
+    const srvArr = JSON.parse(serverStr);
+    if (!Array.isArray(locArr) || !Array.isArray(srvArr)) return false;
+    const score = (arr: any[]) =>
+      arr.reduce((acc, c) => {
+        if (!c || typeof c !== 'object') return acc;
+        const lotLen = Array.isArray(c.catalogo_lotacoes) ? c.catalogo_lotacoes.length : 0;
+        const cronLen = Array.isArray(c.cronograma) ? c.cronograma.length : 0;
+        const docLen = Array.isArray(c.documentos) ? c.documentos.length : 0;
+        const comLen = Array.isArray(c.comunicados) ? c.comunicados.length : 0;
+        return acc + lotLen * 10 + cronLen * 5 + docLen * 5 + comLen * 5;
+      }, 0);
+    return score(locArr) > score(srvArr);
+  } catch {
+    return false;
+  }
 }
 
 function shouldSyncKey(key: string): boolean {
@@ -277,8 +316,23 @@ function mergeKeyedObjectItems(existingItem: any, incomingItem: any): any {
 
 function resolveSupabaseConfig(): SupabaseConnectionConfig | null {
   try {
-    const envUrl = (import.meta as any).env?.VITE_SUPABASE_URL?.trim?.() || '';
-    const envKey = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY?.trim?.() || '';
+    const env = (import.meta as any).env || {};
+    const envUrl = (
+      env.VITE_SUPABASE_URL ||
+      env.NEXT_PUBLIC_SUPABASE_URL ||
+      env.SUPABASE_URL ||
+      env.PUBLIC_SUPABASE_URL ||
+      ''
+    ).trim();
+    const envKey = (
+      env.VITE_SUPABASE_ANON_KEY ||
+      env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+      env.SUPABASE_ANON_KEY ||
+      env.PUBLIC_SUPABASE_ANON_KEY ||
+      env.VITE_SUPABASE_PUBLISHABLE_KEY ||
+      env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+      ''
+    ).trim();
     if (envUrl && envKey && envUrl.startsWith('http')) {
       return { url: envUrl.replace(/\/+$/, ''), anonKey: envKey };
     }
@@ -476,12 +530,82 @@ function getAllLocalSyncEntries(): Record<string, string> {
   return result;
 }
 
+async function upsertSingleRowViaPatchOrInsert(
+  cfg: SupabaseConnectionConfig,
+  chave: string,
+  valor: any
+): Promise<{ ok: boolean; error?: string }> {
+  const encodedKey = encodeURIComponent(chave);
+  const strValor = typeof valor === 'string' ? valor : JSON.stringify(valor);
+
+  // 1. Tenta PATCH filtrando por chave=eq.<chave> (não exige UNIQUE constraint nem coluna updated_at)
+  for (const candidateValor of [valor, strValor]) {
+    try {
+      const patchRes = await fetch(`${cfg.url}/rest/v1/configuracoes?chave=eq.${encodedKey}`, {
+        method: 'PATCH',
+        headers: getSupabaseHeaders(cfg.anonKey, {
+          Prefer: 'return=representation',
+        }),
+        body: JSON.stringify({ valor: candidateValor }),
+      });
+
+      if (patchRes.ok) {
+        const updatedRows = await patchRes.json().catch(() => []);
+        if (Array.isArray(updatedRows) && updatedRows.length > 0) {
+          // Se existiam linhas duplicadas para a mesma chave (com id), remove as cópias excedentes
+          if (updatedRows.length > 1 && updatedRows[0]?.id !== undefined) {
+            const keepId = updatedRows[0].id;
+            await fetch(
+              `${cfg.url}/rest/v1/configuracoes?chave=eq.${encodedKey}&id=neq.${encodeURIComponent(String(keepId))}`,
+              {
+                method: 'DELETE',
+                headers: getSupabaseHeaders(cfg.anonKey),
+              }
+            ).catch(() => {});
+          }
+          return { ok: true };
+        }
+        // Nenhuma linha existia com essa chave -> prossegue para INSERT simples abaixo
+        break;
+      }
+    } catch {
+      // ignore and try next
+    }
+  }
+
+  // 2. Faz INSERT simples (sem ?on_conflict=chave) para funcionar mesmo sem índice UNIQUE em chave
+  let lastError = '';
+  for (const candidateValor of [valor, strValor]) {
+    try {
+      const postRes = await fetch(`${cfg.url}/rest/v1/configuracoes`, {
+        method: 'POST',
+        headers: getSupabaseHeaders(cfg.anonKey, {
+          Prefer: 'return=minimal',
+        }),
+        body: JSON.stringify({ chave, valor: candidateValor }),
+      });
+      if (postRes.ok) {
+        return { ok: true };
+      }
+      lastError = await postRes.text().catch(() => `HTTP ${postRes.status}`);
+    } catch (e: any) {
+      lastError = e?.message || 'Erro de rede';
+    }
+  }
+
+  return {
+    ok: false,
+    error: `Erro ao gravar chave ${chave} no Supabase: ${lastError.slice(0, 180)}`,
+  };
+}
+
 async function upsertConfigRowsToSupabase(
   cfg: SupabaseConnectionConfig,
   rowsWithTimestamp: { chave: string; valor: any; updated_at: string }[]
 ): Promise<{ ok: boolean; error?: string }> {
   if (rowsWithTimestamp.length === 0) return { ok: true };
   try {
+    // Estratégia 1: Upsert em lote com updated_at
     const res = await fetch(`${cfg.url}/rest/v1/configuracoes?on_conflict=chave`, {
       method: 'POST',
       headers: getSupabaseHeaders(cfg.anonKey, {
@@ -494,35 +618,33 @@ async function upsertConfigRowsToSupabase(
       return { ok: true };
     }
 
-    const errText = await res.text().catch(() => `HTTP ${res.status}`);
-
-    // Fallback automático caso a tabela public.configuracoes ainda não tenha a coluna updated_at
-    if (res.status === 400 && errText.includes('updated_at')) {
-      const rowsWithoutTimestamp = rowsWithTimestamp.map(({ chave, valor }) => ({
-        chave,
-        valor,
-      }));
-      const retryRes = await fetch(`${cfg.url}/rest/v1/configuracoes?on_conflict=chave`, {
-        method: 'POST',
-        headers: getSupabaseHeaders(cfg.anonKey, {
-          Prefer: 'resolution=merge-duplicates,return=minimal',
-        }),
-        body: JSON.stringify(rowsWithoutTimestamp),
-      });
-      if (retryRes.ok) {
-        return { ok: true };
-      }
-      const retryErr = await retryRes.text().catch(() => `HTTP ${retryRes.status}`);
-      return {
-        ok: false,
-        error: `Erro ao gravar em configuracoes (${retryRes.status}): ${retryErr.slice(0, 180)}`,
-      };
+    // Estratégia 2: Upsert em lote sem updated_at (caso a coluna não exista)
+    const rowsWithoutTimestamp = rowsWithTimestamp.map(({ chave, valor }) => ({
+      chave,
+      valor,
+    }));
+    const retryRes = await fetch(`${cfg.url}/rest/v1/configuracoes?on_conflict=chave`, {
+      method: 'POST',
+      headers: getSupabaseHeaders(cfg.anonKey, {
+        Prefer: 'resolution=merge-duplicates,return=minimal',
+      }),
+      body: JSON.stringify(rowsWithoutTimestamp),
+    });
+    if (retryRes.ok) {
+      return { ok: true };
     }
 
-    return {
-      ok: false,
-      error: `Erro ao gravar em configuracoes (${res.status}): ${errText.slice(0, 180)}`,
-    };
+    // Estratégia 3: Fallback universal PATCH + INSERT por chave (funciona mesmo sem UNIQUE(chave), sem updated_at ou com valor TEXT)
+    let allOk = true;
+    let lastErr: string | undefined;
+    for (const row of rowsWithTimestamp) {
+      const singleRes = await upsertSingleRowViaPatchOrInsert(cfg, row.chave, row.valor);
+      if (!singleRes.ok) {
+        allOk = false;
+        lastErr = singleRes.error;
+      }
+    }
+    return { ok: allOk, error: lastErr };
   } catch (err: any) {
     return {
       ok: false,
@@ -916,15 +1038,30 @@ async function executePullFromServer(): Promise<boolean> {
       if (isAdminAuthoritativeKey(localKey)) {
         if (isCurrentUserAdmin) {
           const missingInApi = syncStatus.lastLocalApiOk && apiVal !== localVal;
-          const missingInSupabase = Boolean(supabaseData && supVal !== localVal);
+          const missingInSupabase = Boolean(
+            supabaseData && localKey !== SUPABASE_CONFIG_KEY && supVal !== localVal
+          );
           if (srvVal !== localVal || missingInApi || missingInSupabase) {
             toForcePushAdmin[localKey] = localVal;
           }
-        } else if (localKey.startsWith('certam_candidatos_data_v6_')) {
-          // Se este navegador já possui uma lista de classificação importada que ainda não subiu para a nuvem/servidor (ex: admin deslogou para testar como usuário comum), publica imediatamente!
-          const missingOnServer = !isNonEmptySerialized(srvVal);
-          const missingOnSupabase = Boolean(supabaseData && !isNonEmptySerialized(supVal));
-          if (missingOnServer || missingOnSupabase) {
+        } else {
+          // Se este navegador já possui listas de classificação ou concursos mais completos salvos pelo Admin (ex: admin deslogou para testar como usuário comum), publica imediatamente para o servidor/Supabase!
+          const srvVerForLocal = serverVersions[localKey] || 0;
+          const missingOnServer = !isNonEmptySerialized(srvVal) || srvVerForLocal <= 1;
+          const missingOnSupabase = Boolean(
+            supabaseData && localKey !== SUPABASE_CONFIG_KEY && !isNonEmptySerialized(supVal)
+          );
+          const localIsRicherConcursos =
+            localKey === 'certam_concursos_cargos_v6' && isRicherConcursosJson(localVal, srvVal);
+          if (
+            localKey.startsWith('certam_candidatos_data_v6_') &&
+            (missingOnServer || missingOnSupabase)
+          ) {
+            toForcePushAdmin[localKey] = localVal;
+          } else if (
+            (missingOnServer || localIsRicherConcursos) &&
+            localVal !== srvVal
+          ) {
             toForcePushAdmin[localKey] = localVal;
           }
         }
@@ -982,8 +1119,15 @@ async function executePullFromServer(): Promise<boolean> {
           changedKeys.push(k);
           continue;
         } else {
-          // Se veio apenas do seed estático inicial (srvVer <= 1) e o navegador já tem dados reais salvos localmente, preserva os dados reais locais
-          if (srvVer <= 1 && usedStaticFallback && !supabaseData && isNonEmptySerialized(localVal)) {
+          // Nunca permite que um seed estático (srvVer <= 1) ou um seed sem catálogo de lotações sobrescreva dados reais já existentes neste navegador
+          if (
+            isNonEmptySerialized(localVal) &&
+            (srvVer <= 1 ||
+              (k === 'certam_concursos_cargos_v6' && isRicherConcursosJson(localVal, serverVal)))
+          ) {
+            if (localVal !== serverVal) {
+              toForcePushAdmin[k] = localVal;
+            }
             continue;
           }
           if (localVal !== serverVal) {

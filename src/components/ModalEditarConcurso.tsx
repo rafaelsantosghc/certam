@@ -85,8 +85,8 @@ export const ModalEditarConcurso: React.FC<ModalEditarConcursoProps> = ({
 
     const finalId =
       concurso?.id ||
-      id.trim().toLowerCase().replace(/[^a-z0-9]/g, '_') ||
-      `${orgao.toLowerCase().replace(/[^a-z0-9]/g, '_')}_${ano}`;
+      id.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') ||
+      `${orgao.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '')}_${ano.trim()}`;
 
     const concursoAtualizado: Concurso = {
       ...(concurso || {

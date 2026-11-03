@@ -22,18 +22,35 @@ function sanitizeSyncEntryValue(key: string, valStr: string): string {
     try {
       const parsed = JSON.parse(valStr);
       if (Array.isArray(parsed)) {
-        const filtered = parsed.filter((c: any) => {
-          if (!c || typeof c !== 'object') return false;
-          const cid = String(c.id || '').toLowerCase();
-          if (BANNED_CONCURSO_IDS.has(cid)) return false;
-          if (
-            String(c.orgao || '').toUpperCase() === 'TJRS' &&
-            String(c.ano || '') === '2024'
-          ) {
-            return false;
-          }
-          return true;
-        });
+        const filtered = parsed
+          .filter((c: any) => {
+            if (!c || typeof c !== 'object') return false;
+            const cid = String(c.id || '').toLowerCase();
+            if (BANNED_CONCURSO_IDS.has(cid)) return false;
+            if (
+              String(c.orgao || '').toUpperCase() === 'TJRS' &&
+              String(c.ano || '') === '2024'
+            ) {
+              return false;
+            }
+            return true;
+          })
+          .map((c: any) => {
+            if (
+              c.id === 'tjrs_2025' &&
+              c.nome === 'Concurso TJRS - Tribunal de Justiça do Rio Grande do Sul' &&
+              c.status === 'Homologado' &&
+              c.tipo_lotacao === 'Comarca'
+            ) {
+              return {
+                ...c,
+                nome: 'Tribunal de Justiça do Estado do Rio Grande do Sul',
+                status: 'Convocando',
+                tipo_lotacao: 'Lotação',
+              };
+            }
+            return c;
+          });
         return JSON.stringify(filtered);
       }
     } catch {
@@ -510,6 +527,7 @@ function certamSyncPlugin(): Plugin {
 
 export default defineConfig(({ mode }) => ({
   plugins: [react(), tailwindcss(), certamSyncPlugin()],
+  envPrefix: ['VITE_', 'NEXT_PUBLIC_', 'SUPABASE_', 'PUBLIC_'],
   server: {
     host: '0.0.0.0',
     port: 3000,

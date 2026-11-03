@@ -17,17 +17,17 @@ function isLegacyBannedConcurso(c: any): boolean {
 export const DEFAULT_CONCURSOS: Concurso[] = [
   {
     id: 'tjrs_2025',
-    nome: 'Concurso TJRS - Tribunal de Justiça do Rio Grande do Sul',
+    nome: 'Tribunal de Justiça do Estado do Rio Grande do Sul',
     orgao: 'TJRS',
     ano: '2025',
     edital: 'Edital 01/2025',
-    status: 'Homologado',
+    status: 'Convocando',
     homologado: true,
     regiao: 'Sul',
     esfera: 'Estadual',
     estado: 'RS',
     descricao: 'Tribunal de Justiça do Estado do Rio Grande do Sul',
-    tipo_lotacao: 'Comarca',
+    tipo_lotacao: 'Lotação',
     cargos: [
       {
         id: 'analista_judici_rio___rea_judici',
@@ -81,6 +81,24 @@ export const DEFAULT_CONCURSOS: Concurso[] = [
   },
 ];
 
+function normalizePlaceholderConcurso(c: Concurso): Concurso {
+  if (
+    c &&
+    c.id === 'tjrs_2025' &&
+    c.nome === 'Concurso TJRS - Tribunal de Justiça do Rio Grande do Sul' &&
+    c.status === 'Homologado' &&
+    c.tipo_lotacao === 'Comarca'
+  ) {
+    return {
+      ...c,
+      nome: 'Tribunal de Justiça do Estado do Rio Grande do Sul',
+      status: 'Convocando',
+      tipo_lotacao: 'Lotação',
+    };
+  }
+  return c;
+}
+
 export const certamStore = {
   getConcursos(): Concurso[] {
     try {
@@ -88,7 +106,9 @@ export const certamStore = {
       if (stored) {
         const parsed = JSON.parse(stored);
         if (Array.isArray(parsed)) {
-          const filtered = parsed.filter((c) => !isLegacyBannedConcurso(c));
+          const filtered = parsed
+            .filter((c) => !isLegacyBannedConcurso(c))
+            .map((c) => normalizePlaceholderConcurso(c));
           if (filtered.length !== parsed.length) {
             // Remove permanentemente o tjrs_2024 legado do armazenamento local
             if (filtered.length > 0) {
@@ -110,7 +130,16 @@ export const certamStore = {
   getConcurso(id: string): Concurso | null {
     if (!id) return null;
     const list = this.getConcursos();
-    return list.find((c) => c.id === id) || null;
+    const exact = list.find((c) => c.id === id);
+    if (exact) return exact;
+    const normTarget = id.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_');
+    return (
+      list.find(
+        (c) =>
+          c.id.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_') === normTarget ||
+          `${(c.orgao || '').trim().toLowerCase()}_${(c.ano || '').trim()}` === normTarget
+      ) || null
+    );
   },
 
   getCargo(concursoId: string, cargoId: string): Cargo | null {

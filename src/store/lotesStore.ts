@@ -91,7 +91,7 @@ export const lotesStore = {
       return exactList;
     }
 
-    // Resolução inteligente de variações de slug de cargo (ex: 'geral' renomeado ou slug truncado)
+    // Resolução inteligente de variações de slug de concurso e de cargo
     try {
       const conc = certamStore.getConcurso(concursoId);
       const cargoObj = conc?.cargos?.find((cg) => cg.id === cargoId);
@@ -99,29 +99,56 @@ export const lotesStore = {
       const targetNormId = normSlug(cargoId);
       const targetNormNome = normSlug(cargoObj?.nome || '');
       const targetCanonico = extrairTipoCargoCanonico(cargoObj?.nome || cargoId);
+      const orgaoNorm = normSlug(conc?.orgao || concursoId.split('_')[0] || '');
+      const anoNorm = normSlug(conc?.ano || '');
 
       const prefix = `${CANDIDATOS_KEY}_${concursoId}_`;
-      const allKeys = cloudSync
+      const allCandidateKeys = cloudSync
         .getAllKeys()
-        .filter((k) => k.startsWith(prefix) && k !== exactKey);
+        .filter(
+          (k) =>
+            k.startsWith(`${CANDIDATOS_KEY}_`) &&
+            !k.includes('tjrs_2024') &&
+            !k.includes('mprs_2024') &&
+            k !== exactKey
+        );
 
-      const nonEmptyCandidatesBySuffix: { suffix: string; list: Candidato[] }[] = [];
-      for (const k of allKeys) {
+      const sameConcursoEntries: { suffix: string; list: Candidato[] }[] = [];
+      const sameOrgaoEntries: { keyRest: string; list: Candidato[] }[] = [];
+
+      for (const k of allCandidateKeys) {
         const list = parseCandidatosArray(cloudSync.getItem(k));
-        if (list.length > 0) {
-          nonEmptyCandidatesBySuffix.push({
+        if (list.length === 0) continue;
+
+        if (k.startsWith(prefix)) {
+          sameConcursoEntries.push({
             suffix: k.slice(prefix.length),
             list,
           });
+        } else {
+          const keyRest = k.slice(`${CANDIDATOS_KEY}_`.length);
+          const keyNorm = normSlug(keyRest);
+          const firstCand = list[0];
+          const candMatchesConcurso =
+            firstCand &&
+            (normSlug(firstCand.concurso_id || '') === normSlug(concursoId) ||
+              (orgaoNorm && normSlug(firstCand.concurso_id || '').includes(orgaoNorm)));
+          const keyMatchesOrgao =
+            orgaoNorm.length >= 2 &&
+            keyNorm.includes(orgaoNorm) &&
+            (!anoNorm || keyNorm.includes(anoNorm));
+
+          if (candMatchesConcurso || keyMatchesOrgao) {
+            sameOrgaoEntries.push({
+              keyRest,
+              list,
+            });
+          }
         }
       }
 
-      if (nonEmptyCandidatesBySuffix.length === 0) {
-        return [];
-      }
-
-      // 1. Match por slug normalizado ou tipo canônico do cargo
-      for (const item of nonEmptyCandidatesBySuffix) {
+      // 1. Match dentro do mesmo concursoId por slug normalizado ou tipo canônico do cargo
+      for (const item of sameConcursoEntries) {
         const sNorm = normSlug(item.suffix);
         const sCanon = extrairTipoCargoCanonico(item.suffix);
         if (
@@ -131,6 +158,7 @@ export const lotesStore = {
           (targetNormId && sNorm.length >= 6 && targetNormId.startsWith(sNorm)) ||
           (targetCanonico && sCanon === targetCanonico)
         ) {
+          cloudSync.setItem(exactKey, item.list, true);
           return item.list;
         }
       }
@@ -138,15 +166,36 @@ export const lotesStore = {
       // 2. Se for o 1º cargo do concurso (ou cargo único) e houver lista salva sob '_geral'
       const hasExplicitGeralCargo = conc?.cargos?.some((cg) => cg.id === 'geral');
       if ((cargoIndex === 0 || (conc?.cargos?.length || 0) <= 1) && !hasExplicitGeralCargo) {
-        const geralEntry = nonEmptyCandidatesBySuffix.find((x) => normSlug(x.suffix) === 'geral');
+        const geralEntry = sameConcursoEntries.find((x) => normSlug(x.suffix) === 'geral');
         if (geralEntry) {
+          cloudSync.setItem(exactKey, geralEntry.list, true);
           return geralEntry.list;
         }
       }
 
       // 3. Se o concurso possui apenas 1 cargo e existe apenas 1 lista de candidatos para este concurso
-      if ((conc?.cargos?.length || 0) === 1 && nonEmptyCandidatesBySuffix.length === 1) {
-        return nonEmptyCandidatesBySuffix[0].list;
+      if ((conc?.cargos?.length || 0) === 1 && sameConcursoEntries.length === 1) {
+        cloudSync.setItem(exactKey, sameConcursoEntries[0].list, true);
+        return sameConcursoEntries[0].list;
+      }
+
+      // 4. Match em chaves do mesmo órgão/ano com slug de concurso variante (ex: tjrs__2025 ou tribunal_de_justica...)
+      for (const item of sameOrgaoEntries) {
+        const sCanon = extrairTipoCargoCanonico(item.keyRest);
+        const sNorm = normSlug(item.keyRest);
+        if (
+          (targetCanonico && sCanon === targetCanonico) ||
+          (targetNormId && targetNormId.length >= 6 && sNorm.endsWith(targetNormId)) ||
+          (targetNormNome && targetNormNome.length >= 6 && sNorm.includes(targetNormNome.slice(0, 16)))
+        ) {
+          cloudSync.setItem(exactKey, item.list, true);
+          return item.list;
+        }
+      }
+
+      if ((conc?.cargos?.length || 0) === 1 && sameOrgaoEntries.length === 1) {
+        cloudSync.setItem(exactKey, sameOrgaoEntries[0].list, true);
+        return sameOrgaoEntries[0].list;
       }
     } catch {
       // ignore fallback error
