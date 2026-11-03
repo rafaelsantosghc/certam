@@ -222,7 +222,7 @@ export const PerfilCandidatoModal: React.FC<PerfilCandidatoModalProps> = ({
 
     const diffs = calcularDiffs();
     const jaPossuiaCpfVinculado = Boolean((usuario.cpf || '').replace(/\D/g, '').length >= 11);
-    const alterouCamposExistentes = diffs.some(
+    const diffsDeCamposJaPreenchidos = diffs.filter(
       (d) =>
         d.valor_antigo &&
         d.valor_antigo !== '(não informado)' &&
@@ -230,21 +230,35 @@ export const PerfilCandidatoModal: React.FC<PerfilCandidatoModalProps> = ({
         d.valor_antigo.trim() !== d.valor_novo.trim()
     );
 
-    // Se for estritamente o primeiro preenchimento inicial sem alterar dados já vinculados
-    if (obrigatorio && primeiroCadastro && !jaPossuiaCpfVinculado && !alterouCamposExistentes) {
+    // 1. Preenchimento obrigatório de 1º acesso: salva os campos que estavam em branco para concluir o cadastro inicial
+    if (obrigatorio && primeiroCadastro) {
       if (!nome.trim() || !cpf.trim() || !dataNascimento.trim() || !whatsapp.trim()) {
         return;
       }
 
       atualizarDadosUsuario({
-        nome: sanitizeInput(nome, 100),
-        cpf: sanitizeInput(cpf, 20),
-        data_nascimento: sanitizeInput(dataNascimento, 15),
-        whatsapp: sanitizeInput(whatsapp, 25),
-        telefone: sanitizeInput(whatsapp, 25),
-        email_contato: sanitizeInput(emailContato || usuario.email, 80),
+        nome: !jaPossuiaCpfVinculado ? sanitizeInput(nome, 100) : usuario.nome || sanitizeInput(nome, 100),
+        cpf: usuario.cpf || sanitizeInput(cpf, 20),
+        data_nascimento: usuario.data_nascimento || sanitizeInput(dataNascimento, 15),
+        whatsapp: usuario.whatsapp || sanitizeInput(whatsapp, 25),
+        telefone: usuario.telefone || sanitizeInput(whatsapp, 25),
+        email_contato: usuario.email_contato || sanitizeInput(emailContato || usuario.email, 80),
         outros_concursos: outrosSincronizados,
       });
+
+      // Se durante o 1º acesso o candidato já vinculado alterou algum dado que já constava no cadastro (ex: Nome ou CPF), envia para auditoria do Admin
+      if (jaPossuiaCpfVinculado && diffsDeCamposJaPreenchidos.length > 0) {
+        auditStore.submeterSolicitacaoAlteracao({
+          usuario_email: usuario.email || emailContato.trim() || 'candidato@certam',
+          usuario_nome: sanitizeInput(usuario.nome || nome.trim() || 'Candidato', 100),
+          cpf: sanitizeInput(usuario.cpf || cpf.trim() || '', 20),
+          alteracoes: diffsDeCamposJaPreenchidos,
+        });
+        setTodasSolicitacoes(auditStore.getAuditRequests());
+        setDiffAlteracoes(diffsDeCamposJaPreenchidos);
+      }
+
+      setPrimeiroCadastro(false);
       setSubmetidoSucesso(true);
       setTimeout(() => {
         setSubmetidoSucesso(false);
@@ -253,7 +267,7 @@ export const PerfilCandidatoModal: React.FC<PerfilCandidatoModalProps> = ({
       return;
     }
 
-    // Qualquer solicitação de alteração de dados cadastrais gera registro na fila de Auditoria do Painel Admin (Item 2)
+    // 2. Qualquer alteração de dados cadastrais solicitada pelo candidato vai para a fila de Auditoria do Painel Admin (Item 2)
     const finalDiffs: AlteracaoCampoItem[] =
       diffs.length > 0
         ? diffs
@@ -272,10 +286,11 @@ export const PerfilCandidatoModal: React.FC<PerfilCandidatoModalProps> = ({
             },
           ];
 
-    // Se ainda não tinha data de nascimento salva no primeiro acesso, salva a data de nascimento mas envia as alterações para auditoria
-    if (primeiroCadastro && dataNascimento.trim() && !usuario.data_nascimento) {
+    // Se ainda não tinha data de nascimento ou CPF salvos, garante que o perfil básico não fique incompleto enquanto a alteração aguarda auditoria
+    if ((!usuario.data_nascimento && dataNascimento.trim()) || (!usuario.cpf && cpf.trim())) {
       atualizarDadosUsuario({
-        data_nascimento: sanitizeInput(dataNascimento, 15),
+        cpf: usuario.cpf || sanitizeInput(cpf, 20),
+        data_nascimento: usuario.data_nascimento || sanitizeInput(dataNascimento, 15),
         whatsapp: usuario.whatsapp || sanitizeInput(whatsapp, 25),
         telefone: usuario.telefone || sanitizeInput(whatsapp, 25),
         email_contato: usuario.email_contato || sanitizeInput(emailContato || usuario.email, 80),
@@ -283,7 +298,7 @@ export const PerfilCandidatoModal: React.FC<PerfilCandidatoModalProps> = ({
       });
     }
 
-    // Registrar imediatamente no auditStore para moderação administrativa (Item 2)
+    // Registrar imediatamente no auditStore e sincronizar com o servidor/Supabase para moderação administrativa
     auditStore.submeterSolicitacaoAlteracao({
       usuario_email: usuario.email || emailContato.trim() || 'candidato@certam',
       usuario_nome: sanitizeInput(usuario.nome || nome.trim() || 'Candidato', 100),

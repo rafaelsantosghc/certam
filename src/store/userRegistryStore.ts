@@ -1,5 +1,7 @@
 import { Usuario, Candidato } from '../types';
 import { cloudSync } from './cloudSync';
+import { certamStore } from './certamStore';
+import { lotesStore } from './lotesStore';
 
 const REGISTRY_STORAGE_KEY = 'certam_users_registry_v2';
 
@@ -48,6 +50,78 @@ function rebuildActiveLookupCache(reg: Record<string, Usuario>) {
   cachedActiveByNome = byNome;
 }
 
+function findImportedCandidateMatch(criteria: {
+  id?: string;
+  cpf?: string;
+  nome?: string;
+  email?: string;
+}): {
+  cand: Candidato;
+  concursoId: string;
+  cargoId: string;
+  orgaoNome: string;
+  cargoNome: string;
+  inscricoes: { concurso_id: string; cargo_id: string; data_inscricao: string }[];
+} | null {
+  const targetId = (criteria.id || '').trim().toLowerCase();
+  const targetCpf = criteria.cpf ? limparCpf(criteria.cpf) : '';
+  const targetNome = criteria.nome ? normalizarTexto(criteria.nome) : '';
+  const targetEmail =
+    criteria.email && !isFakeEmail(criteria.email) ? criteria.email.trim().toLowerCase() : '';
+
+  const concursos = certamStore.getConcursos();
+  const hojeStr = new Date().toLocaleDateString('pt-BR');
+  let firstMatch: {
+    cand: Candidato;
+    concursoId: string;
+    cargoId: string;
+    orgaoNome: string;
+    cargoNome: string;
+  } | null = null;
+  const inscricoes: { concurso_id: string; cargo_id: string; data_inscricao: string }[] = [];
+
+  for (const conc of concursos) {
+    for (const cg of conc.cargos || []) {
+      const cands = lotesStore.getCandidatos(conc.id, cg.id);
+      for (const c of cands) {
+        const cId = (c.id || '').trim().toLowerCase();
+        const cCpf = c.cpf ? limparCpf(c.cpf) : '';
+        const cNome = c.nome ? normalizarTexto(c.nome) : '';
+        const cEmail = c.email && !isFakeEmail(c.email) ? c.email.trim().toLowerCase() : '';
+
+        const matched =
+          (targetId && cId === targetId) ||
+          (targetCpf.length >= 9 && cCpf === targetCpf) ||
+          (targetEmail && cEmail === targetEmail) ||
+          (targetNome.length >= 5 && cNome === targetNome);
+
+        if (matched) {
+          if (!firstMatch) {
+            firstMatch = {
+              cand: c,
+              concursoId: conc.id,
+              cargoId: cg.id,
+              orgaoNome: conc.orgao,
+              cargoNome: cg.nome,
+            };
+          }
+          if (!inscricoes.some((i) => i.concurso_id === conc.id && i.cargo_id === cg.id)) {
+            inscricoes.push({
+              concurso_id: conc.id,
+              cargo_id: cg.id,
+              data_inscricao: hojeStr,
+            });
+          }
+          break;
+        }
+      }
+    }
+  }
+
+  if (!firstMatch) return null;
+  return { ...firstMatch, inscricoes };
+}
+
 export const userRegistryStore = {
   getRegistry(): Record<string, Usuario> {
     try {
@@ -65,21 +139,16 @@ export const userRegistryStore = {
             if (!u || typeof u !== 'object') continue;
             const userCopy: Usuario = { ...u };
 
-            // Remover e-mails aleatórios gerados anteriormente para candidatos importados (Item 18)
             if (isFakeEmail(userCopy.email)) {
-              if (userCopy.email !== '') {
-                userCopy.email = '';
-                needsMigration = true;
-              }
+              userCopy.email = '';
               if (userCopy.email_contato && isFakeEmail(userCopy.email_contato)) {
                 userCopy.email_contato = '';
               }
-              if (
-                userCopy.status_cadastro !== 'bloqueado' &&
-                userCopy.status_cadastro !== 'primeiro_acesso'
-              ) {
-                userCopy.status_cadastro = 'primeiro_acesso';
+              // Não duplica candidatos sem login e não bloqueados em certam_users_registry_v2,
+              // pois já estão salvos em certam_candidatos_data_v6_* e são mesclados em getAllUsers()
+              if (!userCopy.bloqueado) {
                 needsMigration = true;
+                continue;
               }
             } else if (
               userCopy.status_cadastro === 'aguardando_vinculacao' ||
@@ -116,8 +185,98 @@ export const userRegistryStore = {
 
   getAllUsers(): Usuario[] {
     const reg = this.getRegistry();
-    return Object.values(reg).sort((a, b) => {
-      // Colocar usuários ativos com login real primeiro ou ordenar alfabeticamente
+    const list: Usuario[] = Object.values(reg);
+
+    const seenIds = new Set<string>();
+    const seenCpfs = new Set<string>();
+    const seenNomes = new Set<string>();
+
+    for (const u of list) {
+      if (u.id) seenIds.add(u.id.toLowerCase().trim());
+      if (u.candidato_id) seenIds.add(u.candidato_id.toLowerCase().trim());
+      const c = u.cpf ? limparCpf(u.cpf) : '';
+      if (c.length >= 7) seenCpfs.add(c);
+      const n = u.nome ? normalizarTexto(u.nome) : '';
+      if (n.length >= 3) seenNomes.add(n);
+    }
+
+    // Mescla dinamicamente os candidatos importados das listas de classificação que ainda estão aguardando 1º acesso
+    try {
+      const concursos = certamStore.getConcursos();
+      const virtualByKey = new Map<string, Usuario>();
+      const hojeStr = new Date().toLocaleDateString('pt-BR');
+
+      for (const conc of concursos) {
+        for (const cg of conc.cargos || []) {
+          const cands = lotesStore.getCandidatos(conc.id, cg.id);
+          for (const cand of cands) {
+            const cId = (cand.id || '').toLowerCase().trim();
+            const cpfLimpo = cand.cpf ? limparCpf(cand.cpf) : '';
+            const nomeNorm = cand.nome ? normalizarTexto(cand.nome) : '';
+
+            if (
+              (cId && seenIds.has(cId)) ||
+              (cpfLimpo.length >= 7 && seenCpfs.has(cpfLimpo)) ||
+              (nomeNorm.length >= 3 && seenNomes.has(nomeNorm))
+            ) {
+              continue;
+            }
+
+            const dedupKey = cpfLimpo.length >= 7 ? `cpf:${cpfLimpo}` : `nome:${nomeNorm || cId}`;
+            const existingVirtual = virtualByKey.get(dedupKey);
+            if (existingVirtual) {
+              const insc = existingVirtual.concursos_inscritos || [];
+              if (!insc.some((i) => i.concurso_id === conc.id && i.cargo_id === cg.id)) {
+                insc.push({
+                  concurso_id: conc.id,
+                  cargo_id: cg.id,
+                  data_inscricao: hojeStr,
+                });
+              }
+              existingVirtual.concursos_inscritos = insc;
+              continue;
+            }
+
+            const realEmail =
+              cand.email && !isFakeEmail(cand.email) ? cand.email.toLowerCase().trim() : '';
+
+            virtualByKey.set(dedupKey, {
+              id: cand.id || dedupKey,
+              nome: cand.nome || 'Candidato Importado',
+              email: realEmail,
+              email_contato: realEmail,
+              cpf: cand.cpf || '',
+              cpf_verificado: Boolean(cand.cpf),
+              whatsapp: cand.whatsapp || '',
+              telefone: cand.whatsapp || '',
+              is_admin: false,
+              tipo_usuario: 'candidato',
+              status_cadastro: realEmail ? 'ativo' : 'primeiro_acesso',
+              candidato_id: cand.id,
+              concurso_id: conc.id,
+              cargo_id: cg.id,
+              orgao: conc.orgao,
+              cargo_nome: cg.nome,
+              concursos_inscritos: [
+                {
+                  concurso_id: conc.id,
+                  cargo_id: cg.id,
+                  data_inscricao: hojeStr,
+                },
+              ],
+            });
+          }
+        }
+      }
+
+      for (const vu of virtualByKey.values()) {
+        list.push(vu);
+      }
+    } catch {
+      // ignore
+    }
+
+    return list.sort((a, b) => {
       const aAtivo = a.status_cadastro === 'ativo' && !isFakeEmail(a.email) ? 0 : 1;
       const bAtivo = b.status_cadastro === 'ativo' && !isFakeEmail(b.email) ? 0 : 1;
       if (aAtivo !== bAtivo) return aAtivo - bAtivo;
@@ -223,8 +382,33 @@ export const userRegistryStore = {
   atualizarCamposUsuario(chave: string, campos: Partial<Usuario>): Usuario | null {
     if (!chave) return null;
     const reg = { ...this.getRegistry() };
-    const targetKey = this.findRegistryKey(chave);
-    if (!targetKey || !reg[targetKey]) return null;
+    let targetKey = this.findRegistryKey(chave);
+
+    if (!targetKey || !reg[targetKey]) {
+      const imp = findImportedCandidateMatch({ id: chave, email: chave, nome: campos.nome, cpf: campos.cpf });
+      if (imp) {
+        const promotedKey = (imp.cand.id || chave).toLowerCase().trim();
+        reg[promotedKey] = {
+          id: imp.cand.id || chave,
+          nome: imp.cand.nome,
+          email: imp.cand.email && !isFakeEmail(imp.cand.email) ? imp.cand.email : '',
+          cpf: imp.cand.cpf || '',
+          cpf_verificado: Boolean(imp.cand.cpf),
+          is_admin: false,
+          tipo_usuario: 'candidato',
+          status_cadastro: 'primeiro_acesso',
+          candidato_id: imp.cand.id,
+          concurso_id: imp.concursoId,
+          cargo_id: imp.cargoId,
+          orgao: imp.orgaoNome,
+          cargo_nome: imp.cargoNome,
+          concursos_inscritos: imp.inscricoes,
+        };
+        targetKey = promotedKey;
+      } else {
+        return null;
+      }
+    }
 
     const existente = reg[targetKey];
     const novoEmail =
@@ -246,8 +430,11 @@ export const userRegistryStore = {
   },
 
   bloquearUsuario(chave: string, bloquear: boolean): boolean {
-    const targetKey = this.findRegistryKey(chave);
-    if (!targetKey) return false;
+    let targetKey = this.findRegistryKey(chave);
+    if (!targetKey) {
+      const promoted = this.atualizarCamposUsuario(chave, { bloqueado: bloquear });
+      return Boolean(promoted);
+    }
     const reg = this.getRegistry();
     const user = reg[targetKey];
     if (!user) return false;
@@ -286,24 +473,30 @@ export const userRegistryStore = {
     const nomeNorm = usuario.nome ? normalizarTexto(usuario.nome) : '';
 
     // 1. Verificar se já existe pelo e-mail real
-    let matchEntry = emailReal
+    const matchEntry = emailReal
       ? entries.find(([_, u]) => u.email && u.email.toLowerCase().trim() === emailReal)
       : undefined;
 
-    // 2. Verificar se existe candidato importado com o mesmo CPF
+    // 2. Verificar se existe registro por CPF ou Nome no registry
     let importedEntryByCpfOrName =
       cpfLimpo.length >= 9
         ? entries.find(([_, u]) => u.cpf && limparCpf(u.cpf) === cpfLimpo)
         : undefined;
 
-    // 3. Verificar se existe candidato importado com o mesmo Nome Completo exato
     if (!importedEntryByCpfOrName && nomeNorm.length >= 5) {
       importedEntryByCpfOrName = entries.find(
         ([_, u]) => u.nome && normalizarTexto(u.nome) === nomeNorm
       );
     }
 
-    // Se encontrou tanto um registro de login quanto um pré-cadastro importado separado, unificar!
+    // 3. Buscar também nas listas de classificação oficiais (lotesStore)
+    const matchFromLotes = findImportedCandidateMatch({
+      id: usuario.candidato_id || usuario.id,
+      cpf: usuario.cpf,
+      nome: usuario.nome,
+      email: emailReal,
+    });
+
     if (
       matchEntry &&
       importedEntryByCpfOrName &&
@@ -322,15 +515,28 @@ export const userRegistryStore = {
           inscricoesUnificadas.push(ins);
         }
       });
+      (matchFromLotes?.inscricoes || []).forEach((ins) => {
+        if (
+          !inscricoesUnificadas.some(
+            (i) => i.concurso_id === ins.concurso_id && i.cargo_id === ins.cargo_id
+          )
+        ) {
+          inscricoesUnificadas.push(ins);
+        }
+      });
 
       const unificado: Usuario = {
         ...impUser,
         ...loginUser,
         ...usuario,
         id: impUser.id || loginUser.id || loginKey,
-        candidato_id: impUser.candidato_id || usuario.candidato_id || loginUser.candidato_id,
+        candidato_id:
+          matchFromLotes?.cand.id ||
+          impUser.candidato_id ||
+          usuario.candidato_id ||
+          loginUser.candidato_id,
         email: emailReal || loginUser.email,
-        cpf: usuario.cpf || impUser.cpf || loginUser.cpf || '',
+        cpf: usuario.cpf || matchFromLotes?.cand.cpf || impUser.cpf || loginUser.cpf || '',
         cpf_verificado: true,
         status_cadastro: 'ativo',
         concursos_inscritos: inscricoesUnificadas,
@@ -356,18 +562,30 @@ export const userRegistryStore = {
           inscricoesUnificadas.push(ins);
         }
       });
+      (matchFromLotes?.inscricoes || []).forEach((ins) => {
+        if (
+          !inscricoesUnificadas.some(
+            (i) => i.concurso_id === ins.concurso_id && i.cargo_id === ins.cargo_id
+          )
+        ) {
+          inscricoesUnificadas.push(ins);
+        }
+      });
 
       const atualizado: Usuario = {
         ...existingUser,
         ...usuario,
         id: existingUser.id || usuario.id || targetKey,
-        candidato_id: existingUser.candidato_id || usuario.candidato_id,
+        candidato_id:
+          matchFromLotes?.cand.id || existingUser.candidato_id || usuario.candidato_id,
         email: emailReal || existingUser.email || '',
-        cpf: usuario.cpf || existingUser.cpf || '',
+        cpf: usuario.cpf || matchFromLotes?.cand.cpf || existingUser.cpf || '',
         data_nascimento: usuario.data_nascimento || existingUser.data_nascimento || '',
         whatsapp: usuario.whatsapp || existingUser.whatsapp || '',
         telefone: usuario.telefone || usuario.whatsapp || existingUser.telefone || '',
-        cpf_verificado: Boolean(usuario.cpf || existingUser.cpf_verificado),
+        cpf_verificado: Boolean(
+          usuario.cpf || matchFromLotes?.cand.cpf || existingUser.cpf_verificado
+        ),
         status_cadastro: existingUser.bloqueado ? 'bloqueado' : 'ativo',
         concursos_inscritos: inscricoesUnificadas,
         concursos_acompanhados:
@@ -379,16 +597,38 @@ export const userRegistryStore = {
       return atualizado;
     }
 
-    // Novo usuário que ainda não constava na lista: registrar como Ativo no Cadastro Geral
-    const newId = usuario.id || `user-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 5)}`;
+    // Novo usuário que acabou de logar: se cruzar com aprovado na lista de classificação, vincula automaticamente!
+    const newId =
+      matchFromLotes?.cand.id ||
+      usuario.id ||
+      `user-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 5)}`;
+    const inscricoesIniciais = [...(usuario.concursos_inscritos || [])];
+    (matchFromLotes?.inscricoes || []).forEach((ins) => {
+      if (
+        !inscricoesIniciais.some(
+          (i) => i.concurso_id === ins.concurso_id && i.cargo_id === ins.cargo_id
+        )
+      ) {
+        inscricoesIniciais.push(ins);
+      }
+    });
+
     const novoRegistro: Usuario = {
       ...usuario,
       id: newId,
+      nome: matchFromLotes?.cand.nome || usuario.nome,
+      cpf: usuario.cpf || matchFromLotes?.cand.cpf || '',
+      cpf_verificado: Boolean(usuario.cpf || matchFromLotes),
       email: emailReal,
       email_contato: usuario.email_contato || emailReal,
       tipo_usuario: usuario.is_admin ? 'admin' : 'candidato',
       status_cadastro: 'ativo',
-      candidato_id: usuario.candidato_id || newId,
+      candidato_id: matchFromLotes?.cand.id || usuario.candidato_id || newId,
+      concurso_id: matchFromLotes?.concursoId || usuario.concurso_id,
+      cargo_id: matchFromLotes?.cargoId || usuario.cargo_id,
+      orgao: matchFromLotes?.orgaoNome || usuario.orgao,
+      cargo_nome: matchFromLotes?.cargoNome || usuario.cargo_nome,
+      concursos_inscritos: inscricoesIniciais,
     };
 
     reg[newId.toLowerCase()] = novoRegistro;
@@ -424,8 +664,8 @@ export const userRegistryStore = {
   },
 
   /**
-   * Importação em lote de alta performance (Item 8): processa todos os candidatos em memória
-   * com busca O(1) via Map e salva no localStorage / cloudSync apenas uma única vez ao final.
+   * Sincroniza candidatos importados com usuários já existentes no Cadastro Geral em O(N)
+   * sem inflar o localStorage duplicando candidatos sem e-mail que já estão em lotesStore.
    */
   cadastrarOuSincronizarCandidatosEmLote(
     candidatos: Partial<Candidato>[],
@@ -450,6 +690,7 @@ export const userRegistryStore = {
     const hojeStr = new Date().toLocaleDateString('pt-BR');
     let novos = 0;
     let atualizados = 0;
+    let registryModified = false;
 
     candidatos.forEach((cand, idx) => {
       const cpfLimpo = cand.cpf ? limparCpf(cand.cpf) : '';
@@ -491,57 +732,64 @@ export const userRegistryStore = {
         if (cpfLimpo.length >= 7) mapByCpf.set(cpfLimpo, matchKey);
         if (nomeNorm.length >= 3) mapByNome.set(nomeNorm, matchKey);
         atualizados++;
+        registryModified = true;
         return;
       }
 
-      const generatedId =
-        cand.id ||
-        `cand-pre-${Date.now().toString(36)}-${idx}-${Math.random().toString(36).substring(2, 5)}`;
-      const dictKey = generatedId.toLowerCase();
+      // Se o candidato já veio com e-mail real na planilha, persiste no registry;
+      // caso contrário, ele já faz parte da lista em lotesStore e aparece automaticamente em getAllUsers()
+      if (realEmail) {
+        const generatedId =
+          cand.id ||
+          `cand-pre-${Date.now().toString(36)}-${idx}-${Math.random().toString(36).substring(2, 5)}`;
+        const dictKey = generatedId.toLowerCase();
 
-      const novoPerfil: Usuario = {
-        id: generatedId,
-        nome: cand.nome ? cand.nome.trim() : 'Candidato Importado',
-        email: realEmail,
-        email_contato: realEmail,
-        cpf: cand.cpf ? cand.cpf.trim() : '',
-        cpf_verificado: Boolean(cand.cpf),
-        whatsapp: cand.whatsapp || '',
-        telefone: cand.whatsapp || '',
-        is_admin: false,
-        tipo_usuario: 'candidato',
-        status_cadastro: 'primeiro_acesso',
-        candidato_id: cand.id || generatedId,
-        concurso_id: concursoId,
-        cargo_id: cargoId,
-        orgao: orgaoNome,
-        cargo_nome: cargoNome,
-        concursos_inscritos:
-          concursoId && cargoId
-            ? [
-                {
-                  concurso_id: concursoId,
-                  cargo_id: cargoId,
-                  data_inscricao: hojeStr,
-                },
-              ]
-            : [],
-      };
+        const novoPerfil: Usuario = {
+          id: generatedId,
+          nome: cand.nome ? cand.nome.trim() : 'Candidato Importado',
+          email: realEmail,
+          email_contato: realEmail,
+          cpf: cand.cpf ? cand.cpf.trim() : '',
+          cpf_verificado: Boolean(cand.cpf),
+          whatsapp: cand.whatsapp || '',
+          telefone: cand.whatsapp || '',
+          is_admin: false,
+          tipo_usuario: 'candidato',
+          status_cadastro: 'ativo',
+          candidato_id: cand.id || generatedId,
+          concurso_id: concursoId,
+          cargo_id: cargoId,
+          orgao: orgaoNome,
+          cargo_nome: cargoNome,
+          concursos_inscritos:
+            concursoId && cargoId
+              ? [
+                  {
+                    concurso_id: concursoId,
+                    cargo_id: cargoId,
+                    data_inscricao: hojeStr,
+                  },
+                ]
+              : [],
+        };
 
-      reg[dictKey] = novoPerfil;
-      if (cpfLimpo.length >= 7) mapByCpf.set(cpfLimpo, dictKey);
-      if (nomeNorm.length >= 3) mapByNome.set(nomeNorm, dictKey);
+        reg[dictKey] = novoPerfil;
+        if (cpfLimpo.length >= 7) mapByCpf.set(cpfLimpo, dictKey);
+        if (nomeNorm.length >= 3) mapByNome.set(nomeNorm, dictKey);
+        registryModified = true;
+      }
       novos++;
     });
 
-    this.salvarRegistry(reg);
+    if (registryModified) {
+      this.salvarRegistry(reg);
+    } else if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('certam_registry_updated'));
+      window.dispatchEvent(new CustomEvent('certam_users_updated'));
+    }
     return { novos, atualizados };
   },
 
-  /**
-   * Verifica se o candidato da planilha já existe por CPF ou Nome Completo.
-   * Se não existir, cadastra como perfil vinculável (status: 'primeiro_acesso', sem e-mail aleatório).
-   */
   cadastrarOuSincronizarCandidatoImportado(
     cand: Partial<Candidato>,
     concursoId?: string,
@@ -556,9 +804,10 @@ export const userRegistryStore = {
       orgaoNome,
       cargoNome
     );
-    const reg = this.getRegistry();
-    const key = (cand.id || '').toLowerCase();
-    const u = reg[key] || Object.values(reg)[0];
+    const all = this.getAllUsers();
+    const u =
+      all.find((x) => x.id === cand.id || x.candidato_id === cand.id) ||
+      all[0];
     return { usuario: u, jaExistia: res.atualizados > 0 };
   },
 };

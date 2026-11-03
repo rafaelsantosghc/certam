@@ -1,16 +1,47 @@
 import { Candidato, Lote, Comarca } from '../types';
-import {
-  CANDIDATOS_ANALISTA_TJRS,
-  CANDIDATOS_ANALISTA_ADM_TJRS,
-  CANDIDATOS_TECNICO_TJRS,
-  CANDIDATOS_ANALISTA_MPRS,
-  CANDIDATOS_TECNICO_MPRS,
-} from '../data/defaultCandidates';
-import { COMARCAS_RS } from '../data/comarcas';
 import { cloudSync } from './cloudSync';
+import { certamStore } from './certamStore';
 
 const LOTES_KEY = 'certam_lotes_data_v6';
 const CANDIDATOS_KEY = 'certam_candidatos_data_v6';
+
+function normSlug(str: string = ''): string {
+  return str
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
+function extrairTipoCargoCanonico(str: string = ''): string {
+  const s = normSlug(str);
+  if (!s) return '';
+  if ((s.includes('analista') || s.includes('aj')) && (s.includes('adm') || s.includes('administrat'))) {
+    return 'analista_administrativo';
+  }
+  if ((s.includes('analista') || s.includes('aj')) && (s.includes('jud') || s.includes('direito'))) {
+    return 'analista_judiciario';
+  }
+  if (s.includes('tecnico') || s.includes('t_cnico') || s.includes('tj')) {
+    return 'tecnico_judiciario';
+  }
+  if (s.includes('oficial')) {
+    return 'oficial_justica';
+  }
+  return s;
+}
+
+function parseCandidatosArray(raw: string | null | undefined): Candidato[] {
+  if (!raw) return [];
+  try {
+    const p = JSON.parse(raw);
+    if (Array.isArray(p) && p.length > 0) return p;
+  } catch {
+    // ignore
+  }
+  return [];
+}
 
 export interface SimulacaoResultado {
   alocacoes: {
@@ -53,15 +84,72 @@ export const lotesStore = {
   },
 
   getCandidatos(concursoId: string, cargoId: string): Candidato[] {
-    const key = `${CANDIDATOS_KEY}_${concursoId}_${cargoId}`;
+    if (!concursoId) return [];
+    const exactKey = `${CANDIDATOS_KEY}_${concursoId}_${cargoId}`;
+    const exactList = parseCandidatosArray(cloudSync.getItem(exactKey));
+    if (exactList.length > 0) {
+      return exactList;
+    }
+
+    // Resolução inteligente de variações de slug de cargo (ex: 'geral' renomeado ou slug truncado)
     try {
-      const s = cloudSync.getItem(key);
-      if (s) {
-        const p = JSON.parse(s);
-        if (Array.isArray(p)) return p;
+      const conc = certamStore.getConcurso(concursoId);
+      const cargoObj = conc?.cargos?.find((cg) => cg.id === cargoId);
+      const cargoIndex = conc?.cargos ? conc.cargos.findIndex((cg) => cg.id === cargoId) : -1;
+      const targetNormId = normSlug(cargoId);
+      const targetNormNome = normSlug(cargoObj?.nome || '');
+      const targetCanonico = extrairTipoCargoCanonico(cargoObj?.nome || cargoId);
+
+      const prefix = `${CANDIDATOS_KEY}_${concursoId}_`;
+      const allKeys = cloudSync
+        .getAllKeys()
+        .filter((k) => k.startsWith(prefix) && k !== exactKey);
+
+      const nonEmptyCandidatesBySuffix: { suffix: string; list: Candidato[] }[] = [];
+      for (const k of allKeys) {
+        const list = parseCandidatosArray(cloudSync.getItem(k));
+        if (list.length > 0) {
+          nonEmptyCandidatesBySuffix.push({
+            suffix: k.slice(prefix.length),
+            list,
+          });
+        }
+      }
+
+      if (nonEmptyCandidatesBySuffix.length === 0) {
+        return [];
+      }
+
+      // 1. Match por slug normalizado ou tipo canônico do cargo
+      for (const item of nonEmptyCandidatesBySuffix) {
+        const sNorm = normSlug(item.suffix);
+        const sCanon = extrairTipoCargoCanonico(item.suffix);
+        if (
+          (targetNormId && sNorm === targetNormId) ||
+          (targetNormNome && sNorm === targetNormNome) ||
+          (targetNormNome && sNorm.length >= 6 && targetNormNome.startsWith(sNorm)) ||
+          (targetNormId && sNorm.length >= 6 && targetNormId.startsWith(sNorm)) ||
+          (targetCanonico && sCanon === targetCanonico)
+        ) {
+          return item.list;
+        }
+      }
+
+      // 2. Se for o 1º cargo do concurso (ou cargo único) e houver lista salva sob '_geral'
+      const hasExplicitGeralCargo = conc?.cargos?.some((cg) => cg.id === 'geral');
+      if ((cargoIndex === 0 || (conc?.cargos?.length || 0) <= 1) && !hasExplicitGeralCargo) {
+        const geralEntry = nonEmptyCandidatesBySuffix.find((x) => normSlug(x.suffix) === 'geral');
+        if (geralEntry) {
+          return geralEntry.list;
+        }
+      }
+
+      // 3. Se o concurso possui apenas 1 cargo e existe apenas 1 lista de candidatos para este concurso
+      if ((conc?.cargos?.length || 0) === 1 && nonEmptyCandidatesBySuffix.length === 1) {
+        return nonEmptyCandidatesBySuffix[0].list;
       }
     } catch {
-      // ignore
+      // ignore fallback error
     }
 
     return [];

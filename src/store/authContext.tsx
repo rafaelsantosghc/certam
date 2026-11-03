@@ -81,8 +81,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (usuario) {
         localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(usuario));
         userRegistryStore.vincularOuRegistrarUsuarioLogin(usuario);
+        if (usuario.is_admin || usuario.email?.toLowerCase() === 'rafasms0@hotmail.com') {
+          void cloudSync.pushAllLocal(true).then(() => cloudSync.pullFromServer());
+        } else {
+          void cloudSync.pullFromServer();
+        }
       } else {
         localStorage.removeItem(AUTH_STORAGE_KEY);
+        void cloudSync.pullFromServer();
       }
     } catch {
       // ignore

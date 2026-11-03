@@ -81,10 +81,11 @@ const SYNC_PREFIXES = [
   SUPABASE_CONFIG_KEY,
 ];
 
+// Chaves leves de alta prioridade enviadas em lote rápido;
+// Listas de candidatos (certam_candidatos_data_v6_*) são enviadas individualmente (1 POST por cargo) para evitar limite de payload.
 const PRIORITY_PREFIXES = [
   'certam_concursos_',
   'certam_lotes_',
-  'certam_candidatos_',
   'certam_perfil_audit_',
   'certam_audit_',
   'certam_vinculacao_',
@@ -142,6 +143,7 @@ const ADMIN_AUTHORITATIVE_KEYS = new Set([
   'certam_concursos_cargos_v6',
   'certam_lotes_data_v6',
   'certam_faq_items_v6',
+  SUPABASE_CONFIG_KEY,
 ]);
 
 function isAdminAuthoritativeKey(key: string): boolean {
@@ -213,6 +215,14 @@ function shouldSyncKey(key: string): boolean {
     return false;
   }
   if (/^certam_candidatos_data_v[1-5]_/.test(key)) {
+    return false;
+  }
+  if (
+    key.endsWith('_tjrs_2024') ||
+    key.includes('_tjrs_2024_') ||
+    key.endsWith('_mprs_2024') ||
+    key.includes('_mprs_2024_')
+  ) {
     return false;
   }
   return SYNC_PREFIXES.some((prefix) => key.startsWith(prefix));
@@ -328,7 +338,6 @@ function migrateAndCleanupLegacyLocalStorage(): void {
       memoryStore.delete(oldKey);
     }
 
-    // Higieniza também as chaves atuais caso contenham tjrs_2024 em cache no navegador
     for (const activeKey of ['certam_concursos_cargos_v6', 'certam_notifications_events_v5']) {
       const rawCurrent = localStorage.getItem(activeKey);
       if (rawCurrent) {
@@ -367,7 +376,9 @@ function migrateAndCleanupLegacyLocalStorage(): void {
         k === '_test_ping' ||
         k === 'certam_diag_heartbeat' ||
         k.endsWith('_tjrs_2024') ||
-        k.includes('_tjrs_2024_')
+        k.includes('_tjrs_2024_') ||
+        k.endsWith('_mprs_2024') ||
+        k.includes('_mprs_2024_')
       ) {
         keysToDelete.push(k);
       }
@@ -392,7 +403,11 @@ function safeLocalStorageSet(key: string, value: string): boolean {
       localStorage.setItem(key, value);
       return true;
     } catch {
-      if (isPriorityKey(key) || key.startsWith('certam_auth_')) {
+      if (
+        isPriorityKey(key) ||
+        key.startsWith('certam_candidatos_') ||
+        key.startsWith('certam_auth_')
+      ) {
         try {
           const bulkKeys: { k: string; len: number }[] = [];
           for (let i = 0; i < localStorage.length; i++) {
@@ -461,6 +476,61 @@ function getAllLocalSyncEntries(): Record<string, string> {
   return result;
 }
 
+async function upsertConfigRowsToSupabase(
+  cfg: SupabaseConnectionConfig,
+  rowsWithTimestamp: { chave: string; valor: any; updated_at: string }[]
+): Promise<{ ok: boolean; error?: string }> {
+  if (rowsWithTimestamp.length === 0) return { ok: true };
+  try {
+    const res = await fetch(`${cfg.url}/rest/v1/configuracoes?on_conflict=chave`, {
+      method: 'POST',
+      headers: getSupabaseHeaders(cfg.anonKey, {
+        Prefer: 'resolution=merge-duplicates,return=minimal',
+      }),
+      body: JSON.stringify(rowsWithTimestamp),
+    });
+
+    if (res.ok) {
+      return { ok: true };
+    }
+
+    const errText = await res.text().catch(() => `HTTP ${res.status}`);
+
+    // Fallback automático caso a tabela public.configuracoes ainda não tenha a coluna updated_at
+    if (res.status === 400 && errText.includes('updated_at')) {
+      const rowsWithoutTimestamp = rowsWithTimestamp.map(({ chave, valor }) => ({
+        chave,
+        valor,
+      }));
+      const retryRes = await fetch(`${cfg.url}/rest/v1/configuracoes?on_conflict=chave`, {
+        method: 'POST',
+        headers: getSupabaseHeaders(cfg.anonKey, {
+          Prefer: 'resolution=merge-duplicates,return=minimal',
+        }),
+        body: JSON.stringify(rowsWithoutTimestamp),
+      });
+      if (retryRes.ok) {
+        return { ok: true };
+      }
+      const retryErr = await retryRes.text().catch(() => `HTTP ${retryRes.status}`);
+      return {
+        ok: false,
+        error: `Erro ao gravar em configuracoes (${retryRes.status}): ${retryErr.slice(0, 180)}`,
+      };
+    }
+
+    return {
+      ok: false,
+      error: `Erro ao gravar em configuracoes (${res.status}): ${errText.slice(0, 180)}`,
+    };
+  } catch (err: any) {
+    return {
+      ok: false,
+      error: err?.message || 'Falha de rede ao conectar ao Supabase',
+    };
+  }
+}
+
 async function pushEntriesToSupabase(entries: Record<string, string>): Promise<boolean> {
   const cfg = resolveSupabaseConfig();
   syncStatus.supabaseConfigured = Boolean(cfg);
@@ -471,7 +541,10 @@ async function pushEntriesToSupabase(entries: Record<string, string>): Promise<b
   if (keys.length === 0) return true;
 
   const nowIso = new Date().toISOString();
-  const rows = keys.map((chave) => {
+  const smallRows: { chave: string; valor: any; updated_at: string }[] = [];
+  const largeRows: { chave: string; valor: any; updated_at: string }[] = [];
+
+  for (const chave of keys) {
     const cleanStr = sanitizeSyncValue(chave, entries[chave]) || entries[chave];
     let parsedValor: any = cleanStr;
     try {
@@ -479,71 +552,43 @@ async function pushEntriesToSupabase(entries: Record<string, string>): Promise<b
     } catch {
       parsedValor = cleanStr;
     }
-    return {
+    const row = {
       chave,
       valor: parsedValor,
       updated_at: nowIso,
     };
-  });
-
-  try {
-    const res = await fetch(`${cfg.url}/rest/v1/configuracoes?on_conflict=chave`, {
-      method: 'POST',
-      headers: getSupabaseHeaders(cfg.anonKey, {
-        Prefer: 'resolution=merge-duplicates,return=minimal',
-      }),
-      body: JSON.stringify(rows),
-    });
-
-    if (!res.ok) {
-      const errText = await res.text().catch(() => `HTTP ${res.status}`);
-      syncStatus.lastSupabaseOk = false;
-      syncStatus.lastSupabaseError = `Erro ao gravar em configuracoes (${res.status}): ${errText.slice(0, 180)}`;
-      return false;
+    if (chave.startsWith('certam_candidatos_') || cleanStr.length > 35000) {
+      largeRows.push(row);
+    } else {
+      smallRows.push(row);
     }
-
-    if (entries['certam_concursos_cargos_v6']) {
-      try {
-        const cleanConcStr =
-          sanitizeSyncValue('certam_concursos_cargos_v6', entries['certam_concursos_cargos_v6']) ||
-          '[]';
-        const concursosArr = JSON.parse(cleanConcStr);
-        if (Array.isArray(concursosArr) && concursosArr.length > 0) {
-          const concursoRows = concursosArr
-            .filter((c: any) => c && c.id && c.nome)
-            .map((c: any) => ({
-              id: String(c.id),
-              nome: String(c.nome),
-              cargo: Array.isArray(c.cargos)
-                ? c.cargos.map((cg: any) => cg.nome).join(', ')
-                : String(c.cargo || ''),
-              orgao: String(c.orgao || c.banca || 'TJRS'),
-              ativo: c.status !== 'suspenso',
-            }));
-          if (concursoRows.length > 0) {
-            await fetch(`${cfg.url}/rest/v1/concursos?on_conflict=id`, {
-              method: 'POST',
-              headers: getSupabaseHeaders(cfg.anonKey, {
-                Prefer: 'resolution=merge-duplicates,return=minimal',
-              }),
-              body: JSON.stringify(concursoRows),
-            }).catch(() => {});
-          }
-        }
-      } catch {
-        // ignore mirror error
-      }
-    }
-
-    syncStatus.lastSupabaseOk = true;
-    syncStatus.lastSupabaseError = null;
-    syncStatus.lastPushAt = nowIso;
-    return true;
-  } catch (err: any) {
-    syncStatus.lastSupabaseOk = false;
-    syncStatus.lastSupabaseError = err?.message || 'Falha de rede ao conectar ao Supabase';
-    return false;
   }
+
+  let allOk = true;
+  let lastErr: string | null = null;
+
+  if (smallRows.length > 0) {
+    const res = await upsertConfigRowsToSupabase(cfg, smallRows);
+    if (!res.ok) {
+      allOk = false;
+      lastErr = res.error || null;
+    }
+  }
+
+  for (const largeRow of largeRows) {
+    const res = await upsertConfigRowsToSupabase(cfg, [largeRow]);
+    if (!res.ok) {
+      allOk = false;
+      lastErr = res.error || null;
+    }
+  }
+
+  syncStatus.lastSupabaseOk = allOk;
+  syncStatus.lastSupabaseError = allOk ? null : lastErr;
+  if (allOk) {
+    syncStatus.lastPushAt = nowIso;
+  }
+  return allOk;
 }
 
 async function fetchEntriesFromSupabase(): Promise<{
@@ -556,7 +601,8 @@ async function fetchEntriesFromSupabase(): Promise<{
   if (!cfg) return null;
 
   try {
-    const res = await fetch(`${cfg.url}/rest/v1/configuracoes?select=chave,valor,updated_at`, {
+    // Usa select=* para nunca falhar caso a coluna updated_at ainda não exista na tabela legada
+    const res = await fetch(`${cfg.url}/rest/v1/configuracoes?select=*`, {
       method: 'GET',
       headers: getSupabaseHeaders(cfg.anonKey),
       cache: 'no-store',
@@ -577,12 +623,16 @@ async function fetchEntriesFromSupabase(): Promise<{
       for (const row of rows) {
         if (!row || typeof row.chave !== 'string') continue;
         const rawKey = row.chave;
+        // Ignora chaves que não pertencem ao CERTAM (ex: cadastradas por outro site antigo)
+        if (!rawKey.startsWith('certam_')) continue;
         if (rawKey === '_test_ping' || rawKey === 'certam_diag_heartbeat') continue;
         const canonicalKey = LEGACY_KEY_MIGRATIONS[rawKey] || rawKey;
+        if (!shouldSyncKey(canonicalKey)) continue;
+
         const rawSerialized =
           typeof row.valor === 'string' ? row.valor : JSON.stringify(row.valor ?? null);
         const serialized = sanitizeSyncValue(canonicalKey, rawSerialized);
-        const ts = row.updated_at ? new Date(row.updated_at).getTime() : Date.now();
+        const ts = row.updated_at ? new Date(row.updated_at).getTime() : Date.now() - 5000;
 
         if (!isNonEmptySerialized(serialized)) continue;
 
@@ -659,7 +709,10 @@ async function sendEntriesBatch(
       const res = await fetch('/api/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ entries: { [bk]: cleanVal }, forceReplace }),
+        body: JSON.stringify({
+          entries: { [bk]: cleanVal },
+          forceReplace: forceReplace || isAdminAuthoritativeKey(bk),
+        }),
       });
       if (res.ok) {
         syncStatus.lastLocalApiOk = true;
@@ -722,6 +775,7 @@ async function executePullFromServer(): Promise<boolean> {
 
     let localApiEntries: Record<string, string> = {};
     let localApiVersions: Record<string, number> = {};
+    let usedStaticFallback = false;
 
     try {
       const res = await fetch('/api/sync', { cache: 'no-store' });
@@ -742,11 +796,16 @@ async function executePullFromServer(): Promise<boolean> {
     if (!syncStatus.lastLocalApiOk) {
       try {
         const snapRes = await fetch('/certam_sync_db.json', { cache: 'no-store' });
-        if (snapRes.ok) {
+        const snapType = snapRes.headers.get('content-type') || '';
+        if (snapRes.ok && snapType.includes('json')) {
           const snapData = await snapRes.json();
           if (snapData?.entries && typeof snapData.entries === 'object') {
             localApiEntries = snapData.entries;
-            localApiVersions = snapData.versions || {};
+            localApiVersions = {};
+            for (const k of Object.keys(snapData.entries)) {
+              localApiVersions[k] = 1;
+            }
+            usedStaticFallback = true;
           }
         }
       } catch {
@@ -765,14 +824,25 @@ async function executePullFromServer(): Promise<boolean> {
 
     const supabaseData = await fetchEntriesFromSupabase();
 
+    if (
+      supabaseData?.entries?.[SUPABASE_CONFIG_KEY] &&
+      !memoryStore.has(SUPABASE_CONFIG_KEY) &&
+      !localStorage.getItem(SUPABASE_CONFIG_KEY)
+    ) {
+      memoryStore.set(SUPABASE_CONFIG_KEY, supabaseData.entries[SUPABASE_CONFIG_KEY]);
+      safeLocalStorageSet(SUPABASE_CONFIG_KEY, supabaseData.entries[SUPABASE_CONFIG_KEY]);
+    }
+
     const entries: Record<string, string> = {};
     const serverVersions: Record<string, number> = {};
+    const nowMs = Date.now();
 
     for (const [k, rawVal] of Object.entries(localApiEntries)) {
       const cleanVal = sanitizeSyncValue(k, rawVal);
       if (cleanVal !== null) {
         entries[k] = cleanVal;
-        serverVersions[k] = localApiVersions[k] || 0;
+        const rawVer = localApiVersions[k] || 0;
+        serverVersions[k] = rawVer === 1793400000000 || rawVer > nowMs + 60000 ? 1 : rawVer;
       }
     }
 
@@ -784,11 +854,11 @@ async function executePullFromServer(): Promise<boolean> {
         const locSrvVal = entries[k];
         const locSrvVer = serverVersions[k] || 0;
 
-        if (!isNonEmptySerialized(locSrvVal)) {
+        if (!isNonEmptySerialized(locSrvVal) || usedStaticFallback || locSrvVer <= 1) {
           entries[k] = supVal;
           serverVersions[k] = supVer;
         } else if (supVal !== locSrvVal) {
-          if (ADMIN_AUTHORITATIVE_KEYS.has(k)) {
+          if (isAdminAuthoritativeKey(k)) {
             if (supVer >= locSrvVer) {
               entries[k] = supVal;
               serverVersions[k] = supVer;
@@ -835,22 +905,37 @@ async function executePullFromServer(): Promise<boolean> {
     const toForcePushAdmin: Record<string, string> = {};
     const allLocal = getAllLocalSyncEntries();
 
-    // 1. Se o usuário conectado for o ADMIN, suas bases autoritativas locais (Concursos, Lotes, Candidatos, FAQs) prevalecem e são publicadas para todos!
+    // 1. Garantir que dados autoritativos do Admin e listas de classificação locais que ainda não estejam no servidor/Supabase sejam publicados
     for (const [localKey, localVal] of Object.entries(allLocal)) {
       if (!isNonEmptySerialized(localVal)) continue;
+
+      const srvVal = entries[localKey];
+      const apiVal = localApiEntries[localKey];
+      const supVal = supabaseData?.entries?.[localKey];
+
       if (isAdminAuthoritativeKey(localKey)) {
         if (isCurrentUserAdmin) {
-          const srvVal = entries[localKey];
-          if (srvVal !== localVal) {
+          const missingInApi = syncStatus.lastLocalApiOk && apiVal !== localVal;
+          const missingInSupabase = Boolean(supabaseData && supVal !== localVal);
+          if (srvVal !== localVal || missingInApi || missingInSupabase) {
+            toForcePushAdmin[localKey] = localVal;
+          }
+        } else if (localKey.startsWith('certam_candidatos_data_v6_')) {
+          // Se este navegador já possui uma lista de classificação importada que ainda não subiu para a nuvem/servidor (ex: admin deslogou para testar como usuário comum), publica imediatamente!
+          const missingOnServer = !isNonEmptySerialized(srvVal);
+          const missingOnSupabase = Boolean(supabaseData && !isNonEmptySerialized(supVal));
+          if (missingOnServer || missingOnSupabase) {
             toForcePushAdmin[localKey] = localVal;
           }
         }
         continue;
       }
 
-      const srvVal = entries[localKey];
-      const supVal = supabaseData?.entries?.[localKey];
-      if (!isNonEmptySerialized(srvVal) || (supabaseData && !isNonEmptySerialized(supVal))) {
+      if (
+        !isNonEmptySerialized(srvVal) ||
+        (syncStatus.lastLocalApiOk && !isNonEmptySerialized(apiVal)) ||
+        (supabaseData && !isNonEmptySerialized(supVal))
+      ) {
         toPushBack[localKey] = localVal;
       }
     }
@@ -870,7 +955,11 @@ async function executePullFromServer(): Promise<boolean> {
 
       if (!isNonEmptySerialized(serverVal)) {
         if (isNonEmptySerialized(localVal) && !recentlyWrittenLocally) {
-          if (!isAdminAuthoritativeKey(k) || isCurrentUserAdmin) {
+          if (
+            !isAdminAuthoritativeKey(k) ||
+            isCurrentUserAdmin ||
+            k.startsWith('certam_candidatos_data_v6_')
+          ) {
             toPushBack[k] = localVal;
           }
         }
@@ -880,7 +969,6 @@ async function executePullFromServer(): Promise<boolean> {
       // REGRA DE AUTORIDADE PARA CONCURSOS, LOTES, CANDIDATOS E FAQs:
       if (isAdminAuthoritativeKey(k)) {
         if (isCurrentUserAdmin) {
-          // Se o Admin já tem dados locais para esta chave, o Admin é a fonte da verdade
           if (isNonEmptySerialized(localVal)) {
             if (localVal !== serverVal) {
               toForcePushAdmin[k] = localVal;
@@ -888,14 +976,16 @@ async function executePullFromServer(): Promise<boolean> {
             if (srvVer) knownServerVersions.set(k, srvVer);
             continue;
           }
-          // Se o Admin está em um navegador novo sem dados locais, adota os do servidor
           memoryStore.set(k, serverVal);
           safeLocalStorageSet(k, serverVal);
           if (srvVer) knownServerVersions.set(k, srvVer);
           changedKeys.push(k);
           continue;
         } else {
-          // Usuário comum ou visitante: adota 100% a lista oficial do servidor (nunca mantém lixo antigo do localStorage)
+          // Se veio apenas do seed estático inicial (srvVer <= 1) e o navegador já tem dados reais salvos localmente, preserva os dados reais locais
+          if (srvVer <= 1 && usedStaticFallback && !supabaseData && isNonEmptySerialized(localVal)) {
+            continue;
+          }
           if (localVal !== serverVal) {
             memoryStore.set(k, serverVal);
             safeLocalStorageSet(k, serverVal);
@@ -1064,6 +1154,24 @@ async function executePullFromServer(): Promise<boolean> {
 }
 
 export const cloudSync = {
+  getAllKeys(): string[] {
+    const keys = new Set<string>();
+    for (const k of memoryStore.keys()) {
+      keys.add(k);
+    }
+    if (typeof window !== 'undefined') {
+      try {
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k) keys.add(k);
+        }
+      } catch {
+        // ignore
+      }
+    }
+    return Array.from(keys);
+  },
+
   getItem(key: string): string | null {
     const canonicalKey = LEGACY_KEY_MIGRATIONS[key] || key;
     if (memoryStore.has(canonicalKey)) {
@@ -1147,7 +1255,6 @@ export const cloudSync = {
       const nonEmpty: Record<string, string> = {};
       for (const [k, val] of Object.entries(allLocal)) {
         if (!isNonEmptySerialized(val)) continue;
-        // Usuários comuns nunca sobem chaves exclusivas da administração (Concursos, Lotes, Candidatos, FAQ)
         if (!isCurrentUserAdmin && isAdminAuthoritativeKey(k)) {
           continue;
         }
@@ -1192,7 +1299,7 @@ export const cloudSync = {
     safeLocalStorageSet(SUPABASE_CONFIG_KEY, serialized);
     await this.pushKey(SUPABASE_CONFIG_KEY, serialized, true);
     await this.pullFromServer();
-    await this.pushAllLocal(false);
+    await this.pushAllLocal(true);
     return Boolean(syncStatus.lastSupabaseOk);
   },
 
@@ -1241,8 +1348,9 @@ export const cloudSync = {
     const t0 = performance.now();
     try {
       const res = await fetch('/api/sync', { cache: 'no-store' });
+      const contentType = res.headers.get('content-type') || '';
       report.localApi.latencyMs = Math.round(performance.now() - t0);
-      if (res.ok) {
+      if (res.ok && contentType.includes('application/json')) {
         report.localApi.ok = true;
         const data = await res.json();
         const entries: Record<string, string> = data?.entries || {};
@@ -1267,7 +1375,6 @@ export const cloudSync = {
           };
         });
 
-        // Roundtrip write/read test
         const postRes = await fetch('/api/sync', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1275,7 +1382,7 @@ export const cloudSync = {
         });
         report.localApi.roundtripOk = postRes.ok;
       } else {
-        report.localApi.error = `HTTP ${res.status}`;
+        report.localApi.error = 'Modo estático (usando Supabase)';
       }
     } catch (err: any) {
       report.localApi.error = err?.message || 'Servidor /api/sync indisponível (modo estático)';
@@ -1291,120 +1398,134 @@ export const cloudSync = {
     report.supabase.configured = true;
     report.supabase.url = cfg.url;
 
-    const tablesToCheck = [
-      'configuracoes',
-      'concursos',
-      'lotes',
-      'respostas',
-      'candidatos_base',
-      'comarcas_tjrs',
-    ];
+    // 2.1 Verificar a tabela oficial única do site atual: public.configuracoes
+    const stConf = performance.now();
+    try {
+      const res = await fetch(`${cfg.url}/rest/v1/configuracoes?select=*`, {
+        method: 'GET',
+        headers: getSupabaseHeaders(cfg.anonKey),
+        cache: 'no-store',
+      });
+      const latencyMs = Math.round(performance.now() - stConf);
+      if (res.ok) {
+        const rows = await res.json();
+        const rowCount = Array.isArray(rows) ? rows.length : 0;
+        const conflictKeys: string[] = [];
+        const sampleKeys: string[] = [];
 
-    for (const table of tablesToCheck) {
+        if (Array.isArray(rows)) {
+          for (const r of rows) {
+            if (r?.chave) {
+              const k = String(r.chave);
+              sampleKeys.push(k);
+              if (!k.startsWith('certam_')) {
+                conflictKeys.push(`${k} (outro site)`);
+                report.supabase.conflictsFound.push(`configuracoes.${k} (outro site)`);
+              } else if (
+                k in LEGACY_KEY_MIGRATIONS ||
+                k === '_test_ping' ||
+                k === 'certam_diag_heartbeat' ||
+                /^certam_candidatos_data_v[1-5]_/.test(k) ||
+                k.includes('tjrs_2024') ||
+                k.includes('mprs_2024')
+              ) {
+                conflictKeys.push(`${k} (legado)`);
+                report.supabase.conflictsFound.push(`configuracoes.${k}`);
+              }
+            }
+          }
+        }
+
+        report.supabase.tables.push({
+          table: 'configuracoes (Tabela Oficial CERTAM)',
+          ok: true,
+          rowCount,
+          latencyMs,
+          conflictKeys,
+          sampleKeys,
+        });
+        report.supabase.connected = true;
+      } else {
+        const errText = await res.text().catch(() => `HTTP ${res.status}`);
+        report.supabase.tables.push({
+          table: 'configuracoes (Tabela Oficial CERTAM)',
+          ok: false,
+          rowCount: 0,
+          latencyMs,
+          error: `HTTP ${res.status}: ${errText.slice(0, 140)}`,
+        });
+      }
+    } catch (err: any) {
+      report.supabase.tables.push({
+        table: 'configuracoes (Tabela Oficial CERTAM)',
+        ok: false,
+        rowCount: 0,
+        latencyMs: Math.round(performance.now() - stConf),
+        error: err?.message || 'Erro de rede',
+      });
+    }
+
+    // 2.2 Verificar se tabelas do outro site ainda existem no banco
+    const foreignTables = ['concursos', 'lotes', 'respostas', 'candidatos_base', 'comarcas_tjrs'];
+    for (const table of foreignTables) {
       const st = performance.now();
       try {
-        const selectParam = table === 'configuracoes' ? 'chave,updated_at' : 'id';
-        const res = await fetch(`${cfg.url}/rest/v1/${table}?select=${selectParam}`, {
+        const res = await fetch(`${cfg.url}/rest/v1/${table}?select=*&limit=5`, {
           method: 'GET',
           headers: getSupabaseHeaders(cfg.anonKey),
           cache: 'no-store',
         });
         const latencyMs = Math.round(performance.now() - st);
-        if (res.ok) {
+        if (res.status === 404) {
+          // Tabela do outro site já foi eliminada com sucesso via DROP TABLE!
+          report.supabase.tables.push({
+            table: `${table} (Outro Site — Eliminada)`,
+            ok: true,
+            rowCount: 0,
+            latencyMs,
+            conflictKeys: [],
+          });
+        } else if (res.ok) {
           const rows = await res.json();
           const rowCount = Array.isArray(rows) ? rows.length : 0;
-          const conflictKeys: string[] = [];
-          const sampleKeys: string[] = [];
-
-          if (table === 'configuracoes' && Array.isArray(rows)) {
-            for (const r of rows) {
-              if (r?.chave) {
-                sampleKeys.push(String(r.chave));
-                if (
-                  r.chave in LEGACY_KEY_MIGRATIONS ||
-                  r.chave === '_test_ping' ||
-                  /^certam_candidatos_data_v[1-5]_/.test(r.chave)
-                ) {
-                  conflictKeys.push(String(r.chave));
-                  report.supabase.conflictsFound.push(`configuracoes.${r.chave}`);
-                }
-              }
-            }
+          const conflictMsg =
+            rowCount > 0
+              ? [`Tabela do outro site com dados residuais (execute o SQL para DROP TABLE)`]
+              : [`Tabela do outro site vazia (execute o SQL para DROP TABLE)`];
+          if (rowCount > 0) {
+            report.supabase.conflictsFound.push(`public.${table} (tabela do outro site)`);
           }
-          if (table === 'concursos' && Array.isArray(rows)) {
-            for (const r of rows) {
-              if (r?.id) {
-                sampleKeys.push(String(r.id));
-                if (r.id === 'tjrs_analista_2024') {
-                  conflictKeys.push('tjrs_analista_2024 (seed legado)');
-                  report.supabase.conflictsFound.push('concursos.tjrs_analista_2024');
-                }
-              }
-            }
-          }
-
           report.supabase.tables.push({
-            table,
+            table: `${table} (Outro Site)`,
             ok: true,
             rowCount,
             latencyMs,
-            conflictKeys,
-            sampleKeys,
-          });
-        } else {
-          const errText = await res.text().catch(() => `HTTP ${res.status}`);
-          report.supabase.tables.push({
-            table,
-            ok: false,
-            rowCount: 0,
-            latencyMs,
-            error: `HTTP ${res.status}: ${errText.slice(0, 140)}`,
+            conflictKeys: conflictMsg,
           });
         }
-      } catch (err: any) {
-        report.supabase.tables.push({
-          table,
-          ok: false,
-          rowCount: 0,
-          latencyMs: Math.round(performance.now() - st),
-          error: err?.message || 'Erro de rede',
-        });
+      } catch {
+        // ignore
       }
     }
 
-    const configTable = report.supabase.tables.find((t) => t.table === 'configuracoes');
-    report.supabase.connected = Boolean(configTable?.ok);
-
-    // Teste real de Escrita + Leitura + Limpeza no Supabase
+    // 2.3 Teste real de Escrita + Leitura + Limpeza na tabela public.configuracoes
     if (report.supabase.connected) {
-      try {
-        const testToken = `ok_${Date.now()}`;
-        const writeRes = await fetch(`${cfg.url}/rest/v1/configuracoes?on_conflict=chave`, {
-          method: 'POST',
-          headers: getSupabaseHeaders(cfg.anonKey, {
-            Prefer: 'resolution=merge-duplicates,return=representation',
-          }),
-          body: JSON.stringify([
-            {
-              chave: 'certam_diag_heartbeat',
-              valor: { status: testToken, testedAt: timestamp },
-              updated_at: timestamp,
-            },
-          ]),
-        });
-        if (writeRes.ok) {
-          report.supabase.roundtripOk = true;
-          // Remove chave de teste para manter a tabela limpa
-          await fetch(`${cfg.url}/rest/v1/configuracoes?chave=eq.certam_diag_heartbeat`, {
-            method: 'DELETE',
-            headers: getSupabaseHeaders(cfg.anonKey),
-          }).catch(() => {});
-        } else {
-          const errText = await writeRes.text().catch(() => '');
-          report.supabase.error = `Falha na escrita (${writeRes.status}): ${errText.slice(0, 140)}`;
-        }
-      } catch (err: any) {
-        report.supabase.error = err?.message || 'Falha no teste de escrita no Supabase';
+      const testToken = `ok_${Date.now()}`;
+      const writeRes = await upsertConfigRowsToSupabase(cfg, [
+        {
+          chave: 'certam_diag_heartbeat',
+          valor: { status: testToken, testedAt: timestamp },
+          updated_at: timestamp,
+        },
+      ]);
+      if (writeRes.ok) {
+        report.supabase.roundtripOk = true;
+        await fetch(`${cfg.url}/rest/v1/configuracoes?chave=eq.certam_diag_heartbeat`, {
+          method: 'DELETE',
+          headers: getSupabaseHeaders(cfg.anonKey),
+        }).catch(() => {});
+      } else {
+        report.supabase.error = writeRes.error || 'Falha no teste de escrita no Supabase';
       }
     }
 
@@ -1418,7 +1539,7 @@ export const cloudSync = {
   }> {
     migrateAndCleanupLegacyLocalStorage();
 
-    // 1. Puxa antes para resgatar qualquer dado que esteja apenas no servidor/Supabase sob chave legada
+    // 1. Puxa antes para resgatar qualquer dado válido que esteja no servidor/Supabase
     await this.pullFromServer();
 
     const allLocal = getAllLocalSyncEntries();
@@ -1429,23 +1550,67 @@ export const cloudSync = {
       }
     }
 
-    // 2. Limpa chaves legadas no servidor /api/sync e força publicação das chaves atuais
+    let cleanedKeysCount = LEGACY_KEYS_TO_REMOVE.length;
+
+    // 2. Limpa chaves legadas no servidor /api/sync e força publicação de todas as chaves atuais (incluindo listas de classificação!)
     await sendEntriesBatch(nonEmpty, true, true, LEGACY_KEYS_TO_REMOVE);
 
-    // 3. Se o Supabase estiver configurado, limpa chaves legadas em public.configuracoes e o registro legado em public.concursos
+    // 3. Se o Supabase estiver configurado, limpa TODOS os dados do outro site e chaves obsoletas, e publica tudo em public.configuracoes
     let supabaseCleaned = false;
     const cfg = resolveSupabaseConfig();
     if (cfg) {
       try {
-        const inList = LEGACY_KEYS_TO_REMOVE.map((k) => `"${k}"`).join(',');
-        await fetch(`${cfg.url}/rest/v1/configuracoes?chave=in.(${encodeURIComponent(inList)})`, {
+        // 3.1 Buscar todas as chaves existentes em public.configuracoes para remover qualquer chave de outro site (!certam_*) ou legada
+        const getRes = await fetch(`${cfg.url}/rest/v1/configuracoes?select=*`, {
+          method: 'GET',
+          headers: getSupabaseHeaders(cfg.anonKey),
+          cache: 'no-store',
+        });
+        if (getRes.ok) {
+          const rows = await getRes.json();
+          if (Array.isArray(rows)) {
+            const keysToPurge: string[] = [];
+            for (const r of rows) {
+              const k = String(r?.chave || '');
+              if (!k) continue;
+              if (
+                !k.startsWith('certam_') ||
+                k in LEGACY_KEY_MIGRATIONS ||
+                k === '_test_ping' ||
+                k === 'certam_diag_heartbeat' ||
+                /^certam_candidatos_data_v[1-5]_/.test(k) ||
+                k.includes('tjrs_2024') ||
+                k.includes('mprs_2024')
+              ) {
+                keysToPurge.push(k);
+              }
+            }
+            for (const purgeKey of keysToPurge) {
+              await fetch(
+                `${cfg.url}/rest/v1/configuracoes?chave=eq.${encodeURIComponent(purgeKey)}`,
+                {
+                  method: 'DELETE',
+                  headers: getSupabaseHeaders(cfg.anonKey),
+                }
+              ).catch(() => {});
+              cleanedKeysCount++;
+            }
+          }
+        }
+
+        // 3.2 Esvaziar registros de tabelas do outro site caso ainda não tenham sido excluídas com DROP TABLE no SQL Editor
+        for (const oldTable of ['respostas', 'lotes', 'concursos', 'candidatos_base']) {
+          await fetch(`${cfg.url}/rest/v1/${oldTable}?id=not.is.null`, {
+            method: 'DELETE',
+            headers: getSupabaseHeaders(cfg.anonKey),
+          }).catch(() => {});
+        }
+        await fetch(`${cfg.url}/rest/v1/comarcas_tjrs?nome=not.is.null`, {
           method: 'DELETE',
           headers: getSupabaseHeaders(cfg.anonKey),
-        });
-        await fetch(`${cfg.url}/rest/v1/concursos?id=eq.tjrs_analista_2024`, {
-          method: 'DELETE',
-          headers: getSupabaseHeaders(cfg.anonKey),
-        });
+        }).catch(() => {});
+
+        // 3.3 Publicar todas as chaves atuais do CERTAM em public.configuracoes
         supabaseCleaned = await pushEntriesToSupabase(nonEmpty);
       } catch {
         supabaseCleaned = false;
@@ -1453,7 +1618,7 @@ export const cloudSync = {
     }
 
     return {
-      cleanedKeysCount: LEGACY_KEYS_TO_REMOVE.length,
+      cleanedKeysCount,
       publishedKeysCount: Object.keys(nonEmpty).length,
       supabaseCleaned,
     };
@@ -1479,4 +1644,3 @@ export const cloudSync = {
     });
   },
 };
-

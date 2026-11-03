@@ -1,102 +1,60 @@
 -- =====================================================================
--- SCRIPT COMPLETO DE CONFIGURAÇÃO, LIMPEZA DE CONFLITOS E MIGRAÇÃO: SUPABASE POSTGRESQL
--- CERTAM - Portal de Acompanhamento de Concursos Públicos (Vercel + Supabase)
+-- SCRIPT DE LIMPEZA GERAL E PADRONIZAÇÃO EXCLUSIVA: SUPABASE POSTGRESQL
+-- CERTAM - Portal de Acompanhamento de Concursos Públicos
 -- =====================================================================
+-- OBJETIVO DESTE SCRIPT:
+-- 1. Eliminar TODAS as tabelas que pertenciam a outro site vinculado anteriormente
+--    (concursos, lotes, respostas, comarcas_tjrs, candidatos_base e quaisquer outras),
+--    mantendo EXCLUSIVAMENTE a tabela `public.configuracoes` utilizada pelo site atual.
+-- 2. Garantir a estrutura correta de `public.configuracoes` (incluindo a coluna `updated_at`).
+-- 3. Limpar todos os registros de `public.configuracoes` que vieram do outro site ou de testes
+--    antigos (ex: tjrs_2024), preservando apenas os dados oficiais atuais do CERTAM (`certam_*`).
+-- 4. Configurar políticas RLS de leitura e escrita pública para funcionamento 100% sem bloqueios.
+--
 -- INSTRUÇÕES DE EXECUÇÃO:
 -- 1. Abra o painel do seu projeto no Supabase (https://supabase.com/dashboard).
 -- 2. No menu lateral esquerdo, clique em "SQL Editor".
 -- 3. Clique em "+ New query", cole TODO este script abaixo e clique em "RUN".
 -- =====================================================================
 
--- 1. CRIAÇÃO E ATUALIZAÇÃO DAS TABELAS ESSENCIAIS
-CREATE TABLE IF NOT EXISTS public.concursos (
-    id TEXT PRIMARY KEY,
-    nome TEXT NOT NULL,
-    cargo TEXT DEFAULT '',
-    orgao TEXT DEFAULT 'TJRS',
-    ativo BOOLEAN DEFAULT true,
-    dados_completos JSONB DEFAULT '{}'::jsonb,
-    created_at TIMESTAMPTZ DEFAULT now(),
-    updated_at TIMESTAMPTZ DEFAULT now()
-);
-
-ALTER TABLE public.concursos ADD COLUMN IF NOT EXISTS dados_completos JSONB DEFAULT '{}'::jsonb;
-ALTER TABLE public.concursos ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now();
-
-CREATE TABLE IF NOT EXISTS public.lotes (
-    id TEXT NOT NULL,
-    concurso_id TEXT NOT NULL,
-    nome TEXT NOT NULL,
-    ativo BOOLEAN DEFAULT false,
-    is_ranking_visible BOOLEAN DEFAULT true,
-    is_printing_enabled BOOLEAN DEFAULT true,
-    travado BOOLEAN DEFAULT false,
-    senha TEXT DEFAULT '',
-    comarcas JSONB DEFAULT '[]'::jsonb,
-    candidatos JSONB DEFAULT '[]'::jsonb,
-    dados_completos JSONB DEFAULT '{}'::jsonb,
-    created_at TIMESTAMPTZ DEFAULT now(),
-    updated_at TIMESTAMPTZ DEFAULT now(),
-    PRIMARY KEY (id, concurso_id)
-);
-
--- Remove a Foreign Key restritiva legada (lotes_concurso_id_fkey) que impedia salvar lotes
--- de novos concursos ou cargos vinculados via configuracoes
-ALTER TABLE public.lotes DROP CONSTRAINT IF EXISTS lotes_concurso_id_fkey;
-ALTER TABLE public.lotes ADD COLUMN IF NOT EXISTS dados_completos JSONB DEFAULT '{}'::jsonb;
-ALTER TABLE public.lotes ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now();
-
-CREATE TABLE IF NOT EXISTS public.respostas (
-    id TEXT PRIMARY KEY,
-    concurso_id TEXT DEFAULT 'tjrs_2025',
-    lote_id TEXT NOT NULL,
-    ambiente TEXT DEFAULT 'prod',
-    nome TEXT NOT NULL,
-    cpf TEXT DEFAULT '',
-    email TEXT DEFAULT '',
-    whatsapp TEXT DEFAULT '',
-    intencao TEXT DEFAULT 'assumir',
-    escolhas JSONB DEFAULT '[]'::jsonb,
-    possui_fg_cc TEXT DEFAULT 'Não',
-    fg_cc_registro_funcional TEXT DEFAULT '',
-    fg_cc_cargo TEXT DEFAULT '',
-    fg_cc_comarca_atual TEXT DEFAULT '',
-    fg_cc_pretende_continuar TEXT DEFAULT '',
-    bloqueado BOOLEAN DEFAULT true,
-    dados_cadastrais_bloqueados BOOLEAN DEFAULT true,
-    dados_completos JSONB DEFAULT '{}'::jsonb,
-    created_at TIMESTAMPTZ DEFAULT now(),
-    updated_at TIMESTAMPTZ DEFAULT now()
-);
-
+-- 1. GARANTIR QUE A TABELA OFICIAL DO SITE ATUAL (public.configuracoes) EXISTA COM A COLUNA updated_at
 CREATE TABLE IF NOT EXISTS public.configuracoes (
     chave TEXT PRIMARY KEY,
     valor JSONB NOT NULL,
     updated_at TIMESTAMPTZ DEFAULT now()
 );
 
-CREATE TABLE IF NOT EXISTS public.comarcas_tjrs (
-    id SERIAL PRIMARY KEY,
-    nome TEXT NOT NULL UNIQUE,
-    regiao TEXT DEFAULT 'RS',
-    ativo BOOLEAN DEFAULT true
-);
+-- Caso a tabela public.configuracoes tenha sido criada pelo site antigo sem a coluna updated_at:
+ALTER TABLE public.configuracoes ADD COLUMN IF NOT EXISTS valor JSONB;
+ALTER TABLE public.configuracoes ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now();
 
-CREATE TABLE IF NOT EXISTS public.candidatos_base (
-    id TEXT PRIMARY KEY,
-    nome TEXT NOT NULL,
-    cpf TEXT DEFAULT '',
-    email TEXT DEFAULT '',
-    whatsapp TEXT DEFAULT '',
-    tipo TEXT DEFAULT 'PF',
-    created_at TIMESTAMPTZ DEFAULT now()
-);
+-- 2. ELIMINAR TODAS AS TABELAS DO OUTRO SITE / NÃO UTILIZADAS PELO SITE ATUAL
+DROP TABLE IF EXISTS public.respostas CASCADE;
+DROP TABLE IF EXISTS public.lotes CASCADE;
+DROP TABLE IF EXISTS public.concursos CASCADE;
+DROP TABLE IF EXISTS public.comarcas_tjrs CASCADE;
+DROP TABLE IF EXISTS public.candidatos_base CASCADE;
+
+-- Remove dinamicamente qualquer outra tabela residual no schema public que não seja 'configuracoes'
+DO $$
+DECLARE
+    r RECORD;
+BEGIN
+    FOR r IN (
+        SELECT tablename
+        FROM pg_tables
+        WHERE schemaname = 'public'
+          AND tablename <> 'configuracoes'
+    ) LOOP
+        EXECUTE format('DROP TABLE IF EXISTS public.%I CASCADE', r.tablename);
+    END LOOP;
+END $$;
 
 -- =====================================================================
--- 2. LIMPEZA DE CONFLITOS E MIGRAÇÃO AUTOMÁTICA DE CHAVES NA TABELA configuracoes
+-- 3. MIGRAÇÃO SEGURA E LIMPEZA DE DADOS DO OUTRO SITE EM public.configuracoes
 -- =====================================================================
 
--- 2.1 Migra concursos de chaves legadas (certam_concursos_cargos ou _v1.._v5) para certam_concursos_cargos_v6
+-- 3.1 Migra concursos de chaves legadas (se existirem) para certam_concursos_cargos_v6
 DO $$
 DECLARE
     legacy_val JSONB;
@@ -119,7 +77,7 @@ BEGIN
         )
         AND valor IS NOT NULL
         AND valor::text NOT IN ('[]', '{}', '""', 'null')
-        ORDER BY updated_at DESC
+        ORDER BY updated_at DESC NULLS LAST
         LIMIT 1;
 
         IF legacy_val IS NOT NULL THEN
@@ -130,7 +88,7 @@ BEGIN
     END IF;
 END $$;
 
--- 2.2 Migra lotes de chaves legadas para certam_lotes_data_v6
+-- 3.2 Migra lotes de chaves legadas para certam_lotes_data_v6
 DO $$
 DECLARE
     legacy_val JSONB;
@@ -152,7 +110,7 @@ BEGIN
         )
         AND valor IS NOT NULL
         AND valor::text NOT IN ('[]', '{}', '""', 'null')
-        ORDER BY updated_at DESC
+        ORDER BY updated_at DESC NULLS LAST
         LIMIT 1;
 
         IF legacy_val IS NOT NULL THEN
@@ -163,7 +121,7 @@ BEGIN
     END IF;
 END $$;
 
--- 2.3 Migra auditorias, vinculações, contatos, notificações e usuários legados
+-- 3.3 Migra auditorias, vinculações, contatos e usuários se estivessem em versão anterior
 INSERT INTO public.configuracoes (chave, valor, updated_at)
 SELECT 'certam_perfil_audit_requests_v5', valor, now()
 FROM public.configuracoes
@@ -185,105 +143,94 @@ WHERE chave = 'certam_contact_messages_v4'
   AND NOT EXISTS (SELECT 1 FROM public.configuracoes WHERE chave = 'certam_contact_messages_v5')
 ON CONFLICT (chave) DO NOTHING;
 
-INSERT INTO public.configuracoes (chave, valor, updated_at)
-SELECT 'certam_notifications_events_v5', valor, now()
-FROM public.configuracoes
-WHERE chave IN ('certam_notifications_events_v4', 'certam_notifications_events_v3')
-  AND NOT EXISTS (SELECT 1 FROM public.configuracoes WHERE chave = 'certam_notifications_events_v5')
-ORDER BY updated_at DESC
-LIMIT 1
-ON CONFLICT (chave) DO NOTHING;
-
-INSERT INTO public.configuracoes (chave, valor, updated_at)
-SELECT 'certam_users_registry_v2', valor, now()
-FROM public.configuracoes
-WHERE chave = 'certam_users_registry_v1'
-  AND NOT EXISTS (SELECT 1 FROM public.configuracoes WHERE chave = 'certam_users_registry_v2')
-ON CONFLICT (chave) DO NOTHING;
-
--- 2.4 Remove chaves obsoletas/conflitantes da tabela configuracoes
+-- 3.4 ELIMINA TODOS OS DADOS CADASTRADOS PELO OUTRO SITE E CHAVES DE TESTE OBSOLETAS
 DELETE FROM public.configuracoes
-WHERE chave IN (
-    '_test_ping',
-    'certam_concursos_cargos',
-    'certam_concursos_cargos_v1',
-    'certam_concursos_cargos_v2',
-    'certam_concursos_cargos_v3',
-    'certam_concursos_cargos_v4',
-    'certam_concursos_cargos_v5',
-    'certam_lotes_data',
-    'certam_lotes_data_v1',
-    'certam_lotes_data_v2',
-    'certam_lotes_data_v3',
-    'certam_lotes_data_v4',
-    'certam_lotes_data_v5',
-    'certam_users_registry_v1',
-    'certam_perfil_audit_requests_v4',
-    'certam_vinculacao_requests_v4',
-    'certam_contact_messages_v4',
-    'certam_notifications_events_v3',
-    'certam_notifications_events_v4',
-    'certam_faq_items_v1',
-    'certam_faq_items_v2',
-    'certam_faq_items_v3',
-    'certam_faq_items_v4',
-    'certam_faq_items_v5'
-)
-OR chave LIKE 'certam_candidatos_data_v1_%'
-OR chave LIKE 'certam_candidatos_data_v2_%'
-OR chave LIKE 'certam_candidatos_data_v3_%'
-OR chave LIKE 'certam_candidatos_data_v4_%'
-OR chave LIKE 'certam_candidatos_data_v5_%';
+WHERE chave NOT LIKE 'certam_%'
+   OR chave IN (
+       '_test_ping',
+       'certam_diag_heartbeat',
+       'certam_concursos_cargos',
+       'certam_concursos_cargos_v1',
+       'certam_concursos_cargos_v2',
+       'certam_concursos_cargos_v3',
+       'certam_concursos_cargos_v4',
+       'certam_concursos_cargos_v5',
+       'certam_lotes_data',
+       'certam_lotes_data_v1',
+       'certam_lotes_data_v2',
+       'certam_lotes_data_v3',
+       'certam_lotes_data_v4',
+       'certam_lotes_data_v5',
+       'certam_users_registry_v1',
+       'certam_perfil_audit_requests_v4',
+       'certam_vinculacao_requests_v4',
+       'certam_contact_messages_v4',
+       'certam_notifications_events_v3',
+       'certam_notifications_events_v4',
+       'certam_faq_items_v1',
+       'certam_faq_items_v2',
+       'certam_faq_items_v3',
+       'certam_faq_items_v4',
+       'certam_faq_items_v5'
+   )
+   OR chave LIKE 'certam_candidatos_data_v1_%'
+   OR chave LIKE 'certam_candidatos_data_v2_%'
+   OR chave LIKE 'certam_candidatos_data_v3_%'
+   OR chave LIKE 'certam_candidatos_data_v4_%'
+   OR chave LIKE 'certam_candidatos_data_v5_%'
+   OR chave LIKE '%tjrs_2024%'
+   OR chave LIKE '%tjrs_analista_2024%'
+   OR chave LIKE '%mprs_2024%';
 
--- 2.5 Remove o registro legado 'tjrs_analista_2024' de public.concursos caso conflite com a estrutura multi-cargo
-DELETE FROM public.concursos WHERE id = 'tjrs_analista_2024';
+-- 3.5 Remove eventual concurso de teste antigo (tjrs_2024 / mprs_2024) de dentro do array JSON certam_concursos_cargos_v6
+UPDATE public.configuracoes
+SET valor = COALESCE(
+    (
+        SELECT jsonb_agg(elem)
+        FROM jsonb_array_elements(
+            CASE
+                WHEN jsonb_typeof(valor) = 'array' THEN valor
+                WHEN jsonb_typeof(valor) = 'string' AND (valor #>> '{}') LIKE '[%' THEN (valor #>> '{}')::jsonb
+                ELSE '[]'::jsonb
+            END
+        ) AS elem
+        WHERE lower(COALESCE(elem->>'id', '')) NOT IN ('tjrs_2024', 'tjrs_analista_2024', 'mprs_2024')
+          AND NOT (upper(COALESCE(elem->>'orgao', '')) = 'TJRS' AND COALESCE(elem->>'ano', '') = '2024')
+    ),
+    '[]'::jsonb
+),
+updated_at = now()
+WHERE chave = 'certam_concursos_cargos_v6';
 
 -- =====================================================================
--- 3. HABILITAÇÃO DO ROW LEVEL SECURITY (RLS) COM POLÍTICAS PERMISSIVAS
--- Garante que o site consiga ler e gravar todas as tabelas sem erro 42501!
+-- 4. PERMISSÕES E ROW LEVEL SECURITY (RLS) NA TABELA public.configuracoes
+-- Garante que todos os usuários (logados ou anônimos) visualizem concursos e
+-- listas de classificação e consigam enviar solicitações ao painel Admin.
 -- =====================================================================
 
-ALTER TABLE public.concursos ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.lotes ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.respostas ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.configuracoes ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.comarcas_tjrs ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.candidatos_base ENABLE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS "concursos_leitura_publica" ON public.concursos;
-CREATE POLICY "concursos_leitura_publica" ON public.concursos FOR SELECT USING (true);
-DROP POLICY IF EXISTS "concursos_escrita_publica" ON public.concursos;
-CREATE POLICY "concursos_escrita_publica" ON public.concursos FOR ALL USING (true) WITH CHECK (true);
-
-DROP POLICY IF EXISTS "lotes_leitura_publica" ON public.lotes;
-CREATE POLICY "lotes_leitura_publica" ON public.lotes FOR SELECT USING (true);
-DROP POLICY IF EXISTS "lotes_escrita_publica" ON public.lotes;
-CREATE POLICY "lotes_escrita_publica" ON public.lotes FOR ALL USING (true) WITH CHECK (true);
-
-DROP POLICY IF EXISTS "respostas_leitura_publica" ON public.respostas;
-CREATE POLICY "respostas_leitura_publica" ON public.respostas FOR SELECT USING (true);
-DROP POLICY IF EXISTS "respostas_escrita_publica" ON public.respostas;
-CREATE POLICY "respostas_escrita_publica" ON public.respostas FOR ALL USING (true) WITH CHECK (true);
+GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON TABLE public.configuracoes TO anon, authenticated, service_role;
 
 DROP POLICY IF EXISTS "configuracoes_leitura_publica" ON public.configuracoes;
-CREATE POLICY "configuracoes_leitura_publica" ON public.configuracoes FOR SELECT USING (true);
+CREATE POLICY "configuracoes_leitura_publica"
+ON public.configuracoes
+FOR SELECT
+TO public
+USING (true);
+
 DROP POLICY IF EXISTS "configuracoes_escrita_publica" ON public.configuracoes;
-CREATE POLICY "configuracoes_escrita_publica" ON public.configuracoes FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "configuracoes_escrita_publica"
+ON public.configuracoes
+FOR ALL
+TO public
+USING (true)
+WITH CHECK (true);
 
-DROP POLICY IF EXISTS "comarcas_tjrs_leitura_publica" ON public.comarcas_tjrs;
-CREATE POLICY "comarcas_tjrs_leitura_publica" ON public.comarcas_tjrs FOR SELECT USING (true);
-DROP POLICY IF EXISTS "comarcas_tjrs_escrita_publica" ON public.comarcas_tjrs;
-CREATE POLICY "comarcas_tjrs_escrita_publica" ON public.comarcas_tjrs FOR ALL USING (true) WITH CHECK (true);
-
-DROP POLICY IF EXISTS "candidatos_base_leitura_publica" ON public.candidatos_base;
-CREATE POLICY "candidatos_base_leitura_publica" ON public.candidatos_base FOR SELECT USING (true);
-DROP POLICY IF EXISTS "candidatos_base_escrita_publica" ON public.candidatos_base;
-CREATE POLICY "candidatos_base_escrita_publica" ON public.candidatos_base FOR ALL USING (true) WITH CHECK (true);
-
--- Recarrega o cache de schema do PostgREST no Supabase
+-- Recarrega o cache de schema do PostgREST no Supabase imediatamente
 NOTIFY pgrst, 'reload schema';
 
 -- =====================================================================
 -- FIM DO SCRIPT
 -- =====================================================================
-

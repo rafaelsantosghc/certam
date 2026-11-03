@@ -57,6 +57,37 @@ function sanitizeSyncEntryValue(key: string, valStr: string): string {
       // ignore
     }
   }
+  if (key === 'certam_users_registry_v2' && valStr.startsWith('{')) {
+    try {
+      const parsed = JSON.parse(valStr);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        const cleaned: Record<string, any> = {};
+        let changed = false;
+        for (const [uk, u] of Object.entries(parsed)) {
+          if (!u || typeof u !== 'object') {
+            changed = true;
+            continue;
+          }
+          const usr = u as any;
+          const email = String(usr.email || '').trim().toLowerCase();
+          const hasRealEmail =
+            email.length > 0 &&
+            !email.endsWith('@portalcertam.com.br') &&
+            !email.startsWith('cand-pre-');
+          if (!hasRealEmail && !usr.bloqueado && usr.status_cadastro === 'primeiro_acesso') {
+            changed = true;
+            continue;
+          }
+          cleaned[uk] = usr;
+        }
+        if (changed) {
+          return JSON.stringify(cleaned);
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
   return valStr;
 }
 
@@ -67,9 +98,18 @@ function readDbFile(filePath: string): SyncDbFileFormat | null {
       const parsed = JSON.parse(raw);
       if (parsed && typeof parsed === 'object') {
         if (parsed.entries && typeof parsed.entries === 'object') {
+          const rawVersions =
+            parsed.versions && typeof parsed.versions === 'object' ? parsed.versions : {};
+          const clampedVersions: Record<string, number> = {};
+          const now = Date.now();
+          for (const [vk, vv] of Object.entries(rawVersions)) {
+            if (typeof vv === 'number') {
+              clampedVersions[vk] = vv === 1793400000000 || vv > now + 60000 ? 1 : vv;
+            }
+          }
           return {
             entries: parsed.entries,
-            versions: parsed.versions && typeof parsed.versions === 'object' ? parsed.versions : {},
+            versions: clampedVersions,
           };
         }
         const entries: Record<string, string> = {};
@@ -126,10 +166,12 @@ function normalizeAndMigrateDb(db: SyncDbFileFormat): { db: SyncDbFileFormat; mi
   const versions = { ...db.versions };
   let migrated = false;
 
-  if ('_test_ping' in entries) {
-    delete entries['_test_ping'];
-    delete versions['_test_ping'];
-    migrated = true;
+  for (const k of Object.keys(entries)) {
+    if (!k.startsWith('certam_') || k === 'certam_diag_heartbeat') {
+      delete entries[k];
+      delete versions[k];
+      migrated = true;
+    }
   }
 
   for (const [oldKey, newKey] of Object.entries(LEGACY_KEY_MIGRATIONS)) {
@@ -162,13 +204,22 @@ function normalizeAndMigrateDb(db: SyncDbFileFormat): { db: SyncDbFileFormat; mi
       delete entries[key];
       delete versions[key];
       migrated = true;
+    } else if (
+      key.endsWith('_tjrs_2024') ||
+      key.includes('_tjrs_2024_') ||
+      key.endsWith('_mprs_2024') ||
+      key.includes('_mprs_2024_')
+    ) {
+      delete entries[key];
+      delete versions[key];
+      migrated = true;
     }
   }
 
   for (const key of Object.keys(entries)) {
     const sanitized = sanitizeSyncEntryValue(key, entries[key]);
     if (sanitized !== entries[key]) {
-      if (isNonEmptyJsonStr(sanitized)) {
+      if (isNonEmptyJsonStr(sanitized) || key === 'certam_users_registry_v2') {
         entries[key] = sanitized;
       } else {
         delete entries[key];

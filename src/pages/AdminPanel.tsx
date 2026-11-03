@@ -695,8 +695,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         const concObj = concursos.find((c) => c.id === importConcursoId);
         const cargoObj = concObj?.cargos?.find((cg) => cg.id === importCargoId);
 
-        // 1. Salvar lista de classificação do cargo em lote
+        // 1. Salvar lista de classificação do cargo em lote e publicar imediatamente para todos os usuários
         lotesStore.salvarCandidatos(importConcursoId, importCargoId, candidatosCompletos, true);
+        void cloudSync.pushKey(
+          `certam_candidatos_data_v6_${importConcursoId}_${importCargoId}`,
+          candidatosCompletos,
+          true
+        );
 
         // 2. Sincronizar todos os candidatos com o Cadastro Geral de Usuários em uma única operação em lote O(N) (Item 8 & Item 18)
         userRegistryStore.cadastrarOuSincronizarCandidatosEmLote(
@@ -719,10 +724,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           certamStore.adicionarLotacoesAoCatalogoEmLote(importConcursoId, lotacoesUnicas);
         }
 
+        void cloudSync.pushAllLocal(true);
         setUsuariosGerais(userRegistryStore.getAllUsers());
         setImportando(false);
         showToast(
-          `${candidatosCompletos.length} candidatos importados para o cargo e sincronizados com o Cadastro Geral!`
+          `${candidatosCompletos.length} candidatos importados e publicados para todos os usuários!`
         );
         setPreviewPlanilha([]);
         setLinhasBrutasPlanilha([]);
@@ -3200,21 +3206,74 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       {/* ============================================================== */}
       {abaAdmin === 'supabase' && (
         <section className="space-y-6">
-          {/* Cabeçalho e Ações de Verificação e Limpeza */}
+          {/* Cabeçalho e Ações de Verificação e Limpeza Geral */}
           <div className="bg-white rounded-2xl p-6 sm:p-8 border border-slate-200 card-shadow flex flex-col lg:flex-row lg:items-center justify-between gap-4">
             <div className="space-y-1 max-w-2xl">
               <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-[10px] font-mono font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                <span>MONITOR DE COMUNICAÇÃO EM TEMPO REAL</span>
+                <span>BANCO DE DADOS EXCLUSIVO DO SITE ATUAL (public.configuracoes)</span>
               </div>
               <h2 className="text-xl font-bold font-serif text-slate-900">
-                Diagnóstico do Supabase & Servidor de Sincronização
+                Limpeza Geral do Supabase & Sincronização de Classificação
               </h2>
               <p className="text-xs text-slate-500 leading-relaxed">
-                Verifique se o banco de dados está recebendo e enviando Concursos, Lotes, Solicitações de Alteração Cadastral (Auditoria) e Fale Conosco, e limpe chaves antigas ou tabelas em conflito com 1 clique.
+                O site atual utiliza <strong>exclusivamente</strong> a tabela{' '}
+                <code className="font-mono text-slate-700">public.configuracoes</code>. Use os botões ao lado para eliminar dados residuais de outro site antigo, publicar todas as listas de classificação (<code className="font-mono text-slate-700">certam_candidatos_data_v6_*</code>) para usuários comuns e copiar o script SQL que apaga todas as tabelas inutilizadas.
               </p>
             </div>
 
             <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  const sqlLimpeza = `-- LIMPEZA GERAL: MANTÉM APENAS public.configuracoes E APAGA TABELAS/DADOS DO OUTRO SITE
+CREATE TABLE IF NOT EXISTS public.configuracoes (
+    chave TEXT PRIMARY KEY,
+    valor JSONB NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+ALTER TABLE public.configuracoes ADD COLUMN IF NOT EXISTS valor JSONB;
+ALTER TABLE public.configuracoes ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now();
+
+DROP TABLE IF EXISTS public.respostas CASCADE;
+DROP TABLE IF EXISTS public.lotes CASCADE;
+DROP TABLE IF EXISTS public.concursos CASCADE;
+DROP TABLE IF EXISTS public.comarcas_tjrs CASCADE;
+DROP TABLE IF EXISTS public.candidatos_base CASCADE;
+
+DO $$
+DECLARE r RECORD;
+BEGIN
+  FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename <> 'configuracoes') LOOP
+    EXECUTE format('DROP TABLE IF EXISTS public.%I CASCADE', r.tablename);
+  END LOOP;
+END $$;
+
+DELETE FROM public.configuracoes
+WHERE chave NOT LIKE 'certam_%'
+   OR chave LIKE 'certam_candidatos_data_v1_%'
+   OR chave LIKE 'certam_candidatos_data_v2_%'
+   OR chave LIKE 'certam_candidatos_data_v3_%'
+   OR chave LIKE 'certam_candidatos_data_v4_%'
+   OR chave LIKE 'certam_candidatos_data_v5_%'
+   OR chave LIKE '%tjrs_2024%'
+   OR chave LIKE '%mprs_2024%';
+
+ALTER TABLE public.configuracoes ENABLE ROW LEVEL SECURITY;
+GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON TABLE public.configuracoes TO anon, authenticated, service_role;
+DROP POLICY IF EXISTS "configuracoes_leitura_publica" ON public.configuracoes;
+CREATE POLICY "configuracoes_leitura_publica" ON public.configuracoes FOR SELECT TO public USING (true);
+DROP POLICY IF EXISTS "configuracoes_escrita_publica" ON public.configuracoes;
+CREATE POLICY "configuracoes_escrita_publica" ON public.configuracoes FOR ALL TO public USING (true) WITH CHECK (true);
+NOTIFY pgrst, 'reload schema';`;
+                  navigator.clipboard.writeText(sqlLimpeza);
+                  showToast('Script SQL de limpeza geral copiado! Cole no SQL Editor do Supabase e clique em RUN.');
+                }}
+                className="px-4 py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-bold text-xs rounded-xl cursor-pointer transition-all shadow-xs"
+              >
+                Copiar SQL (Eliminar Tabelas do Outro Site)
+              </button>
+
               <button
                 type="button"
                 disabled={diagLoading}
@@ -3222,7 +3281,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   setDiagLoading(true);
                   try {
                     await cloudSync.pullFromServer();
-                    await cloudSync.pushAllLocal(false);
+                    await cloudSync.pushAllLocal(true);
                     const rep = await cloudSync.runDiagnostics();
                     setDiagReport(rep);
                     reloadData();
@@ -3255,7 +3314,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     setContatos(contactStore.getMensagens());
                     setUsuariosGerais(userRegistryStore.getAllUsers());
                     showToast(
-                      `Conflitos limpos e ${res.publishedKeysCount} bases republicadas para todos os usuários!`
+                      `Limpeza geral concluída! ${res.publishedKeysCount} bases (incluindo listas de classificação) publicadas!`
                     );
                   } finally {
                     setCleaningConflicts(false);
@@ -3265,7 +3324,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               >
                 {cleaningConflicts
                   ? 'Limpando e republicando...'
-                  : 'Limpar Conflitos e Republicar Tudo Agora'}
+                  : 'Limpar Banco e Republicar Tudo Agora'}
               </button>
             </div>
           </div>
@@ -3280,9 +3339,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 <p className="text-xs text-slate-500">
                   Caso as variáveis <code className="font-mono text-slate-700">VITE_SUPABASE_URL</code> e{' '}
                   <code className="font-mono text-slate-700">VITE_SUPABASE_ANON_KEY</code> não estejam definidas no ambiente, informe abaixo os dados do seu projeto (disponíveis no Supabase em{' '}
-                  <strong>Project Settings → API</strong>) para ativar a sincronização direta com as tabelas{' '}
-                  <code className="font-mono text-slate-700">public.configuracoes</code> e{' '}
-                  <code className="font-mono text-slate-700">public.concursos</code>.
+                  <strong>Project Settings → API</strong>) para ativar a sincronização direta com a tabela única{' '}
+                  <code className="font-mono text-slate-700">public.configuracoes</code>.
                 </p>
               </div>
               <span
