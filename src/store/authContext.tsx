@@ -106,10 +106,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       if (usuario) {
         localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(usuario));
-        const vinculado = userRegistryStore.vincularOuRegistrarUsuarioLogin(usuario);
-        if (vinculado && (vinculado.nome !== usuario.nome || vinculado.cpf !== usuario.cpf)) {
-          setUsuario((prev) => (prev ? { ...prev, ...vinculado } : null));
-        }
         if (usuario.is_admin || usuario.email?.toLowerCase() === 'rafasms0@hotmail.com') {
           void cloudSync.pushAllLocal(true).then(() => cloudSync.pullFromServer());
         } else {
@@ -223,9 +219,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (req && mudancas) {
         setUsuario((prev) => {
           if (!prev) return null;
+          const prevCpf = prev.cpf ? prev.cpf.replace(/\D/g, '') : '';
+          const reqCpf = req.cpf ? req.cpf.replace(/\D/g, '') : '';
           const isMatch =
-            (prev.email && prev.email.toLowerCase() === req.usuario_email.toLowerCase()) ||
-            (prev.cpf && req.cpf && prev.cpf.replace(/\D/g, '') === req.cpf.replace(/\D/g, ''));
+            (req.usuario_id && (prev.id === req.usuario_id || prev.candidato_id === req.usuario_id)) ||
+            (prev.email && req.usuario_email && prev.email.toLowerCase().trim() === req.usuario_email.toLowerCase().trim()) ||
+            (prevCpf.length >= 7 && reqCpf.length >= 7 && prevCpf === reqCpf) ||
+            (prev.nome && req.usuario_nome && prev.nome.trim().toLowerCase() === req.usuario_nome.trim().toLowerCase());
           if (isMatch) {
             const atualizado = { ...prev, ...mudancas };
             try {
@@ -405,8 +405,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const match =
       (cpf ? identificarCandidatoMaster(nomeLimpo, cpf) : null) ||
-      matchEmail ||
-      identificarCandidatoMaster(nomeLimpo);
+      matchEmail;
 
     const isAdminUser = ADMIN_EMAILS.some((adm) => adm.toLowerCase() === emailLimpo);
 
@@ -420,7 +419,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       status_cadastro: existingInRegistry?.status_cadastro || 'ativo',
       candidato_id: existingInRegistry?.candidato_id || (match ? match.id : `cand-${Date.now().toString(36)}`),
       cpf: existingInRegistry?.cpf || cpf || match?.cpf || '',
-      cpf_verificado: !!(existingInRegistry?.cpf || match),
+      cpf_verificado: Boolean(existingInRegistry?.cpf_verificado || existingInRegistry?.cpf || match?.cpf),
       data_nascimento: existingInRegistry?.data_nascimento || match?.data_nascimento || '',
       telefone: existingInRegistry?.telefone || match?.whatsapp || '',
       whatsapp: existingInRegistry?.whatsapp || match?.whatsapp || '',
@@ -439,15 +438,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           : []),
     };
 
-    // Vincula automaticamente no Cadastro Geral de Usuários
-    const vinculado = userRegistryStore.vincularOuRegistrarUsuarioLogin(baseCandidato);
-    setUsuario(vinculado);
-
-    // Se o candidato ainda não possui CPF ou data de nascimento, obriga preenchimento cadastral
-    if (!vinculado.cpf || !vinculado.data_nascimento) {
+    // Se já possuir CPF ou já estiver no Cadastro Geral, vincula normalmente;
+    // se for o 1º acesso sem CPF, mantém em sessão e abre o modal obrigatório de Nome e CPF
+    if (baseCandidato.cpf && baseCandidato.cpf.replace(/\D/g, '').length >= 9) {
+      const vinculado = userRegistryStore.vincularOuRegistrarUsuarioLogin(baseCandidato);
+      setUsuario(vinculado);
+    } else {
+      setUsuario(baseCandidato);
       setTimeout(() => {
         window.dispatchEvent(new CustomEvent('certam_abrir_perfil_candidato_obrigatorio'));
-      }, 350);
+      }, 200);
     }
   };
 
@@ -458,17 +458,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const atualizarDadosUsuario = (dados: Partial<Usuario>) => {
     setUsuario((prev) => {
       if (!prev) return null;
-      const atualizado: Usuario = { ...prev, ...dados, status_cadastro: 'ativo' };
-      // Se alterou nome ou CPF, re-cruzar no cadastro master
-      if (dados.nome || dados.cpf) {
-        const match = identificarCandidatoMaster(atualizado.nome, atualizado.cpf);
-        if (match) {
-          atualizado.candidato_id = match.id;
-          atualizado.cpf_verificado = true;
-        }
-      }
-      const consolidado = userRegistryStore.vincularOuRegistrarUsuarioLogin(atualizado);
-      return consolidado;
+      const atualizado: Usuario = {
+        ...prev,
+        ...dados,
+        nome: dados.nome !== undefined ? dados.nome : prev.nome,
+        cpf: dados.cpf !== undefined ? dados.cpf : prev.cpf,
+        status_cadastro: 'ativo',
+      };
+      // Persiste diretamente no userRegistryStore preservando as mudanças explícitas
+      const salvo = userRegistryStore.salvarUsuario(atualizado);
+      return salvo;
     });
   };
 

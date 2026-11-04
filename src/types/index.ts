@@ -356,6 +356,7 @@ export interface AlteracaoCampoItem {
 
 export interface PerfilAuditRequest {
   id: string;
+  usuario_id?: string;
   usuario_email: string;
   usuario_nome: string;
   cpf: string;
@@ -371,6 +372,7 @@ export interface PerfilAuditRequest {
 // -------------------------------------------------------------
 export interface SolicitacaoVinculacao {
   id: string;
+  usuario_id?: string;
   usuario_email: string;
   usuario_nome: string;
   cpf: string;
@@ -387,7 +389,7 @@ export interface SolicitacaoVinculacao {
   concurso_nome?: string;
   cargo_nome?: string;
   ano_concurso?: string;
-  tipo?: 'vinculacao_nao_efetivada' | 'inclusao_novo_concurso';
+  tipo?: 'vinculacao_nao_efetivada' | 'inclusao_novo_concurso' | 'novo_cadastro';
 }
 
 // -------------------------------------------------------------

@@ -4,6 +4,7 @@ import { FileText, Download, Search, Calendar, Eye, Plus, Pencil, Trash2, X, Shi
 import { DocumentViewerModal } from './DocumentViewerModal';
 import { useAuth } from '../store/authContext';
 import { certamStore } from '../store/certamStore';
+import { isDebugMode } from '../utils/environment';
 
 interface DocumentosConcursoViewProps {
   concurso: Concurso;
@@ -95,8 +96,8 @@ export const DocumentosConcursoView: React.FC<DocumentosConcursoViewProps> = ({ 
 
   return (
     <div className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-7 card-shadow space-y-6">
-      {/* Barra de Administração (Quando Modo Admin Ativo) */}
-      {isAdmin && (
+      {/* Barra de Administração (Quando Modo Admin Ativo em Ambiente de Teste / isDebugMode) */}
+      {isAdmin && isDebugMode() && (
         <div className="p-3.5 bg-gradient-to-r from-amber-50 to-amber-100/60 border border-amber-300 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
           <div className="flex items-center gap-2">
             <span className="p-1.5 bg-amber-500 text-slate-950 font-bold rounded-lg text-xs flex items-center justify-center">
@@ -182,8 +183,8 @@ export const DocumentosConcursoView: React.FC<DocumentosConcursoViewProps> = ({ 
                       {doc.data_publicacao}
                     </span>
 
-                    {/* Botões de Ação do Admin na Listagem */}
-                    {isAdmin && (
+                    {/* Botões de Ação do Admin na Listagem (Exclusivo isDebugMode) */}
+                    {isAdmin && isDebugMode() && (
                       <div className="flex items-center gap-1 bg-amber-50 px-1 py-0.5 rounded-lg border border-amber-200">
                         <button
                           type="button"

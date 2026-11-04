@@ -866,27 +866,59 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       }
     });
 
-    // 2. Atualizar no repositório persistente de perfis cadastrados do CERTAM (por email, por CPF e por ID)
+    // 2. Atualizar no repositório persistente de perfis cadastrados do CERTAM (por ID, por email, por CPF e por nome)
+    let atualizadoNoRegistro = false;
+    if (req.usuario_id) {
+      if (userRegistryStore.atualizarCamposUsuario(req.usuario_id, mudancas)) atualizadoNoRegistro = true;
+    }
     if (req.usuario_email) {
-      userRegistryStore.atualizarCamposUsuario(req.usuario_email, mudancas);
+      if (userRegistryStore.atualizarCamposUsuario(req.usuario_email, mudancas)) atualizadoNoRegistro = true;
     }
     if (req.cpf) {
-      userRegistryStore.atualizarCamposUsuario(req.cpf, mudancas);
+      if (userRegistryStore.atualizarCamposUsuario(req.cpf, mudancas)) atualizadoNoRegistro = true;
+    }
+    if (req.usuario_nome) {
+      if (userRegistryStore.atualizarCamposUsuario(req.usuario_nome, mudancas)) atualizadoNoRegistro = true;
     }
 
-    // 3. Aplicar diretamente no perfil ativo se for o usuário conectado (ex: admin ou candidato)
     const reqCpfLimpo = req.cpf ? limparCpf(req.cpf) : '';
-    const userCpfLimpo = usuario?.cpf ? limparCpf(usuario.cpf) : '';
-    const isCurrentActiveUser =
-      (usuario?.email && req.usuario_email && usuario.email.toLowerCase().trim() === req.usuario_email.toLowerCase().trim()) ||
-      (userCpfLimpo.length >= 7 && reqCpfLimpo.length >= 7 && userCpfLimpo === reqCpfLimpo) ||
-      (usuario?.nome && req.usuario_nome && normalizarTexto(usuario.nome) === normalizarTexto(req.usuario_nome));
 
-    if (isCurrentActiveUser) {
-      atualizarDadosUsuario(mudancas);
+    // Se o usuário ainda estava apenas virtual na listagem geral (getAllUsers), consolida no registro persistente com as mudanças
+    if (!atualizadoNoRegistro) {
+      const todos = userRegistryStore.getAllUsers();
+      const encontradoVirtual = todos.find((u) => {
+        const uCpf = u.cpf ? limparCpf(u.cpf) : '';
+        return (
+          (req.usuario_id && (u.id === req.usuario_id || u.candidato_id === req.usuario_id)) ||
+          (req.usuario_email && u.email && u.email.toLowerCase().trim() === req.usuario_email.toLowerCase().trim()) ||
+          (reqCpfLimpo.length >= 7 && uCpf.length >= 7 && uCpf === reqCpfLimpo) ||
+          (req.usuario_nome && u.nome && normalizarTexto(u.nome) === normalizarTexto(req.usuario_nome))
+        );
+      });
+
+      if (encontradoVirtual) {
+        userRegistryStore.salvarUsuario({
+          ...encontradoVirtual,
+          ...mudancas,
+        });
+      } else {
+        userRegistryStore.salvarUsuario({
+          id: req.usuario_id || `user-${Date.now().toString(36)}`,
+          nome: mudancas.nome || req.usuario_nome,
+          cpf: mudancas.cpf || req.cpf,
+          email: mudancas.email || req.usuario_email,
+          email_contato: mudancas.email_contato || req.usuario_email,
+          telefone: mudancas.telefone || mudancas.whatsapp,
+          whatsapp: mudancas.whatsapp || mudancas.telefone,
+          data_nascimento: mudancas.data_nascimento,
+          is_admin: false,
+          role: 'candidato',
+          status_cadastro: 'ativo',
+        });
+      }
     }
 
-    // 4. Atualizar também na chave de persistência do localStorage
+    // 3. Atualizar também na chave de persistência do localStorage ANTES de disparar eventos
     try {
       const storedKey = 'certam_auth_user_v8';
       const storedStr = localStorage.getItem(storedKey);
@@ -895,7 +927,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         const storedCpfLimpo = storedUser?.cpf ? limparCpf(storedUser.cpf) : '';
         if (
           storedUser &&
-          ((storedUser.email && req.usuario_email && storedUser.email.toLowerCase().trim() === req.usuario_email.toLowerCase().trim()) ||
+          ((req.usuario_id && (storedUser.id === req.usuario_id || storedUser.candidato_id === req.usuario_id)) ||
+            (storedUser.email && req.usuario_email && storedUser.email.toLowerCase().trim() === req.usuario_email.toLowerCase().trim()) ||
             (storedCpfLimpo.length >= 7 && reqCpfLimpo.length >= 7 && storedCpfLimpo === reqCpfLimpo) ||
             (storedUser.nome && req.usuario_nome && normalizarTexto(storedUser.nome) === normalizarTexto(req.usuario_nome)))
         ) {
@@ -907,6 +940,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       // ignore
     }
 
+    // 4. Aplicar diretamente no perfil ativo se for o usuário conectado (ex: admin ou candidato)
+    const userCpfLimpo = usuario?.cpf ? limparCpf(usuario.cpf) : '';
+    const isCurrentActiveUser =
+      (req.usuario_id && (usuario?.id === req.usuario_id || usuario?.candidato_id === req.usuario_id)) ||
+      (usuario?.email && req.usuario_email && usuario.email.toLowerCase().trim() === req.usuario_email.toLowerCase().trim()) ||
+      (userCpfLimpo.length >= 7 && reqCpfLimpo.length >= 7 && userCpfLimpo === reqCpfLimpo) ||
+      (usuario?.nome && req.usuario_nome && normalizarTexto(usuario.nome) === normalizarTexto(req.usuario_nome));
+
+    if (isCurrentActiveUser) {
+      atualizarDadosUsuario(mudancas);
+    }
+
     // 5. Aplicar alterações nas listas de candidatos de todos os concursos/cargos
     concursos.forEach((c) => {
       c.cargos?.forEach((cg) => {
@@ -914,6 +959,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         const matchIndex = cands.findIndex((cand) => {
           const candCpfLimpo = cand.cpf ? limparCpf(cand.cpf) : '';
           return (
+            (req.usuario_id && cand.id === req.usuario_id) ||
             (reqCpfLimpo.length >= 7 && candCpfLimpo.length >= 7 && candCpfLimpo === reqCpfLimpo) ||
             (req.usuario_email && cand.email && cand.email.toLowerCase().trim() === req.usuario_email.toLowerCase().trim()) ||
             (req.usuario_nome && cand.nome && normalizarTexto(cand.nome) === normalizarTexto(req.usuario_nome))
@@ -937,6 +983,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     const masterIdx = MASTER_CADASTRO_GERAL.findIndex((cand) => {
       const candCpfLimpo = cand.cpf ? limparCpf(cand.cpf) : '';
       return (
+        (req.usuario_id && cand.id === req.usuario_id) ||
         (reqCpfLimpo.length >= 7 && candCpfLimpo.length >= 7 && candCpfLimpo === reqCpfLimpo) ||
         (req.usuario_email && cand.email && cand.email.toLowerCase().trim() === req.usuario_email.toLowerCase().trim()) ||
         (req.usuario_nome && cand.nome && normalizarTexto(cand.nome) === normalizarTexto(req.usuario_nome))
@@ -952,8 +999,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       });
     }
 
-    // 7. Atualizar a listagem de usuários do painel administrativo
+    // 7. Atualizar a listagem de usuários e auditorias do painel administrativo
     setUsuariosGerais(userRegistryStore.getAllUsers());
+    setAuditRequests(auditStore.getAuditRequests());
 
     // 8. Disparar eventos globais para sincronização de abas e telas abertas
     window.dispatchEvent(new CustomEvent('certam_audit_approved', { detail: { req, mudancas } }));
@@ -962,15 +1010,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     // 9. Notificar o candidato sobre o deferimento das alterações
     const camposAlteradosStr = req.alteracoes.map((a) => a.campo_label).join(', ');
     notificationStore.criarNotificacao({
-      destinatario_email: req.usuario_email,
-      destinatario_nome: req.usuario_nome,
+      destinatario_email: mudancas.email || req.usuario_email,
+      destinatario_nome: mudancas.nome || req.usuario_nome,
       titulo: 'Alteração Cadastral Deferida',
-      mensagem: `Sua solicitação de atualização cadastral (${camposAlteradosStr}) foi analisada e DEFERIDA pela administração. Os dados já estão consolidados no seu perfil e refletidos nas listas de classificação.`,
+      mensagem: `Sua solicitação de atualização cadastral (${camposAlteradosStr}) foi analisada e DEFERIDA pela administração. Os dados já estão consolidados no Cadastro Geral e no seu acesso.`,
       tipo: 'aprovacao_perfil',
       urgente: false,
     });
 
-    showToast(`Alterações de ${req.usuario_nome} aprovadas e cadastro consolidado com sucesso!`);
+    showToast(`Alterações de ${mudancas.nome || req.usuario_nome} aprovadas e cadastro geral atualizado!`);
   };
 
   const handleAbrirIndeferirAuditoria = (req: PerfilAuditRequest) => {
@@ -1014,14 +1062,119 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   };
 
   // -------------------------------------------------------------
-  // HANDLERS DE VALIDAÇÃO MANUAL DE CANDIDATO
+  // HANDLERS DE VALIDAÇÃO MANUAL DE CANDIDATO E VINCULAÇÃO POR NOME PARECIDO
   // -------------------------------------------------------------
+  const handleVincularPorSugestaoNome = (
+    v: SolicitacaoVinculacao,
+    sug: {
+      candidato_id: string;
+      nome: string;
+      concurso_id?: string;
+      concurso_nome?: string;
+      cargo_id?: string;
+      cargo_nome?: string;
+      posicao?: number;
+    }
+  ) => {
+    auditStore.aprovarVinculacao(v.id);
+
+    userRegistryStore.vincularUsuarioACadastroExistente({
+      usuarioEmail: v.usuario_email,
+      usuarioCpf: v.cpf,
+      usuarioId: v.usuario_id,
+      alvoCandidatoId: sug.candidato_id,
+      concursoId: sug.concurso_id || v.concurso_id,
+      cargoId: sug.cargo_id || v.cargo_id,
+    });
+
+    setUsuariosGerais(userRegistryStore.getAllUsers());
+    setVinculacoes(auditStore.getVinculacoes());
+
+    notificationStore.criarNotificacao({
+      concurso_id: sug.concurso_id || v.concurso_id,
+      cargo_id: sug.cargo_id || v.cargo_id,
+      destinatario_email: v.usuario_email,
+      destinatario_nome: sug.nome || v.usuario_nome,
+      titulo: 'Cadastro Vinculado pelo Administrador',
+      mensagem: `Seu acesso (${v.usuario_email}) e CPF (${v.cpf}) foram vinculados ao registro oficial de "${sug.nome}"${
+        sug.concurso_nome ? ` no concurso ${sug.concurso_nome}` : ''
+      }.`,
+      tipo: 'validacao_aprovada',
+      urgente: false,
+    });
+
+    showToast(`Usuário "${v.usuario_nome}" vinculado com sucesso ao cadastro "${sug.nome}"!`);
+  };
+
+  const handleVincularUsuarioGeralACandidato = (
+    u: any,
+    sug: {
+      candidato_id: string;
+      nome: string;
+      concurso_id?: string;
+      concurso_nome?: string;
+      cargo_id?: string;
+      cargo_nome?: string;
+      posicao?: number;
+    }
+  ) => {
+    userRegistryStore.vincularUsuarioACadastroExistente({
+      usuarioEmail: u.email,
+      usuarioCpf: u.cpf,
+      usuarioId: u.id,
+      alvoCandidatoId: sug.candidato_id,
+      concursoId: sug.concurso_id,
+      cargoId: sug.cargo_id,
+    });
+
+    setUsuariosGerais(userRegistryStore.getAllUsers());
+    setModalEditarUsuarioAberto(false);
+    setUsuarioEditando(null);
+
+    if (u.email) {
+      notificationStore.criarNotificacao({
+        concurso_id: sug.concurso_id,
+        cargo_id: sug.cargo_id,
+        destinatario_email: u.email,
+        destinatario_nome: sug.nome || u.nome,
+        titulo: 'Cadastro Vinculado pelo Administrador',
+        mensagem: `Seu cadastro foi vinculado pela administração ao registro oficial de "${sug.nome}"${
+          sug.concurso_nome ? ` (${sug.concurso_nome})` : ''
+        }.`,
+        tipo: 'validacao_aprovada',
+        urgente: false,
+      });
+    }
+
+    showToast(`Cadastro de "${u.nome}" vinculado com sucesso a "${sug.nome}"!`);
+  };
+
   const handleAprovarVinculacao = (v: SolicitacaoVinculacao) => {
     auditStore.aprovarVinculacao(v.id);
 
+    // Se for um novo cadastro no 1º acesso sem concurso específico e nenhum candidato de lista foi selecionado, apenas homologa o novo cadastro geral
+    const idEscolhidoAdmin = vinculoCandSelecionado[v.id] || v.candidato_vinculado_id;
+    if (v.tipo === 'novo_cadastro' && !idEscolhidoAdmin) {
+      userRegistryStore.atualizarCamposUsuario(v.usuario_id || v.usuario_email || v.cpf, {
+        cpf_verificado: true,
+        status_cadastro: 'ativo',
+      });
+      setUsuariosGerais(userRegistryStore.getAllUsers());
+      setVinculacoes(auditStore.getVinculacoes());
+      notificationStore.criarNotificacao({
+        destinatario_email: v.usuario_email,
+        destinatario_nome: v.usuario_nome,
+        titulo: 'Novo Cadastro Homologado',
+        mensagem: `Seu cadastro com o CPF ${v.cpf} foi conferido e homologado pela administração do CERTAM.`,
+        tipo: 'validacao_aprovada',
+        urgente: false,
+      });
+      showToast(`Novo cadastro de ${v.usuario_nome} homologado com sucesso!`);
+      return;
+    }
+
     // Inserir ou atualizar na lista do concurso vinculando ao aprovado selecionado (Item 1)
     const cands = lotesStore.getCandidatos(v.concurso_id, v.cargo_id);
-    const idEscolhidoAdmin = vinculoCandSelecionado[v.id] || v.candidato_vinculado_id;
     const candExistente =
       (idEscolhidoAdmin ? cands.find((c) => c.id === idEscolhidoAdmin) : undefined) ||
       cands.find((c) => c.posicao === v.posicao_declarada);
@@ -1066,6 +1219,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       cargo_id: v.cargo_id,
     });
     setUsuariosGerais(userRegistryStore.getAllUsers());
+    setVinculacoes(auditStore.getVinculacoes());
 
     notificationStore.criarNotificacao({
       concurso_id: v.concurso_id,
@@ -2069,7 +2223,36 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                               <span className="text-[11px] text-slate-500">{u.cargo_nome || u.cargo_id}</span>
                             </div>
                           ) : (
-                            <span className="text-slate-400 italic text-[11px]">Cadastro Geral Portal</span>
+                            <div className="space-y-1">
+                              <span className="text-slate-400 italic text-[11px] block">Cadastro Geral Portal</span>
+                              {(() => {
+                                const sugs = userRegistryStore.buscarSugestoesNomesParecidos(
+                                  u.nome,
+                                  u.cpf,
+                                  u.email,
+                                  2
+                                );
+                                if (sugs.length === 0) return null;
+                                const top = sugs[0];
+                                return (
+                                  <div className="p-1.5 rounded-lg bg-amber-50 border border-amber-200 text-[10px] space-y-1">
+                                    <div className="font-bold text-amber-900 flex items-center gap-1">
+                                      <span>Sugestão ({top.similaridade}%):</span>
+                                      <span className="truncate max-w-[150px]" title={top.nome}>
+                                        {top.nome}
+                                      </span>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleVincularUsuarioGeralACandidato(u, top)}
+                                      className="px-2 py-0.5 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded text-[10px] cursor-pointer transition-colors"
+                                    >
+                                      Vincular Cadastro
+                                    </button>
+                                  </div>
+                                );
+                              })()}
+                            </div>
                           )}
                         </td>
                         <td className="py-3 px-3 text-center">
@@ -2147,7 +2330,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           {/* Modal de Edição / Novo Usuário */}
           {(modalEditarUsuarioAberto || modalNovoUsuarioAberto) && (
             <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
-              <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+              <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-4 max-h-[90vh] overflow-y-auto">
                 <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                   <h3 className="font-bold text-slate-900 text-base font-serif">
                     {modalEditarUsuarioAberto ? `Editar Cadastro: ${usuarioEditando?.nome}` : 'Novo Cadastro de Usuário'}
@@ -2179,6 +2362,58 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       required
                     />
                   </div>
+
+                  {/* Sugestões de Nomes Parecidos dentro do Modal de Edição */}
+                  {modalEditarUsuarioAberto &&
+                    usuarioEditando &&
+                    userFormNome.trim().length >= 3 &&
+                    (() => {
+                      const sugs = userRegistryStore.buscarSugestoesNomesParecidos(
+                        userFormNome,
+                        userFormCpf,
+                        userFormEmail,
+                        4
+                      );
+                      if (sugs.length === 0) return null;
+                      return (
+                        <div className="p-3 rounded-xl bg-teal-50/70 border border-teal-200 space-y-2">
+                          <span className="font-bold text-teal-950 text-[11px] flex items-center gap-1.5">
+                            <UserCheck className="w-3.5 h-3.5 text-teal-700 shrink-0" />
+                            <span>Sugestões de Nomes Parecidos para Vinculação:</span>
+                          </span>
+                          <div className="space-y-1.5">
+                            {sugs.map((sug) => (
+                              <div
+                                key={`${sug.candidato_id}-${sug.concurso_id || 'geral'}`}
+                                className="p-2 bg-white rounded-lg border border-teal-200/80 flex items-center justify-between gap-2"
+                              >
+                                <div className="min-w-0">
+                                  <div className="font-bold text-slate-900 text-xs truncate">
+                                    {sug.nome}{' '}
+                                    <span className="text-[10px] font-mono text-teal-700 bg-teal-100 px-1.5 py-0.5 rounded">
+                                      {sug.similaridade}% compatível
+                                    </span>
+                                  </div>
+                                  <div className="text-[10px] text-slate-500 truncate">
+                                    {sug.concurso_nome || 'Cadastro Geral'}
+                                    {sug.cargo_nome ? ` • ${sug.cargo_nome}` : ''}
+                                    {sug.posicao ? ` • ${sug.posicao}º lugar` : ''}
+                                    {sug.cpf ? ` • CPF: ${sug.cpf}` : ''}
+                                  </div>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => handleVincularUsuarioGeralACandidato(usuarioEditando, sug)}
+                                  className="px-2.5 py-1 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-lg text-[10px] shrink-0 cursor-pointer"
+                                >
+                                  Vincular a este
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })()}
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
@@ -2381,22 +2616,22 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       )}
 
       {/* ============================================================== */}
-      {/* ABA 3: VALIDAÇÃO MANUAL DE CANDIDATOS                          */}
+      {/* ABA 3: VALIDAÇÃO MANUAL DE CANDIDATOS E NOVOS CADASTROS        */}
       {/* ============================================================== */}
       {abaAdmin === 'validacoes' && (
         <section className="space-y-6">
           <div className="border-b border-slate-200 pb-3">
             <h2 className="text-xl font-bold font-serif text-slate-900">
-              Fila de Validação Manual de Aprovados
+              Fila de Validação Manual e Novos Cadastros (1º Acesso)
             </h2>
             <p className="text-xs text-slate-500">
-              Candidatos que não foram reconhecidos automaticamente pelo cruzamento de Nome/CPF e solicitaram liberação ao administrador.
+              Novos usuários cadastrados com CPF inédito no 1º acesso (com sugestões automáticas de nomes parecidos para vinculação) e solicitações de validação manual.
             </p>
           </div>
 
           {vinculacoes.length === 0 ? (
             <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center text-xs text-slate-400 card-shadow">
-              Nenhuma solicitação de validação pendente no momento.
+              Nenhuma solicitação de validação ou novo cadastro pendente no momento.
             </div>
           ) : (
             <div className="space-y-4">
@@ -2408,6 +2643,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     ? vinculoCandSelecionado[v.id]
                     : candSugerido?.id || '';
 
+                const sugestoesNomes = userRegistryStore.buscarSugestoesNomesParecidos(
+                  v.usuario_nome,
+                  v.cpf,
+                  v.usuario_email,
+                  5
+                );
+
                 return (
                   <div
                     key={v.id}
@@ -2416,6 +2658,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                       <div className="space-y-1">
                         <div className="flex items-center gap-2 flex-wrap">
+                          {v.tipo === 'novo_cadastro' && (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-teal-100 text-teal-900 border border-teal-300 uppercase">
+                              Novo Cadastro • 1º Acesso
+                            </span>
+                          )}
                           <span className="font-bold text-sm text-slate-900">{v.usuario_nome}</span>
                           <span className="text-2xs font-mono text-slate-500">({v.usuario_email})</span>
                           <span className="text-2xs font-mono text-slate-400">CPF: {v.cpf}</span>
@@ -2439,10 +2686,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                           {v.ano_concurso && (
                             <span className="text-2xs font-mono text-slate-500">({v.ano_concurso})</span>
                           )}
-                          <span className="text-slate-300">·</span>
-                          <span className="font-mono font-bold text-slate-800">
-                            Classificação oficial declarada: {v.posicao_declarada}º lugar
-                          </span>
+                          {v.tipo !== 'novo_cadastro' && (
+                            <>
+                              <span className="text-slate-300">·</span>
+                              <span className="font-mono font-bold text-slate-800">
+                                Classificação oficial declarada: {v.posicao_declarada}º lugar
+                              </span>
+                            </>
+                          )}
                           {v.cota_declarada && (
                             <>
                               <span className="text-slate-300">·</span>
@@ -2460,8 +2711,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         </div>
 
                         {v.comprovante_info && (
-                          <p className="text-2xs text-slate-500 bg-slate-50 p-2 rounded-lg border border-slate-100 max-w-xl">
-                            <strong>Observação / Justificativa do candidato:</strong> {v.comprovante_info}
+                          <p className="text-2xs text-slate-500 bg-slate-50 p-2 rounded-lg border border-slate-100 max-w-2xl">
+                            <strong>Informação do Sistema / Candidato:</strong> {v.comprovante_info}
                           </p>
                         )}
                       </div>
@@ -2482,18 +2733,71 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                             className="px-4 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1 shadow-xs"
                           >
                             <Check className="w-3.5 h-3.5" />
-                            <span>Vincular e Homologar Aprovado</span>
+                            <span>
+                              {v.tipo === 'novo_cadastro' && !idSelecionado
+                                ? 'Homologar como Novo Cadastro'
+                                : 'Vincular e Homologar Aprovado'}
+                            </span>
                           </button>
                         </div>
                       )}
                     </div>
 
-                    {/* Seletor para vincular a solicitação a um aprovado da lista / cadastro geral (Item 1) */}
-                    {v.status === 'pendente' && (
+                    {/* Sugestões Automáticas de Nomes Parecidos para Vinculação em 1 Clique */}
+                    {v.status === 'pendente' && sugestoesNomes.length > 0 && (
+                      <div className="p-3.5 bg-amber-50/70 border border-amber-200 rounded-xl space-y-2.5 text-xs">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-bold text-amber-950 flex items-center gap-1.5">
+                            <UserCheck className="w-4 h-4 text-amber-700 shrink-0" />
+                            <span>
+                              Nomes Parecidos Encontrados para &quot;{v.usuario_nome}&quot; (Sugestões de Vínculo):
+                            </span>
+                          </span>
+                          <span className="text-[10px] font-mono text-amber-800 bg-amber-100 px-2 py-0.5 rounded">
+                            {sugestoesNomes.length} sugestão(ões)
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                          {sugestoesNomes.map((sug) => (
+                            <div
+                              key={`${sug.candidato_id}-${sug.concurso_id || 'geral'}`}
+                              className="p-2.5 bg-white rounded-xl border border-amber-200 flex items-center justify-between gap-3 shadow-2xs"
+                            >
+                              <div className="min-w-0 space-y-0.5">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="font-bold text-slate-900 text-xs">{sug.nome}</span>
+                                  <span className="text-[10px] font-mono font-bold text-teal-800 bg-teal-100 px-1.5 py-0.5 rounded">
+                                    {sug.similaridade}% compatível
+                                  </span>
+                                </div>
+                                <div className="text-[11px] text-slate-600 truncate">
+                                  {sug.concurso_nome || 'Cadastro Geral'}
+                                  {sug.cargo_nome ? ` • ${sug.cargo_nome}` : ''}
+                                  {sug.posicao ? ` • ${sug.posicao}º lugar` : ''}
+                                  {sug.cpf ? ` • CPF: ${sug.cpf}` : ''}
+                                </div>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => handleVincularPorSugestaoNome(v, sug)}
+                                className="px-3 py-1.5 bg-[#07192B] hover:bg-[#0C2640] text-[#2DD4AA] font-bold rounded-lg text-[11px] shrink-0 cursor-pointer transition-colors"
+                              >
+                                Vincular a este
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Seletor para vincular a solicitação a um aprovado da lista / cadastro geral */}
+                    {v.status === 'pendente' && candsDoCargo.length > 0 && (
                       <div className="p-3 bg-teal-50/50 border border-teal-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
                         <label className="font-bold text-teal-950 flex items-center gap-1.5">
                           <UserCheck className="w-4 h-4 text-teal-700 shrink-0" />
-                          <span>Vincular usuário ao aprovado na lista de classificação / cadastro geral:</span>
+                          <span>Vincular manualmente a outro aprovado da lista deste cargo:</span>
                         </label>
                         <select
                           value={idSelecionado}
@@ -2506,7 +2810,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                           className="px-3 py-1.5 bg-white border border-teal-300 rounded-lg text-xs font-semibold text-slate-800 max-w-md w-full"
                         >
                           <option value="">
-                            -- Criar novo registro na {v.posicao_declarada}ª posição ({v.usuario_nome}) --
+                            {v.tipo === 'novo_cadastro'
+                              ? `-- Manter como novo cadastro sem vínculo na lista (${v.usuario_nome}) --`
+                              : `-- Criar novo registro na ${v.posicao_declarada}ª posição (${v.usuario_nome}) --`}
                           </option>
                           {candsDoCargo.map((cand) => (
                             <option key={cand.id} value={cand.id}>

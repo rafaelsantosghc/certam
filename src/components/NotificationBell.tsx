@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../store/authContext';
-import { notificationStore } from '../store/notificationStore';
+import { useNotifications } from '../store/notificationContext';
 import { NotificacaoItem } from '../types';
 import {
   Bell,
@@ -20,52 +20,10 @@ interface NotificationBellProps {
 }
 
 export const NotificationBell: React.FC<NotificationBellProps> = ({ onNavigate, concursoAtualId }) => {
-  const { usuario, isAdmin, marcarNotificacaoComoLida, marcarTodasNotificacoesComoLidas } = useAuth();
+  const { usuario } = useAuth();
+  const { notificacoesVisiveis, naoLidasCount, marcarComoLida, marcarTodasComoLidas } = useNotifications();
   const [aberto, setAberto] = useState(false);
-  const [notificacoes, setNotificacoes] = useState<NotificacaoItem[]>(() =>
-    notificationStore.getNotificacoes()
-  );
   const containerRef = useRef<HTMLDivElement>(null);
-
-  // Filtrar notificações para o usuário logado
-  const filtrarVisiveis = (list: NotificacaoItem[]) => {
-    return list.filter((n) => {
-      if (isAdmin && (
-        n.tipo === 'aprovacao_perfil' ||
-        n.tipo === 'indeferimento_perfil' ||
-        n.tipo === 'validacao_aprovada' ||
-        n.tipo === 'validacao_indeferida'
-      )) {
-        return false;
-      }
-      if (n.destinatario_email) {
-        if (!usuario) {
-          // No preview sem login ativo, permite visualizar notificações direcionadas de teste
-          return true;
-        }
-        const emailUser = usuario.email?.toLowerCase().trim();
-        const emailDest = n.destinatario_email.toLowerCase().trim();
-        return emailUser === emailDest;
-      }
-      return true; // Notificações gerais / broadcast do portal
-    });
-  };
-
-  useEffect(() => {
-    const handleUpdate = () => {
-      setNotificacoes(notificationStore.getNotificacoes());
-    };
-
-    window.addEventListener('certam_notifications_updated', handleUpdate);
-    window.addEventListener('certam_new_notification', handleUpdate);
-    window.addEventListener('storage', handleUpdate);
-
-    return () => {
-      window.removeEventListener('certam_notifications_updated', handleUpdate);
-      window.removeEventListener('certam_new_notification', handleUpdate);
-      window.removeEventListener('storage', handleUpdate);
-    };
-  }, []);
 
   // Fechar ao clicar fora
   useEffect(() => {
@@ -78,18 +36,14 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ onNavigate, 
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const notificacoesVisiveis = filtrarVisiveis(notificacoes);
-
   const readIds = usuario?.read_notification_ids || [];
-  const naoLidasCount = notificacoesVisiveis.filter((n) => !readIds.includes(n.id)).length;
 
   const handleMarcarTodas = () => {
-    const allIds = notificacoesVisiveis.map((n) => n.id);
-    marcarTodasNotificacoesComoLidas(allIds);
+    marcarTodasComoLidas();
   };
 
   const handleItemClick = (n: NotificacaoItem) => {
-    marcarNotificacaoComoLida(n.id);
+    marcarComoLida(n.id);
     setAberto(false);
 
     if (n.tipo === 'aprovacao_perfil' || n.tipo === 'indeferimento_perfil') {

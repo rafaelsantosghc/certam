@@ -1,19 +1,14 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React from 'react';
 import { createPortal } from 'react-dom';
-import { useAuth } from '../store/authContext';
-import { notificationStore } from '../store/notificationStore';
-import { NotificacaoItem } from '../types';
+import { useNotifications } from '../store/notificationContext';
 import {
   Bell,
   CheckCircle2,
   XCircle,
-  AlertTriangle,
-  UserCheck,
   FileText,
   X,
   ExternalLink,
   Clock,
-  Sparkles,
 } from 'lucide-react';
 
 interface NotificationToastProps {
@@ -21,160 +16,22 @@ interface NotificationToastProps {
 }
 
 export const NotificationToast: React.FC<NotificationToastProps> = ({ onNavigate }) => {
-  const { usuario, isAdmin, marcarNotificacaoComoLida } = useAuth();
-  const [toastNotif, setToastNotif] = useState<NotificacaoItem | null>(null);
-  const toastTimerRef = useRef<any>(null);
-  const prevLatestIdRef = useRef<string | null>(null);
+  const { toastAtivo, fecharToast, marcarComoLida } = useNotifications();
 
-  // Filtrar notificações pertinentes ao usuário atual
-  const filtrarVisiveis = (list: NotificacaoItem[]) => {
-    return list.filter((n) => {
-      // Admin não recebe notificações de aprovação de perfil/vinculação direcionadas a candidatos
-      if (
-        isAdmin &&
-        (n.tipo === 'aprovacao_perfil' ||
-          n.tipo === 'indeferimento_perfil' ||
-          n.tipo === 'validacao_aprovada' ||
-          n.tipo === 'validacao_indeferida')
-      ) {
-        return false;
-      }
-      if (n.destinatario_email) {
-        if (!usuario) {
-          // No preview sem usuário logado, permite visualizar para teste
-          return true;
-        }
-        const emailUser = usuario.email?.toLowerCase().trim();
-        const emailDest = n.destinatario_email.toLowerCase().trim();
-        return emailUser === emailDest;
-      }
-      return true; // Mensagens gerais do portal
-    });
-  };
-
-  const exibirToast = (item: NotificacaoItem) => {
-    if (!item) return;
-
-    if (toastTimerRef.current) {
-      clearTimeout(toastTimerRef.current);
-    }
-
-    try {
-      sessionStorage.setItem(`certam_toast_shown_${item.id}`, 'true');
-    } catch {
-      // ignore
-    }
-
-    setToastNotif(item);
-
-    // Duração exata de 5 segundos (5000ms) conforme especificado
-    toastTimerRef.current = setTimeout(() => {
-      setToastNotif(null);
-    }, 5000);
-  };
-
-  const fecharToast = () => {
-    if (toastTimerRef.current) {
-      clearTimeout(toastTimerRef.current);
-    }
-    setToastNotif(null);
-  };
-
-  const handleToastClick = () => {
-    if (!toastNotif) return;
-    const n = toastNotif;
-    marcarNotificacaoComoLida(n.id);
-    fecharToast();
-
-    if (n.tipo === 'aprovacao_perfil' || n.tipo === 'indeferimento_perfil') {
-      window.dispatchEvent(new CustomEvent('certam_abrir_perfil_candidato'));
-      return;
-    }
-
-    if (n.link_destino && onNavigate) {
-      if (n.link_destino.includes('concurso')) {
-        const url = new URL(n.link_destino, 'http://localhost');
-        const id = url.searchParams.get('id') || 'tjrs_2025';
-        const tab = url.searchParams.get('tab') || 'dashboard';
-        onNavigate('concurso', { concursoId: id, tab });
-      }
-    }
-  };
-
-  useEffect(() => {
-    const verificarNovasNotificacoes = () => {
-      const allNotifs = notificationStore.getNotificacoes();
-      const visiveis = filtrarVisiveis(allNotifs);
-      const readIds = usuario?.read_notification_ids || [];
-
-      if (visiveis.length > 0) {
-        const top = visiveis[0];
-        const isNaoLida = !readIds.includes(top.id);
-        const jaExibida = sessionStorage.getItem(`certam_toast_shown_${top.id}`) === 'true';
-
-        if (prevLatestIdRef.current !== top.id) {
-          prevLatestIdRef.current = top.id;
-          if (isNaoLida && !jaExibida) {
-            exibirToast(top);
-          }
-        } else if (isNaoLida && !jaExibida) {
-          exibirToast(top);
-        }
-      }
-    };
-
-    // Verificação inicial no ciclo de vida
-    verificarNovasNotificacoes();
-
-    const handleNotificationsUpdated = () => {
-      verificarNovasNotificacoes();
-    };
-
-    const handleNewNotification = (e: any) => {
-      const nova = e.detail as NotificacaoItem;
-      if (!nova) return;
-      const vis = filtrarVisiveis([nova]);
-      if (vis.length > 0) {
-        prevLatestIdRef.current = nova.id;
-        exibirToast(nova);
-      }
-    };
-
-    const handleTestNotification = (e: any) => {
-      const testItem = e.detail as NotificacaoItem;
-      if (testItem) {
-        exibirToast(testItem);
-      }
-    };
-
-    window.addEventListener('certam_notifications_updated', handleNotificationsUpdated);
-    window.addEventListener('certam_new_notification', handleNewNotification as EventListener);
-    window.addEventListener('certam_test_notification', handleTestNotification as EventListener);
-    window.addEventListener('storage', handleNotificationsUpdated);
-
-    return () => {
-      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-      window.removeEventListener('certam_notifications_updated', handleNotificationsUpdated);
-      window.removeEventListener('certam_new_notification', handleNewNotification as EventListener);
-      window.removeEventListener('certam_test_notification', handleTestNotification as EventListener);
-      window.removeEventListener('storage', handleNotificationsUpdated);
-    };
-  }, [usuario, isAdmin]);
-
-  if (!toastNotif || typeof document === 'undefined') {
+  if (!toastAtivo || typeof document === 'undefined') {
     return null;
   }
 
   const isSuccess =
-    toastNotif.tipo === 'aprovacao_perfil' || toastNotif.tipo === 'validacao_aprovada';
+    toastAtivo.tipo === 'aprovacao_perfil' || toastAtivo.tipo === 'validacao_aprovada';
   const isAlert =
-    toastNotif.tipo === 'indeferimento_perfil' ||
-    toastNotif.tipo === 'validacao_indeferida' ||
-    toastNotif.urgente;
+    toastAtivo.tipo === 'indeferimento_perfil' ||
+    toastAtivo.tipo === 'validacao_indeferida' ||
+    toastAtivo.urgente;
 
   const style = isSuccess
     ? {
-        wrapper: 'bg-emerald-50/95 border-emerald-400 text-emerald-950 ring-4 ring-emerald-500/10',
+        wrapper: 'bg-emerald-50/98 border-emerald-400 text-emerald-950 ring-4 ring-emerald-500/15',
         iconBg: 'bg-emerald-100 text-emerald-700 border-emerald-300',
         badge: 'bg-emerald-200/80 text-emerald-900 border-emerald-300',
         progressBar: 'bg-emerald-500',
@@ -182,19 +39,38 @@ export const NotificationToast: React.FC<NotificationToastProps> = ({ onNavigate
       }
     : isAlert
     ? {
-        wrapper: 'bg-rose-50/95 border-rose-400 text-rose-950 ring-4 ring-rose-500/10',
+        wrapper: 'bg-rose-50/98 border-rose-400 text-rose-950 ring-4 ring-rose-500/15',
         iconBg: 'bg-rose-100 text-rose-700 border-rose-300',
         badge: 'bg-rose-200/80 text-rose-900 border-rose-300',
         progressBar: 'bg-rose-500',
         tag: 'text-rose-800',
       }
     : {
-        wrapper: 'bg-white/95 border-teal-400 text-slate-900 ring-4 ring-teal-500/10',
+        wrapper: 'bg-white/98 border-teal-400 text-slate-900 ring-4 ring-teal-500/15',
         iconBg: 'bg-teal-50 text-teal-700 border-teal-200',
         badge: 'bg-teal-100 text-teal-800 border-teal-200',
         progressBar: 'bg-teal-500',
         tag: 'text-teal-800',
       };
+
+  const handleToastClick = () => {
+    marcarComoLida(toastAtivo.id);
+    fecharToast();
+
+    if (toastAtivo.tipo === 'aprovacao_perfil' || toastAtivo.tipo === 'indeferimento_perfil') {
+      window.dispatchEvent(new CustomEvent('certam_abrir_perfil_candidato'));
+      return;
+    }
+
+    if (toastAtivo.link_destino && onNavigate) {
+      if (toastAtivo.link_destino.includes('concurso')) {
+        const url = new URL(toastAtivo.link_destino, 'http://localhost');
+        const id = url.searchParams.get('id') || 'tjrs_2025';
+        const tab = url.searchParams.get('tab') || 'dashboard';
+        onNavigate('concurso', { concursoId: id, tab });
+      }
+    }
+  };
 
   return createPortal(
     <aside
@@ -210,7 +86,7 @@ export const NotificationToast: React.FC<NotificationToastProps> = ({ onNavigate
             <CheckCircle2 className="w-5 h-5 text-emerald-600 animate-in zoom-in-50 duration-200" />
           ) : isAlert ? (
             <XCircle className="w-5 h-5 text-rose-600 animate-in zoom-in-50 duration-200" />
-          ) : toastNotif.tipo === 'convocacao' ? (
+          ) : toastAtivo.tipo === 'convocacao' ? (
             <FileText className="w-5 h-5 text-cyan-600" />
           ) : (
             <Bell className="w-5 h-5 text-teal-600" />
@@ -233,27 +109,27 @@ export const NotificationToast: React.FC<NotificationToastProps> = ({ onNavigate
                 ? 'Deferido'
                 : isAlert
                 ? 'Indeferido'
-                : toastNotif.tipo === 'convocacao'
+                : toastAtivo.tipo === 'convocacao'
                 ? 'Convocação'
                 : 'Novo'}
             </span>
             <span className="text-[10px] text-slate-400 font-mono ml-auto flex items-center gap-1">
               <Clock className="w-2.5 h-2.5" />
-              {toastNotif.data_hora}
+              {toastAtivo.data_hora}
             </span>
           </div>
 
           <h4 className="text-sm font-bold leading-tight font-serif text-slate-900">
-            {toastNotif.titulo}
+            {toastAtivo.titulo}
           </h4>
 
           <p className="text-xs text-slate-700 mt-1 line-clamp-2 leading-relaxed">
-            {toastNotif.mensagem}
+            {toastAtivo.mensagem}
           </p>
 
-          {toastNotif.motivo_justificativa && (
+          {toastAtivo.motivo_justificativa && (
             <div className="mt-2 p-2 bg-rose-100/70 border border-rose-300 rounded-lg text-2xs text-rose-900 font-medium">
-              <span className="font-bold">Motivo:</span> {toastNotif.motivo_justificativa}
+              <span className="font-bold">Motivo:</span> {toastAtivo.motivo_justificativa}
             </div>
           )}
 

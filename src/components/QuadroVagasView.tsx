@@ -3,6 +3,7 @@ import { Concurso, Cargo, LotacaoItem } from '../types';
 import { Briefcase, Calendar, CheckCircle2, Clock, Hash, Layers, TrendingUp, Users, Pencil, ArrowUp, ArrowDown, ShieldCheck, X } from 'lucide-react';
 import { useAuth } from '../store/authContext';
 import { certamStore } from '../store/certamStore';
+import { isDebugMode } from '../utils/environment';
 
 interface QuadroVagasViewProps {
   concurso: Concurso;
@@ -11,6 +12,7 @@ interface QuadroVagasViewProps {
 
 export const QuadroVagasView: React.FC<QuadroVagasViewProps> = ({ concurso, cargoIdSelecionado }) => {
   const { isAdmin } = useAuth();
+  const podeEditar = isAdmin && isDebugMode();
   const [cargos, setCargos] = useState<Cargo[]>(() => concurso.cargos || []);
   const [catalogoLotacoes, setCatalogoLotacoes] = useState<LotacaoItem[]>(() => concurso.catalogo_lotacoes || []);
 
@@ -85,8 +87,8 @@ export const QuadroVagasView: React.FC<QuadroVagasViewProps> = ({ concurso, carg
 
   return (
     <div className="space-y-4">
-      {/* Barra de Administração (Quando Modo Admin Ativo) */}
-      {isAdmin && (
+      {/* Barra de Administração (Quando Modo Admin Ativo em Ambiente de Teste / isDebugMode) */}
+      {podeEditar && (
         <div className="p-3.5 bg-gradient-to-r from-amber-50 to-amber-100/60 border border-amber-300 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
           <div className="flex items-center gap-2">
             <span className="p-1.5 bg-amber-500 text-slate-950 font-bold rounded-lg text-xs flex items-center justify-center">
@@ -140,7 +142,7 @@ export const QuadroVagasView: React.FC<QuadroVagasViewProps> = ({ concurso, carg
             </div>
 
             <div className="flex items-center gap-2">
-              {isAdmin && (
+              {podeEditar && (
                 <button
                   type="button"
                   onClick={() => abrirModalQuantitativos(cargoEmDestaque)}
@@ -327,13 +329,13 @@ export const QuadroVagasView: React.FC<QuadroVagasViewProps> = ({ concurso, carg
                 <th className="py-2.5 px-2.5 text-right text-cyan-300 font-semibold">Convocados em Andamento</th>
                 <th className="py-2.5 px-2.5 text-right text-indigo-300 font-semibold">Próximo Lote</th>
                 <th className="py-2.5 px-3 text-center font-semibold">Última Atualização</th>
-                {isAdmin && <th className="py-2.5 px-3 text-right font-semibold">Ação Admin</th>}
+                {podeEditar && <th className="py-2.5 px-3 text-right font-semibold">Ação Admin</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {cargos.length === 0 ? (
                 <tr>
-                  <td colSpan={isAdmin ? 9 : 8} className="py-6 text-center text-slate-400 text-xs">
+                  <td colSpan={podeEditar ? 9 : 8} className="py-6 text-center text-slate-400 text-xs">
                     Nenhum cargo cadastrado neste concurso.
                   </td>
                 </tr>
@@ -397,8 +399,8 @@ export const QuadroVagasView: React.FC<QuadroVagasViewProps> = ({ concurso, carg
                       {c.data_atualizacao_vagas || 'Em apuração'}
                     </td>
 
-                    {/* Ação Admin */}
-                    {isAdmin && (
+                    {/* Ação Admin (Exclusivo isDebugMode) */}
+                    {podeEditar && (
                       <td className="py-2.5 px-3 text-right">
                         <button
                           type="button"

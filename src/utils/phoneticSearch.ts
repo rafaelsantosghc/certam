@@ -45,7 +45,7 @@ export function matchFonético(textoAlvo: string, termoBusca: string): boolean {
   );
 }
 
-function levenshteinDistancia(a: string, b: string): number {
+export function levenshteinDistancia(a: string, b: string): number {
   if (a.length === 0) return b.length;
   if (b.length === 0) return a.length;
   const matrix: number[][] = [];
@@ -72,3 +72,73 @@ function levenshteinDistancia(a: string, b: string): number {
   }
   return matrix[b.length][a.length];
 }
+
+/**
+ * Calcula pontuação de similaridade (0 a 100) entre dois nomes de candidatos,
+ * combinando correspondência exata, tokens compartilhados e fonética (Metaphone/Levenshtein).
+ */
+export function calcularSimilaridadeNome(nomeA: string, nomeB: string): number {
+  if (!nomeA || !nomeB) return 0;
+
+  const limpar = (s: string) =>
+    s
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/\b(de|da|do|das|dos|e)\b/g, ' ')
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+  const aNorm = limpar(nomeA);
+  const bNorm = limpar(nomeB);
+
+  if (!aNorm || !bNorm) return 0;
+  if (aNorm === bNorm) return 100;
+
+  if (aNorm.includes(bNorm) || bNorm.includes(aNorm)) {
+    const minLen = Math.min(aNorm.length, bNorm.length);
+    if (minLen >= 4) return 90;
+  }
+
+  const tokensA = aNorm.split(' ').filter((t) => t.length >= 2);
+  const tokensB = bNorm.split(' ').filter((t) => t.length >= 2);
+  if (tokensA.length === 0 || tokensB.length === 0) return 0;
+
+  let exactTokenMatches = 0;
+  let phoneticTokenMatches = 0;
+
+  for (const ta of tokensA) {
+    const fa = fonetizar(ta);
+    if (tokensB.some((tb) => tb === ta)) {
+      exactTokenMatches++;
+    } else if (
+      tokensB.some((tb) => {
+        const fb = fonetizar(tb);
+        return fb === fa || levenshteinDistancia(ta, tb) <= 1 || (ta.length >= 4 && tb.startsWith(ta));
+      })
+    ) {
+      phoneticTokenMatches++;
+    }
+  }
+
+  // Primeiro nome igual tem peso forte na sugestão de vínculo
+  const primeiroNomeIgual =
+    tokensA[0] === tokensB[0] ||
+    fonetizar(tokensA[0]) === fonetizar(tokensB[0]) ||
+    levenshteinDistancia(tokensA[0], tokensB[0]) <= 1;
+
+  const maxTokens = Math.max(tokensA.length, tokensB.length);
+  const minTokens = Math.min(tokensA.length, tokensB.length);
+
+  const ratioMax = (exactTokenMatches + phoneticTokenMatches * 0.75) / maxTokens;
+  const ratioMin = (exactTokenMatches + phoneticTokenMatches * 0.75) / minTokens;
+
+  let score = Math.round((ratioMax * 0.55 + ratioMin * 0.45) * 85);
+  if (primeiroNomeIgual) {
+    score += 15;
+  }
+
+  return Math.min(99, Math.max(0, score));
+}
+

@@ -2,6 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../store/authContext';
 import { certamStore } from '../store/certamStore';
 import { auditStore } from '../store/auditStore';
+import { userRegistryStore } from '../store/userRegistryStore';
+import { notificationStore } from '../store/notificationStore';
 import { Concurso, OutroConcursoAprovado, AlteracaoCampoItem } from '../types';
 import { sanitizeInput } from '../utils/security';
 import { buscarTodasAprovacoesCandidato, AprovacaoDetectada } from '../utils/candidateMatcher';
@@ -52,6 +54,9 @@ export const PerfilCandidatoModal: React.FC<PerfilCandidatoModalProps> = ({
   const [diffAlteracoes, setDiffAlteracoes] = useState<AlteracaoCampoItem[]>([]);
   const [submetidoSucesso, setSubmetidoSucesso] = useState(false);
   const [primeiroCadastro, setPrimeiroCadastro] = useState(false);
+  const [mensagemSucessoTitulo, setMensagemSucessoTitulo] = useState('');
+  const [mensagemSucessoDetalhe, setMensagemSucessoDetalhe] = useState('');
+  const [erroValidacao, setErroValidacao] = useState('');
 
   useEffect(() => {
     if (aberto && usuario) {
@@ -61,9 +66,11 @@ export const PerfilCandidatoModal: React.FC<PerfilCandidatoModalProps> = ({
       setWhatsapp(usuario.whatsapp || usuario.telefone || '');
       setEmailContato(usuario.email_contato || usuario.email || '');
       setOutrosConcursos(usuario.outros_concursos || []);
+      setErroValidacao('');
 
-      // Se for o modal obrigatório de primeiro acesso ou ainda não tiver CPF cadastrado
-      const isSemDados = Boolean(obrigatorio) || (!usuario.cpf && !usuario.data_nascimento);
+      // Se for o modal obrigatório de primeiro acesso ou ainda não tiver CPF de 11 dígitos cadastrado
+      const cpfDigits = (usuario.cpf || '').replace(/\D/g, '');
+      const isSemDados = Boolean(obrigatorio) || cpfDigits.length < 11;
       setPrimeiroCadastro(isSemDados);
       setTodasSolicitacoes(auditStore.getAuditRequests());
     }
@@ -204,8 +211,42 @@ export const PerfilCandidatoModal: React.FC<PerfilCandidatoModalProps> = ({
     return diffs;
   };
 
+  // Verificação em tempo real do CPF digitado no 1º acesso
+  const statusCpfDigitado = useMemo(() => {
+    const digits = cpf.replace(/\D/g, '');
+    if (digits.length < 11) return null;
+    const reg = userRegistryStore.getUserByCpf(cpf);
+    const aprovs = buscarTodasAprovacoesCandidato({ cpf });
+    if (reg || aprovs.length > 0) {
+      return {
+        existe: true,
+        nomeEncontrado: reg?.nome || aprovs[0]?.concurso_nome || 'Cadastro existente',
+        concursoInfo:
+          aprovs.length > 0
+            ? `${aprovs[0].concurso_nome} (${aprovs[0].cargo_nome} • ${aprovs[0].posicao}º lugar)`
+            : reg?.orgao
+            ? `${reg.orgao} (${reg.cargo_nome || ''})`
+            : 'Cadastro Geral do Portal',
+      };
+    }
+    return { existe: false };
+  }, [cpf]);
+
   const handleSubmeterOuSalvar = (e: React.FormEvent) => {
     e.preventDefault();
+    setErroValidacao('');
+
+    const nomeLimpo = sanitizeInput(nome.trim(), 100);
+    const cpfDigits = cpf.replace(/\D/g, '');
+    const cpfFormatado =
+      cpfDigits.length === 11
+        ? `${cpfDigits.slice(0, 3)}.${cpfDigits.slice(3, 6)}.${cpfDigits.slice(6, 9)}-${cpfDigits.slice(9)}`
+        : sanitizeInput(cpf.trim(), 20);
+
+    if (!nomeLimpo || cpfDigits.length < 11) {
+      setErroValidacao('Por favor, preencha seu Nome Completo e um CPF válido com 11 dígitos.');
+      return;
+    }
 
     const outrosSincronizados: OutroConcursoAprovado[] = aprovacoesIdentificadas
       .filter((ap) => ap.origem === 'declarado')
@@ -222,52 +263,168 @@ export const PerfilCandidatoModal: React.FC<PerfilCandidatoModalProps> = ({
 
     const diffs = calcularDiffs();
     const jaPossuiaCpfVinculado = Boolean((usuario.cpf || '').replace(/\D/g, '').length >= 11);
-    const diffsDeCamposJaPreenchidos = diffs.filter(
-      (d) =>
-        d.valor_antigo &&
-        d.valor_antigo !== '(não informado)' &&
-        d.valor_antigo.trim() !== '' &&
-        d.valor_antigo.trim() !== d.valor_novo.trim()
-    );
 
-    // 1. Preenchimento obrigatório de 1º acesso: salva os campos que estavam em branco para concluir o cadastro inicial
-    if (obrigatorio && primeiroCadastro) {
-      if (!nome.trim() || !cpf.trim() || !dataNascimento.trim() || !whatsapp.trim()) {
-        return;
-      }
+    // 1. Preenchimento obrigatório de 1º acesso (ou quando o usuário ainda não tinha CPF definido)
+    if (obrigatorio || primeiroCadastro || !jaPossuiaCpfVinculado) {
+      const emailLogin = (usuario.email || emailContato.trim() || 'candidato@certam').toLowerCase().trim();
+      const existingByCpf = userRegistryStore.getUserByCpf(cpfFormatado);
+      const aprovacoesPorCpf = buscarTodasAprovacoesCandidato({ cpf: cpfFormatado });
+      const cpfJaExisteNoSistema = Boolean(existingByCpf) || aprovacoesPorCpf.length > 0;
 
-      atualizarDadosUsuario({
-        nome: !jaPossuiaCpfVinculado ? sanitizeInput(nome, 100) : usuario.nome || sanitizeInput(nome, 100),
-        cpf: usuario.cpf || sanitizeInput(cpf, 20),
-        data_nascimento: usuario.data_nascimento || sanitizeInput(dataNascimento, 15),
-        whatsapp: usuario.whatsapp || sanitizeInput(whatsapp, 25),
-        telefone: usuario.telefone || sanitizeInput(whatsapp, 25),
-        email_contato: usuario.email_contato || sanitizeInput(emailContato || usuario.email, 80),
-        outros_concursos: outrosSincronizados,
-      });
+      if (cpfJaExisteNoSistema) {
+        // O CPF já existe no cadastro geral / listas de classificação: vincula automaticamente!
+        const primeiraAprov = aprovacoesPorCpf[0];
+        const nomeConsolidado = existingByCpf?.nome || nomeLimpo;
+        const candIdVinculado =
+          existingByCpf?.candidato_id || existingByCpf?.id || usuario.id || `user-${Date.now().toString(36)}`;
 
-      // Se durante o 1º acesso o candidato já vinculado alterou algum dado que já constava no cadastro (ex: Nome ou CPF), envia para auditoria do Admin
-      if (jaPossuiaCpfVinculado && diffsDeCamposJaPreenchidos.length > 0) {
-        auditStore.submeterSolicitacaoAlteracao({
-          usuario_email: usuario.email || emailContato.trim() || 'candidato@certam',
-          usuario_nome: sanitizeInput(usuario.nome || nome.trim() || 'Candidato', 100),
-          cpf: sanitizeInput(usuario.cpf || cpf.trim() || '', 20),
-          alteracoes: diffsDeCamposJaPreenchidos,
+        const dadosVinculados = {
+          id: existingByCpf?.id || candIdVinculado,
+          candidato_id: candIdVinculado,
+          nome: nomeConsolidado,
+          cpf: cpfFormatado,
+          cpf_verificado: true,
+          status_cadastro: 'ativo' as const,
+          data_nascimento:
+            sanitizeInput(dataNascimento, 15) || existingByCpf?.data_nascimento || usuario.data_nascimento || '',
+          whatsapp: sanitizeInput(whatsapp, 25) || existingByCpf?.whatsapp || existingByCpf?.telefone || '',
+          telefone: sanitizeInput(whatsapp, 25) || existingByCpf?.telefone || existingByCpf?.whatsapp || '',
+          email: emailLogin,
+          email_contato: sanitizeInput(emailContato || emailLogin, 80),
+          concurso_id: existingByCpf?.concurso_id || primeiraAprov?.concurso_id || usuario.concurso_id,
+          cargo_id: existingByCpf?.cargo_id || primeiraAprov?.cargo_id || usuario.cargo_id,
+          outros_concursos: outrosSincronizados,
+        };
+
+        userRegistryStore.vincularOuRegistrarUsuarioLogin({
+          ...usuario,
+          ...dadosVinculados,
         });
-        setTodasSolicitacoes(auditStore.getAuditRequests());
-        setDiffAlteracoes(diffsDeCamposJaPreenchidos);
+        atualizarDadosUsuario(dadosVinculados);
+
+        // Se o nome digitado pelo usuário for diferente do nome que constava no CPF existente, registra na auditoria para ciência/aprovação
+        if (
+          existingByCpf?.nome &&
+          existingByCpf.nome.trim().toLowerCase() !== nomeLimpo.toLowerCase()
+        ) {
+          auditStore.submeterSolicitacaoAlteracao({
+            usuario_id: dadosVinculados.id,
+            usuario_email: emailLogin,
+            usuario_nome: existingByCpf.nome,
+            cpf: cpfFormatado,
+            alteracoes: [
+              {
+                campo: 'nome',
+                campo_label: 'Nome Completo',
+                valor_antigo: existingByCpf.nome,
+                valor_novo: nomeLimpo,
+              },
+            ],
+          });
+        }
+
+        setMensagemSucessoTitulo('CPF Localizado! Cadastro Vinculado Automaticamente!');
+        setMensagemSucessoDetalhe(
+          `Seu CPF (${cpfFormatado}) foi localizado no Cadastro Geral do CERTAM e seu acesso foi vinculado automaticamente ao registro de "${nomeConsolidado}".`
+        );
+      } else {
+        // O CPF NÃO existe no cadastro geral: cria o usuário com o novo CPF, pesquisa nomes parecidos e avisa o administrador
+        const novoId = usuario.id || usuario.candidato_id || `user-${Date.now().toString(36)}`;
+        const sugestoesNomes = userRegistryStore.buscarSugestoesNomesParecidos(
+          nomeLimpo,
+          cpfFormatado,
+          emailLogin,
+          5
+        );
+
+        const dadosNovoUsuario = {
+          id: novoId,
+          candidato_id: novoId,
+          nome: nomeLimpo,
+          cpf: cpfFormatado,
+          cpf_verificado: false,
+          status_cadastro: 'ativo' as const,
+          data_nascimento: sanitizeInput(dataNascimento, 15) || '',
+          whatsapp: sanitizeInput(whatsapp, 25) || '',
+          telefone: sanitizeInput(whatsapp, 25) || '',
+          email: emailLogin,
+          email_contato: sanitizeInput(emailContato || emailLogin, 80),
+          outros_concursos: outrosSincronizados,
+        };
+
+        userRegistryStore.salvarUsuario({
+          ...dadosNovoUsuario,
+          is_admin: Boolean(usuario.is_admin),
+          role: usuario.is_admin ? 'admin' : 'candidato',
+        });
+        atualizarDadosUsuario(dadosNovoUsuario);
+
+        const primeiraSugestao = sugestoesNomes[0];
+        const resumoSugestoes =
+          sugestoesNomes.length > 0
+            ? `Nomes parecidos localizados para sugestão de vínculo: ${sugestoesNomes
+                .map(
+                  (s) =>
+                    `${s.nome} (${s.similaridade}% compatível — ${s.concurso_nome || 'Cadastro Geral'}${
+                      s.posicao ? `, ${s.posicao}º lugar` : ''
+                    })`
+                )
+                .join('; ')}.`
+            : 'Nenhum candidato com nome semelhante foi localizado automaticamente nas listas atuais.';
+
+        // Registra na fila de Validações / Novos Cadastros do Admin para facilitar a vinculação em 1 clique
+        const primeiroConcurso = certamStore.getConcursos()[0];
+        auditStore.solicitarVinculacao({
+          tipo: 'novo_cadastro',
+          usuario_id: novoId,
+          usuario_email: emailLogin,
+          usuario_nome: nomeLimpo,
+          cpf: cpfFormatado,
+          concurso_id: primeiraSugestao?.concurso_id || primeiroConcurso?.id || 'geral',
+          concurso_nome:
+            primeiraSugestao?.concurso_nome || primeiroConcurso?.orgao || 'Cadastro Geral do Portal',
+          cargo_id: primeiraSugestao?.cargo_id || primeiroConcurso?.cargos?.[0]?.id || 'geral',
+          cargo_nome:
+            primeiraSugestao?.cargo_nome ||
+            primeiroConcurso?.cargos?.[0]?.nome ||
+            'Novo Cadastro no 1º Acesso',
+          posicao_declarada: primeiraSugestao?.posicao || 1,
+          candidato_vinculado_id: primeiraSugestao?.candidato_id,
+          comprovante_info: `Novo cadastro realizado no 1º acesso com CPF inédito (${cpfFormatado}). ${resumoSugestoes}`,
+        });
+
+        // Dispara notificação para o Administrador
+        notificationStore.criarNotificacao({
+          destinatario_email: 'rafasms0@hotmail.com',
+          destinatario_nome: 'Administrador CERTAM',
+          titulo: 'Novo Cadastro Realizado no 1º Acesso',
+          mensagem: `O usuário "${nomeLimpo}" (${emailLogin}) cadastrou um novo CPF (${cpfFormatado}) não existente no Cadastro Geral. ${
+            sugestoesNomes.length > 0
+              ? `Foram encontradas ${sugestoesNomes.length} sugestão(ões) de nomes parecidos (ex: ${sugestoesNomes[0].nome} - ${sugestoesNomes[0].similaridade}%) para vinculação.`
+              : 'Acesse o Painel Admin para conferir o novo cadastro.'
+          }`,
+          tipo: 'comunicado',
+          link_destino: '/?admin=1',
+          urgente: true,
+        });
+
+        setMensagemSucessoTitulo('Novo Cadastro Criado com Sucesso!');
+        setMensagemSucessoDetalhe(
+          `Seu cadastro foi criado com o CPF ${cpfFormatado} e o administrador foi avisado para conferência e vinculação.`
+        );
       }
 
+      setTodasSolicitacoes(auditStore.getAuditRequests());
       setPrimeiroCadastro(false);
       setSubmetidoSucesso(true);
       setTimeout(() => {
         setSubmetidoSucesso(false);
         onClose();
-      }, 1800);
+      }, 2200);
       return;
     }
 
-    // 2. Qualquer alteração de dados cadastrais solicitada pelo candidato vai para a fila de Auditoria do Painel Admin (Item 2)
+    // 2. Qualquer alteração de dados cadastrais solicitada pelo candidato já cadastrado vai para a fila de Auditoria do Painel Admin
     const finalDiffs: AlteracaoCampoItem[] =
       diffs.length > 0
         ? diffs
@@ -276,36 +433,22 @@ export const PerfilCandidatoModal: React.FC<PerfilCandidatoModalProps> = ({
               campo: 'nome',
               campo_label: 'Nome Completo',
               valor_antigo: usuario.nome || '(não informado)',
-              valor_novo: nome.trim() || usuario.nome,
-            },
-            {
-              campo: 'cpf',
-              campo_label: 'CPF',
-              valor_antigo: usuario.cpf || '(não informado)',
-              valor_novo: cpf.trim() || usuario.cpf || '(não informado)',
+              valor_novo: nomeLimpo || usuario.nome,
             },
           ];
 
-    // Se ainda não tinha data de nascimento ou CPF salvos, garante que o perfil básico não fique incompleto enquanto a alteração aguarda auditoria
-    if ((!usuario.data_nascimento && dataNascimento.trim()) || (!usuario.cpf && cpf.trim())) {
-      atualizarDadosUsuario({
-        cpf: usuario.cpf || sanitizeInput(cpf, 20),
-        data_nascimento: usuario.data_nascimento || sanitizeInput(dataNascimento, 15),
-        whatsapp: usuario.whatsapp || sanitizeInput(whatsapp, 25),
-        telefone: usuario.telefone || sanitizeInput(whatsapp, 25),
-        email_contato: usuario.email_contato || sanitizeInput(emailContato || usuario.email, 80),
-        outros_concursos: outrosSincronizados,
-      });
-    }
-
-    // Registrar imediatamente no auditStore e sincronizar com o servidor/Supabase para moderação administrativa
     auditStore.submeterSolicitacaoAlteracao({
+      usuario_id: usuario.id || usuario.candidato_id,
       usuario_email: usuario.email || emailContato.trim() || 'candidato@certam',
-      usuario_nome: sanitizeInput(usuario.nome || nome.trim() || 'Candidato', 100),
-      cpf: sanitizeInput(usuario.cpf || cpf.trim() || '', 20),
+      usuario_nome: sanitizeInput(usuario.nome || nomeLimpo || 'Candidato', 100),
+      cpf: sanitizeInput(usuario.cpf || cpfFormatado || '', 20),
       alteracoes: finalDiffs,
     });
 
+    setMensagemSucessoTitulo('Alterações Submetidas ao Administrador!');
+    setMensagemSucessoDetalhe(
+      'As alterações solicitadas foram enviadas para a fila de moderação do administrador. Assim que aprovadas, serão consolidadas no Cadastro Geral e no seu acesso.'
+    );
     setTodasSolicitacoes(auditStore.getAuditRequests());
     setDiffAlteracoes(finalDiffs);
     setPrimeiroCadastro(false);
@@ -320,9 +463,10 @@ export const PerfilCandidatoModal: React.FC<PerfilCandidatoModalProps> = ({
     const diffs = diffAlteracoes.length > 0 ? diffAlteracoes : calcularDiffs();
     if (diffs.length > 0) {
       auditStore.submeterSolicitacaoAlteracao({
+        usuario_id: usuario.id || usuario.candidato_id,
         usuario_email: usuario.email,
-        usuario_nome: nome.trim() || usuario.nome,
-        cpf: cpf.trim() || usuario.cpf || '',
+        usuario_nome: usuario.nome || nome.trim(),
+        cpf: usuario.cpf || cpf.trim() || '',
         alteracoes: diffs,
       });
       setTodasSolicitacoes(auditStore.getAuditRequests());
@@ -347,11 +491,13 @@ export const PerfilCandidatoModal: React.FC<PerfilCandidatoModalProps> = ({
             </div>
             <div>
               <h3 className="font-serif font-bold text-base text-white">
-                {obrigatorio ? 'Cadastro Inicial Obrigatório • CERTAM' : 'Cadastro e Perfil do Candidato'}
+                {obrigatorio || primeiroCadastro
+                  ? 'Identificação Obrigatória de 1º Acesso • CERTAM'
+                  : 'Cadastro e Perfil do Candidato'}
               </h3>
               <p className="text-2xs text-slate-300">
-                {obrigatorio
-                  ? 'Preencha seus dados cadastrais para começar a usar o portal e identificar suas aprovações'
+                {obrigatorio || primeiroCadastro
+                  ? 'Informe seu Nome Completo e CPF para vinculação automática ao Cadastro Geral ou criação do seu acesso'
                   : 'Informações para cruzamento no cadastro geral e identificação de aprovações'}
               </p>
             </div>
@@ -372,12 +518,14 @@ export const PerfilCandidatoModal: React.FC<PerfilCandidatoModalProps> = ({
           <div className="p-10 text-center space-y-3">
             <CheckCircle2 className="w-14 h-14 text-[#2DD4AA] mx-auto animate-bounce" />
             <h4 className="font-serif font-bold text-lg text-slate-900">
-              {primeiroCadastro ? 'Dados Cadastrados com Sucesso!' : 'Alterações Submetidas ao Administrador!'}
+              {mensagemSucessoTitulo ||
+                (primeiroCadastro ? 'Dados Cadastrados com Sucesso!' : 'Alterações Submetidas ao Administrador!')}
             </h4>
             <p className="text-xs text-slate-600 max-w-md mx-auto leading-relaxed">
-              {primeiroCadastro
-                ? 'Seu cadastro foi salvo e sincronizado com as listas oficiais de classificação do CERTAM.'
-                : 'As alterações solicitadas foram enviadas para a fila de moderação do administrador. Assim que conferidas, serão homologadas.'}
+              {mensagemSucessoDetalhe ||
+                (primeiroCadastro
+                  ? 'Seu cadastro foi salvo e sincronizado com as listas oficiais de classificação do CERTAM.'
+                  : 'As alterações solicitadas foram enviadas para a fila de moderação do administrador. Assim que conferidas, serão homologadas.')}
             </p>
           </div>
         ) : modalDiffAberto ? (
@@ -434,8 +582,18 @@ export const PerfilCandidatoModal: React.FC<PerfilCandidatoModalProps> = ({
         ) : (
           /* FORMULÁRIO COMPLETO */
           <form onSubmit={handleSubmeterOuSalvar} className="p-4 sm:p-6 overflow-y-auto space-y-4 text-xs">
-            {/* Aviso de Auditoria */}
-            {!primeiroCadastro && (
+            {/* Aviso de 1º Acesso ou de Auditoria */}
+            {obrigatorio || primeiroCadastro ? (
+              <div className="p-3.5 bg-teal-50 border border-teal-200 rounded-xl flex items-start gap-2.5 text-teal-950">
+                <ShieldCheck className="w-4 h-4 text-teal-700 shrink-0 mt-0.5" />
+                <div className="space-y-0.5">
+                  <span className="font-bold block">Identificação Obrigatória no Primeiro Acesso</span>
+                  <p className="text-2xs text-teal-800 leading-relaxed">
+                    Defina seu <strong>Nome Completo</strong> e seu <strong>CPF</strong>. Se o CPF já constar no Cadastro Geral, seu acesso será vinculado automaticamente. Caso contrário, seu cadastro será criado e o administrador receberá um aviso com sugestões de vinculação.
+                  </p>
+                </div>
+              </div>
+            ) : (
               <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between text-2xs text-slate-600">
                 <div className="flex items-center gap-2">
                   <ShieldCheck className="w-4 h-4 text-teal-600 shrink-0" />
@@ -443,6 +601,13 @@ export const PerfilCandidatoModal: React.FC<PerfilCandidatoModalProps> = ({
                     Qualquer alteração em seus dados cadastrais será auditada e submetida para aprovação da administração.
                   </span>
                 </div>
+              </div>
+            )}
+
+            {erroValidacao && (
+              <div className="p-3 bg-rose-50 border border-rose-300 rounded-xl flex items-center gap-2 text-rose-800 font-semibold">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>{erroValidacao}</span>
               </div>
             )}
 
@@ -510,6 +675,7 @@ export const PerfilCandidatoModal: React.FC<PerfilCandidatoModalProps> = ({
                 </label>
                 <input
                   type="text"
+                  placeholder="Digite seu nome completo"
                   value={nome}
                   onChange={(e) => setNome(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:border-teal-600 focus:outline-hidden font-medium"
@@ -529,6 +695,25 @@ export const PerfilCandidatoModal: React.FC<PerfilCandidatoModalProps> = ({
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:border-teal-600 focus:outline-hidden font-mono font-medium"
                   required
                 />
+                {(obrigatorio || primeiroCadastro) && statusCpfDigitado && (
+                  <div className="mt-1.5">
+                    {statusCpfDigitado.existe ? (
+                      <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-1 rounded-lg flex items-center gap-1">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                        <span>
+                          CPF encontrado ({statusCpfDigitado.nomeEncontrado}) — será vinculado automaticamente!
+                        </span>
+                      </span>
+                    ) : (
+                      <span className="text-[11px] font-medium text-amber-800 bg-amber-50 border border-amber-200 px-2 py-1 rounded-lg flex items-center gap-1">
+                        <Sparkles className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                        <span>
+                          Novo CPF — será criado novo cadastro e enviado aviso de vinculação ao Admin.
+                        </span>
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -536,20 +721,19 @@ export const PerfilCandidatoModal: React.FC<PerfilCandidatoModalProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">
-                  Data de Nascimento <span className="text-rose-500">*</span>
+                  Data de Nascimento <span className="text-slate-400 font-normal">(opcional no 1º acesso)</span>
                 </label>
                 <input
                   type="date"
                   value={dataNascimento}
                   onChange={(e) => setDataNascimento(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:border-teal-600 focus:outline-hidden font-medium"
-                  required
                 />
               </div>
 
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">
-                  WhatsApp para Contato <span className="text-rose-500">*</span>
+                  WhatsApp para Contato <span className="text-slate-400 font-normal">(opcional no 1º acesso)</span>
                 </label>
                 <input
                   type="text"
@@ -557,7 +741,6 @@ export const PerfilCandidatoModal: React.FC<PerfilCandidatoModalProps> = ({
                   value={whatsapp}
                   onChange={(e) => handleWhatsappChange(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:border-teal-600 focus:outline-hidden font-mono font-medium"
-                  required
                 />
               </div>
             </div>

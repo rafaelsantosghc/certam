@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { isAiStudioPreview } from '../utils/environment';
+import { isDebugMode } from '../utils/environment';
 import { useAuth } from '../store/authContext';
+import { useNotifications } from '../store/notificationContext';
 import { auditStore } from '../store/auditStore';
 import { notificationStore } from '../store/notificationStore';
 import { lotesStore } from '../store/lotesStore';
@@ -38,12 +39,14 @@ export const AdminOverlay: React.FC<AdminOverlayProps> = ({
   concursoAtualId = 'tjrs_2025',
   cargoAtualId = 'analista_judiciario',
 }) => {
-  // Renderiza EXCLUSIVAMENTE no ambiente de desenvolvimento/preview do Google AI Studio
-  if (!isAiStudioPreview()) {
+  // Renderiza EXCLUSIVAMENTE quando o modo de depuração/preview estiver ativo (variável de ambiente ou ?admin=1)
+  // Bloqueio absoluto para NUNCA ser renderizado no build de produção
+  if (!isDebugMode()) {
     return null;
   }
 
   const { usuario, isAdmin, alternarModoAdminPreview, loginAdminPreview } = useAuth();
+  const { dispararNotificacao, exibirToast } = useNotifications();
   
   // Aberto por padrão no preview para que o usuário localize o painel imediatamente
   const [expandido, setExpandido] = useState(() => {
@@ -105,10 +108,10 @@ export const AdminOverlay: React.FC<AdminOverlayProps> = ({
   }, []);
 
   const handleDispararNotificacaoTeste = (tipo: 'info' | 'sucesso' | 'alerta') => {
-    const agora = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    let item: any;
 
     if (tipo === 'sucesso') {
-      notificationStore.criarNotificacao({
+      item = dispararNotificacao({
         destinatario_email: usuario?.email || 'cand.aprovado@exemplo.com',
         destinatario_nome: usuario?.nome || 'Candidato Teste',
         titulo: 'Alteração Cadastral Deferida',
@@ -118,7 +121,7 @@ export const AdminOverlay: React.FC<AdminOverlayProps> = ({
         urgente: false,
       });
     } else if (tipo === 'alerta') {
-      notificationStore.criarNotificacao({
+      item = dispararNotificacao({
         destinatario_email: usuario?.email || 'cand.aprovado@exemplo.com',
         destinatario_nome: usuario?.nome || 'Candidato Teste',
         titulo: 'Alteração Cadastral Indeferida',
@@ -129,7 +132,7 @@ export const AdminOverlay: React.FC<AdminOverlayProps> = ({
         motivo_justificativa: 'Documento comprobatório ilegível ou divergência de dígitos no CPF informado.',
       });
     } else {
-      notificationStore.criarNotificacao({
+      item = dispararNotificacao({
         titulo: 'Novo Comunicado da Banca Examinadora',
         mensagem:
           'Publicada a retificação do cronograma de heteroidentificação e perícia médica para o próximo lote de convocação.',
@@ -137,6 +140,10 @@ export const AdminOverlay: React.FC<AdminOverlayProps> = ({
         urgente: false,
         link_destino: `/?id=${concursoAtualId}&cargo=${cargoAtualId}&tab=documentos`,
       });
+    }
+
+    if (item) {
+      exibirToast(item);
     }
   };
 

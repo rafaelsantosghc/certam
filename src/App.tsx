@@ -13,6 +13,7 @@ import { useAuth } from './store/authContext';
 import { PerfilCandidatoModal } from './components/PerfilCandidatoModal';
 import { NotificationToast } from './components/NotificationToast';
 import { AdminOverlay } from './components/AdminOverlay';
+import { NotificationProvider } from './store/notificationContext';
 
 interface ErrorBoundaryState {
   hasError: boolean;
@@ -90,9 +91,13 @@ export const AppContent: React.FC = () => {
     return () => window.removeEventListener('certam_abrir_perfil_candidato_obrigatorio', handleAbrirObrigatorio);
   }, []);
 
-  // Se o usuário estiver autenticado e faltar CPF ou Data de Nascimento, abre o modal obrigatório
+  // Se o usuário estiver autenticado e ainda não tiver definido Nome e CPF válido (11 dígitos), abre o modal obrigatório de 1º acesso
   useEffect(() => {
-    if (usuario && (!usuario.cpf || !usuario.data_nascimento || usuario.cpf.trim() === '')) {
+    if (
+      usuario &&
+      !usuario.is_admin &&
+      (!usuario.cpf || usuario.cpf.replace(/\D/g, '').length < 11 || !usuario.nome || !usuario.nome.trim())
+    ) {
       setModalPerfilObrigatorioAberto(true);
     } else {
       setModalPerfilObrigatorioAberto(false);
@@ -407,7 +412,9 @@ export default function App() {
   return (
     <ErrorBoundary>
       <AuthProvider>
-        <AppContent />
+        <NotificationProvider>
+          <AppContent />
+        </NotificationProvider>
       </AuthProvider>
     </ErrorBoundary>
   );

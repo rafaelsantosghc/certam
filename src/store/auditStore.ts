@@ -33,6 +33,7 @@ export const auditStore = {
   },
 
   submeterSolicitacaoAlteracao(dados: {
+    usuario_id?: string;
     usuario_email: string;
     usuario_nome: string;
     cpf: string;
@@ -41,6 +42,7 @@ export const auditStore = {
     const list = [...this.getAuditRequests()];
     const nova: PerfilAuditRequest = {
       id: `audit-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`,
+      usuario_id: dados.usuario_id,
       usuario_email: dados.usuario_email,
       usuario_nome: dados.usuario_nome,
       cpf: dados.cpf,

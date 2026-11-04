@@ -7,7 +7,7 @@ import { ContatoAdminModal } from './ContatoAdminModal';
 import { MensagensPrivadasDrawer } from './MensagensPrivadasDrawer';
 import { GoogleAuthModal } from './GoogleAuthModal';
 import { matchFonético } from '../utils/phoneticSearch';
-import { isAiStudioPreview } from '../utils/environment';
+import { isDebugMode } from '../utils/environment';
 import {
   Menu,
   Share2,
@@ -240,8 +240,8 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
           )}
 
-          {/* Modo Administrador no Preview e Botão de Teste de Notificação (Exclusivo para o Google AI Studio Preview / Dev) */}
-          {isAiStudioPreview() && (
+          {/* Modo Administrador no Preview e Botão de Teste de Notificação (Exclusivo para isDebugMode) */}
+          {isDebugMode() && (
             <div className="flex items-center gap-1.5 bg-amber-50/80 border border-amber-300 rounded-xl px-2 py-1 shadow-2xs">
               <button
                 type="button"
