@@ -53,6 +53,8 @@ import {
   Send,
   Inbox,
   ArrowLeft,
+  Download,
+  Upload,
   Layers,
   Briefcase,
 } from 'lucide-react';
@@ -3910,6 +3912,176 @@ NOTIFY pgrst, 'reload schema';`;
               </p>
             </div>
           </div>
+
+          {/* PLANO 7: BACKUP COMPLETO EM 1 CLIQUE + MONITOR DE LIMITES GRATUITOS (SUPABASE & VERCEL) */}
+          {(() => {
+            const quotaMetrics = cloudSync.getQuotaAndSyncMetrics();
+            return (
+              <div className="bg-gradient-to-r from-[#07192B] to-[#0C2640] text-white rounded-2xl p-6 border border-[#135A7A]/60 card-shadow space-y-5">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-white/10 pb-4">
+                  <div className="space-y-1">
+                    <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#2DD4AA]/15 border border-[#2DD4AA]/40 text-[#2DD4AA] text-[10px] font-mono font-bold uppercase">
+                      <ShieldCheck className="w-3.5 h-3.5" />
+                      <span>Proteção de Dados & Monitor de Cota Gratuita (Supabase / Vercel)</span>
+                    </div>
+                    <h3 className="text-base sm:text-lg font-bold font-serif text-white">
+                      Backup Completo em 1 Clique, Delta Sync Incremental & Cache IndexedDB
+                    </h3>
+                    <p className="text-xs text-slate-300 max-w-3xl leading-relaxed">
+                      Exporte uma cópia integral de segurança (<code className="font-mono text-teal-300">.json</code>) com todos os concursos, listas de classificação, lotes, cadastros e auditorias, ou restaure um backup a qualquer momento.
+                    </p>
+                  </div>
+
+                  {/* Botões de Backup 1-Clique e Restauração */}
+                  <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const jsonStr = cloudSync.exportFullBackupJson();
+                        const blob = new Blob([jsonStr], { type: 'application/json;charset=utf-8' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        const dateTag = new Date().toISOString().slice(0, 10);
+                        a.href = url;
+                        a.download = `certam_backup_completo_${dateTag}.json`;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                        showToast('Backup completo (.json) exportado com sucesso!');
+                      }}
+                      className="px-4 py-2.5 bg-[#2DD4AA] hover:bg-[#20BE96] text-slate-950 font-bold text-xs rounded-xl cursor-pointer transition-all shadow-sm flex items-center gap-2"
+                    >
+                      <Download className="w-4 h-4" />
+                      <span>Baixar Backup Completo (.JSON)</span>
+                    </button>
+
+                    <label className="px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white border border-white/20 font-bold text-xs rounded-xl cursor-pointer transition-all flex items-center gap-2">
+                      <Upload className="w-4 h-4 text-teal-300" />
+                      <span>Restaurar Backup (.JSON)</span>
+                      <input
+                        type="file"
+                        accept=".json,application/json"
+                        className="hidden"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          try {
+                            const text = await file.text();
+                            setDiagLoading(true);
+                            const res = await cloudSync.importFullBackupJson(text);
+                            if (res.ok) {
+                              reloadData();
+                              setAuditRequests(auditStore.getAuditRequests());
+                              setVinculacoes(auditStore.getVinculacoes());
+                              setContatos(contactStore.getMensagens());
+                              setUsuariosGerais(userRegistryStore.getAllUsers());
+                              const rep = await cloudSync.runDiagnostics();
+                              setDiagReport(rep);
+                              showToast(`Backup restaurado com sucesso! (${res.restoredKeys} bases sincronizadas)`);
+                            } else {
+                              showToast(res.error || 'Falha ao importar backup.');
+                            }
+                          } catch {
+                            showToast('Erro ao ler arquivo JSON de backup.');
+                          } finally {
+                            setDiagLoading(false);
+                            e.target.value = '';
+                          }
+                        }}
+                      />
+                    </label>
+
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const ok = await cloudSync.triggerKeepAlivePing();
+                        showToast(
+                          ok
+                            ? 'Keep-Alive enviado ao Supabase com sucesso! Projeto ativo.'
+                            : 'Supabase não configurado ou indisponível no momento.'
+                        );
+                      }}
+                      className="px-3.5 py-2.5 bg-teal-500/20 hover:bg-teal-500/30 border border-teal-400/40 text-teal-200 font-bold text-xs rounded-xl cursor-pointer transition-all"
+                      title="Evita que o projeto gratuito do Supabase entre em pausa por inatividade"
+                    >
+                      ⚡ Ping Keep-Alive
+                    </button>
+                  </div>
+                </div>
+
+                {/* Indicadores de Uso dos Limites Gratuitos */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+                  <div className="bg-white/5 border border-white/10 rounded-xl p-3.5 space-y-1">
+                    <span className="text-[10px] font-mono uppercase text-slate-300 block">
+                      Banco Supabase (Limite Free: 500 MB)
+                    </span>
+                    <div className="flex items-baseline justify-between">
+                      <strong className="text-base font-mono text-white">
+                        {quotaMetrics.totalStorageMB} MB
+                      </strong>
+                      <span className="text-[11px] font-mono text-[#2DD4AA]">
+                        {quotaMetrics.supabaseDbUsagePercent}% usado ({quotaMetrics.totalKeys} chaves)
+                      </span>
+                    </div>
+                    <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-[#2DD4AA] rounded-full"
+                        style={{ width: `${Math.max(2, quotaMetrics.supabaseDbUsagePercent)}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="bg-white/5 border border-white/10 rounded-xl p-3.5 space-y-1">
+                    <span className="text-[10px] font-mono uppercase text-slate-300 block">
+                      Economia de Banda (Delta Sync)
+                    </span>
+                    <div className="flex items-baseline justify-between">
+                      <strong className="text-base font-mono text-emerald-300">
+                        {quotaMetrics.estimatedMBSaved} MB poupados
+                      </strong>
+                      <span className="text-[10px] font-mono text-slate-300">
+                        {quotaMetrics.keysSkippedByDelta} leituras evitadas
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-slate-300">
+                      Baixa apenas chaves cujo <code className="font-mono">updated_at</code> mudou
+                    </p>
+                  </div>
+
+                  <div className="bg-white/5 border border-white/10 rounded-xl p-3.5 space-y-1">
+                    <span className="text-[10px] font-mono uppercase text-slate-300 block">
+                      Cache Local Expandido (IndexedDB)
+                    </span>
+                    <div className="flex items-center justify-between">
+                      <strong className="text-sm font-mono text-teal-300">
+                        {quotaMetrics.indexedDbActive ? '✓ Ativo (Sem limite 5MB)' : 'Memória + LocalStorage'}
+                      </strong>
+                    </div>
+                    <p className="text-[10px] text-slate-300">
+                      Suporta dezenas de milhares de candidatos sem estourar cota do navegador
+                    </p>
+                  </div>
+
+                  <div className="bg-white/5 border border-white/10 rounded-xl p-3.5 space-y-1">
+                    <span className="text-[10px] font-mono uppercase text-slate-300 block">
+                      Otimização Vercel & Keep-Alive
+                    </span>
+                    <div className="flex items-center justify-between">
+                      <strong className="text-sm font-mono text-amber-300">
+                        Polling 15s (Aba Visível)
+                      </strong>
+                    </div>
+                    <p className="text-[10px] text-slate-300">
+                      {quotaMetrics.lastKeepAliveAt
+                        ? `Último Keep-Alive: ${new Date(quotaMetrics.lastKeepAliveAt).toLocaleTimeString('pt-BR')}`
+                        : 'Pausa requisições automaticamente em segundo plano'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Relatório Detalhado do Diagnóstico */}
           {diagReport && (

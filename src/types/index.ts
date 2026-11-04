@@ -205,6 +205,7 @@ export interface Candidato {
     comarca_atual?: string;
     pretende_continuar?: string;
   };
+  updated_at_ms?: number;
 }
 
 export interface Comarca {

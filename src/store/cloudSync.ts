@@ -1,10 +1,114 @@
-const SYNC_INTERVAL_MS = 3500;
+const SYNC_INTERVAL_MS = 15000;
 let initialized = false;
 let activePullPromise: Promise<boolean> | null = null;
+let localApiAvailable: boolean | null = null;
 
 const memoryStore = new Map<string, string>();
 const lastLocalWriteAt = new Map<string, number>();
 const knownServerVersions = new Map<string, number>();
+
+// Telemetria de economia de limites gratuitos (Supabase Egress & Vercel)
+const syncTelemetry = {
+  deltaPollsCount: 0,
+  fullDownloadsCount: 0,
+  keysSkippedByDelta: 0,
+  estimatedBytesSaved: 0,
+  estimatedBytesDownloaded: 0,
+  indexedDbActive: false,
+  lastKeepAliveAt: null as string | null,
+};
+
+// Camada de Cache Assíncrono em IndexedDB para superar o limite de 5 MB do localStorage
+const IDB_NAME = 'certam_cloud_cache_v1';
+const IDB_STORE = 'kv_entries';
+let idbPromise: Promise<IDBDatabase | null> | null = null;
+
+function openCertamIndexedDB(): Promise<IDBDatabase | null> {
+  if (typeof window === 'undefined' || !('indexedDB' in window)) {
+    return Promise.resolve(null);
+  }
+  if (idbPromise) return idbPromise;
+  idbPromise = new Promise((resolve) => {
+    try {
+      const req = window.indexedDB.open(IDB_NAME, 1);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains(IDB_STORE)) {
+          db.createObjectStore(IDB_STORE);
+        }
+      };
+      req.onsuccess = () => {
+        syncTelemetry.indexedDbActive = true;
+        resolve(req.result);
+      };
+      req.onerror = () => resolve(null);
+    } catch {
+      resolve(null);
+    }
+  });
+  return idbPromise;
+}
+
+async function idbSetItem(key: string, value: string): Promise<void> {
+  const db = await openCertamIndexedDB();
+  if (!db) return;
+  try {
+    const tx = db.transaction(IDB_STORE, 'readwrite');
+    tx.objectStore(IDB_STORE).put(value, key);
+  } catch {
+    // ignore
+  }
+}
+
+async function idbHydrateMemoryStore(): Promise<void> {
+  const db = await openCertamIndexedDB();
+  if (!db) return;
+  return new Promise((resolve) => {
+    try {
+      const tx = db.transaction(IDB_STORE, 'readonly');
+      const store = tx.objectStore(IDB_STORE);
+      const keysReq = store.getAllKeys();
+      const valsReq = store.getAll();
+      tx.oncomplete = () => {
+        const keys = keysReq.result || [];
+        const vals = valsReq.result || [];
+        let hydratedAny = false;
+        for (let i = 0; i < keys.length; i++) {
+          const k = String(keys[i]);
+          const v = vals[i];
+          if (typeof v === 'string' && !memoryStore.has(k)) {
+            memoryStore.set(k, v);
+            hydratedAny = true;
+          }
+        }
+        if (hydratedAny && typeof window !== 'undefined') {
+          window.dispatchEvent(new Event('storage'));
+          window.dispatchEvent(new CustomEvent('certam_candidatos_updated'));
+          window.dispatchEvent(new CustomEvent('certam_concursos_updated'));
+        }
+        resolve();
+      };
+      tx.onerror = () => resolve();
+    } catch {
+      resolve();
+    }
+  });
+}
+
+export interface QuotaAndSyncMetrics {
+  totalKeys: number;
+  totalStorageBytes: number;
+  totalStorageMB: number;
+  supabaseFreeDbLimitMB: number;
+  supabaseDbUsagePercent: number;
+  deltaPollsCount: number;
+  keysSkippedByDelta: number;
+  estimatedMBDownloaded: number;
+  estimatedMBSaved: number;
+  indexedDbActive: boolean;
+  localApiSkippedInStaticMode: boolean;
+  lastKeepAliveAt: string | null;
+}
 
 export interface SupabaseConnectionConfig {
   url: string;
@@ -291,7 +395,16 @@ function isResolvedModerationStatus(status: unknown): boolean {
 }
 
 function mergeKeyedObjectItems(existingItem: any, incomingItem: any): any {
-  const merged = { ...existingItem, ...incomingItem };
+  const existingTs = Number(existingItem?.updated_at_ms || 0);
+  const incomingTs = Number(incomingItem?.updated_at_ms || 0);
+  const base = existingTs > incomingTs ? incomingItem : existingItem;
+  const newer = existingTs > incomingTs ? existingItem : incomingItem;
+  const merged = { ...base, ...newer };
+
+  if (existingTs > 0 || incomingTs > 0) {
+    merged.updated_at_ms = Math.max(existingTs, incomingTs);
+  }
+
   if (
     isResolvedModerationStatus(existingItem?.status) &&
     (incomingItem?.status === 'pendente' || incomingItem?.status === 'aberto')
@@ -312,6 +425,50 @@ function mergeKeyedObjectItems(existingItem: any, incomingItem: any): any {
     merged.status = incomingItem.status;
   }
   return merged;
+}
+
+function mergeCandidateArraysJson(
+  localStr: string,
+  serverStr: string
+): { mergedStr: string; localHadNewerCandidate: boolean } {
+  try {
+    const localArr = JSON.parse(localStr);
+    const serverArr = JSON.parse(serverStr);
+    if (!Array.isArray(localArr) || !Array.isArray(serverArr)) {
+      return { mergedStr: serverStr, localHadNewerCandidate: false };
+    }
+    const map = new Map<string, any>();
+    for (const sItem of serverArr) {
+      if (!sItem || typeof sItem !== 'object') continue;
+      const key = String(sItem.id || `pos_${sItem.posicao}`);
+      map.set(key, sItem);
+    }
+    let localHadNewerCandidate = false;
+    for (const lItem of localArr) {
+      if (!lItem || typeof lItem !== 'object') continue;
+      const key = String(lItem.id || `pos_${lItem.posicao}`);
+      const sItem = map.get(key);
+      if (!sItem) {
+        continue;
+      }
+      const lTs = Number(lItem.updated_at_ms || 0);
+      const sTs = Number(sItem.updated_at_ms || 0);
+      if (lTs > sTs) {
+        const mergedCand = mergeKeyedObjectItems(sItem, lItem);
+        map.set(key, mergedCand);
+        localHadNewerCandidate = true;
+      }
+    }
+    if (!localHadNewerCandidate) {
+      return { mergedStr: serverStr, localHadNewerCandidate: false };
+    }
+    return {
+      mergedStr: JSON.stringify(Array.from(map.values())),
+      localHadNewerCandidate: true,
+    };
+  } catch {
+    return { mergedStr: serverStr, localHadNewerCandidate: false };
+  }
 }
 
 function resolveSupabaseConfig(): SupabaseConnectionConfig | null {
@@ -448,6 +605,9 @@ function migrateAndCleanupLegacyLocalStorage(): void {
 
 function safeLocalStorageSet(key: string, value: string): boolean {
   if (typeof window === 'undefined') return false;
+  // Sempre persiste de forma assíncrona no IndexedDB (sem limite de 5 MB)
+  void idbSetItem(key, value);
+
   try {
     localStorage.setItem(key, value);
     return true;
@@ -457,42 +617,43 @@ function safeLocalStorageSet(key: string, value: string): boolean {
       localStorage.setItem(key, value);
       return true;
     } catch {
-      if (
-        isPriorityKey(key) ||
-        key.startsWith('certam_candidatos_') ||
-        key.startsWith('certam_auth_')
-      ) {
-        try {
-          const bulkKeys: { k: string; len: number }[] = [];
-          for (let i = 0; i < localStorage.length; i++) {
-            const k = localStorage.key(i);
-            // Nunca descarta concursos, lotes, candidatos ou auditoria para liberar espaço
-            if (
-              k &&
-              !k.startsWith('certam_concursos_') &&
-              !k.startsWith('certam_candidatos_') &&
+      try {
+        const evictableKeys: { k: string; len: number; isHeavyCandidates: boolean }[] = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (!k || k === key || k.startsWith('certam_auth_')) continue;
+          const v = localStorage.getItem(k) || '';
+          memoryStore.set(k, v);
+          void idbSetItem(k, v);
+          const isHeavyCandidates = k.startsWith('certam_candidatos_data_v6_');
+          if (
+            isHeavyCandidates ||
+            (!k.startsWith('certam_concursos_') &&
               !k.startsWith('certam_lotes_') &&
-              !k.startsWith('certam_perfil_audit_') &&
-              !k.startsWith('certam_auth_')
-            ) {
-              const v = localStorage.getItem(k) || '';
-              memoryStore.set(k, v);
-              bulkKeys.push({ k, len: v.length });
-            }
+              !k.startsWith('certam_perfil_audit_'))
+          ) {
+            evictableKeys.push({ k, len: v.length, isHeavyCandidates });
           }
-          bulkKeys.sort((a, b) => b.len - a.len);
-          for (const item of bulkKeys) {
-            localStorage.removeItem(item.k);
-            try {
-              localStorage.setItem(key, value);
-              return true;
-            } catch {
-              // continue freeing space
-            }
-          }
-        } catch {
-          // ignore
         }
+        // Remove primeiro chaves secundárias, e se ainda faltar espaço no localStorage de 5MB,
+        // move as listas pesadas de candidatos apenas para memoryStore + IndexedDB
+        evictableKeys.sort((a, b) => {
+          if (a.isHeavyCandidates !== b.isHeavyCandidates) {
+            return a.isHeavyCandidates ? 1 : -1;
+          }
+          return b.len - a.len;
+        });
+        for (const item of evictableKeys) {
+          localStorage.removeItem(item.k);
+          try {
+            localStorage.setItem(key, value);
+            return true;
+          } catch {
+            // continue freeing space
+          }
+        }
+      } catch {
+        // ignore
       }
       return false;
     }
@@ -723,7 +884,92 @@ async function fetchEntriesFromSupabase(): Promise<{
   if (!cfg) return null;
 
   try {
-    // Usa select=* para nunca falhar caso a coluna updated_at ainda não exista na tabela legada
+    // PLANO 1 — DELTA SYNC:
+    // Passo 1: Consulta leve apenas de metadados (chave, updated_at) ~1 KB
+    const metaRes = await fetch(`${cfg.url}/rest/v1/configuracoes?select=chave,updated_at`, {
+      method: 'GET',
+      headers: getSupabaseHeaders(cfg.anonKey),
+      cache: 'no-store',
+    });
+
+    if (metaRes.ok) {
+      const metaRows = await metaRes.json();
+      if (Array.isArray(metaRows)) {
+        syncTelemetry.deltaPollsCount++;
+        const entries: Record<string, string> = {};
+        const versions: Record<string, number> = {};
+        const keysToDownload: string[] = [];
+
+        for (const row of metaRows) {
+          if (!row || typeof row.chave !== 'string') continue;
+          const rawKey = row.chave;
+          if (!rawKey.startsWith('certam_')) continue;
+          if (rawKey === '_test_ping' || rawKey === 'certam_diag_heartbeat') continue;
+          const canonicalKey = LEGACY_KEY_MIGRATIONS[rawKey] || rawKey;
+          if (!shouldSyncKey(canonicalKey)) continue;
+
+          const ts = row.updated_at ? new Date(row.updated_at).getTime() : 0;
+          versions[canonicalKey] = Math.max(versions[canonicalKey] || 0, ts);
+
+          const cachedVal = memoryStore.get(canonicalKey) ?? (typeof window !== 'undefined' ? localStorage.getItem(canonicalKey) : null);
+          const knownTs = knownServerVersions.get(canonicalKey) || 0;
+
+          if (isNonEmptySerialized(cachedVal) && ts > 0 && knownTs > 0 && ts <= knownTs) {
+            // Chave não mudou no Supabase! Reaproveita o cache em memória sem gastar Egress
+            entries[canonicalKey] = cachedVal;
+            syncTelemetry.keysSkippedByDelta++;
+            syncTelemetry.estimatedBytesSaved += cachedVal.length;
+          } else {
+            keysToDownload.push(rawKey);
+          }
+        }
+
+        // Passo 2: Baixa o payload (valor) APENAS das chaves novas ou modificadas
+        if (keysToDownload.length > 0) {
+          const inList = keysToDownload.map((k) => `"${k.replace(/"/g, '')}"`).join(',');
+          const deltaRes = await fetch(
+            `${cfg.url}/rest/v1/configuracoes?select=chave,valor,updated_at&chave=in.(${encodeURIComponent(inList)})`,
+            {
+              method: 'GET',
+              headers: getSupabaseHeaders(cfg.anonKey),
+              cache: 'no-store',
+            }
+          );
+
+          if (deltaRes.ok) {
+            const deltaRows = await deltaRes.json();
+            if (Array.isArray(deltaRows)) {
+              for (const row of deltaRows) {
+                if (!row || typeof row.chave !== 'string') continue;
+                const rawKey = row.chave;
+                const canonicalKey = LEGACY_KEY_MIGRATIONS[rawKey] || rawKey;
+                if (!shouldSyncKey(canonicalKey)) continue;
+
+                const rawSerialized =
+                  typeof row.valor === 'string' ? row.valor : JSON.stringify(row.valor ?? null);
+                const serialized = sanitizeSyncValue(canonicalKey, rawSerialized);
+                const ts = row.updated_at ? new Date(row.updated_at).getTime() : Date.now() - 5000;
+
+                if (!isNonEmptySerialized(serialized)) continue;
+                syncTelemetry.estimatedBytesDownloaded += serialized.length;
+
+                if (!entries[canonicalKey] || (versions[canonicalKey] || 0) <= ts) {
+                  entries[canonicalKey] = serialized;
+                  versions[canonicalKey] = ts;
+                }
+              }
+            }
+          }
+        }
+
+        syncStatus.lastSupabaseOk = true;
+        syncStatus.lastSupabaseError = null;
+        return { entries, versions };
+      }
+    }
+
+    // Fallback para select=* caso a tabela legada não possua a coluna updated_at
+    syncTelemetry.fullDownloadsCount++;
     const res = await fetch(`${cfg.url}/rest/v1/configuracoes?select=*`, {
       method: 'GET',
       headers: getSupabaseHeaders(cfg.anonKey),
@@ -745,7 +991,6 @@ async function fetchEntriesFromSupabase(): Promise<{
       for (const row of rows) {
         if (!row || typeof row.chave !== 'string') continue;
         const rawKey = row.chave;
-        // Ignora chaves que não pertencem ao CERTAM (ex: cadastradas por outro site antigo)
         if (!rawKey.startsWith('certam_')) continue;
         if (rawKey === '_test_ping' || rawKey === 'certam_diag_heartbeat') continue;
         const canonicalKey = LEGACY_KEY_MIGRATIONS[rawKey] || rawKey;
@@ -757,6 +1002,7 @@ async function fetchEntriesFromSupabase(): Promise<{
         const ts = row.updated_at ? new Date(row.updated_at).getTime() : Date.now() - 5000;
 
         if (!isNonEmptySerialized(serialized)) continue;
+        syncTelemetry.estimatedBytesDownloaded += serialized.length;
 
         if (!entries[canonicalKey] || (versions[canonicalKey] || 0) < ts) {
           entries[canonicalKey] = serialized;
@@ -797,57 +1043,67 @@ async function sendEntriesBatch(
     }
   }
 
-  if (Object.keys(priorityBatch).length > 0 || cleanConflicts || deleteKeys.length > 0) {
-    try {
-      const res = await fetch('/api/sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          entries: priorityBatch,
-          forceReplace,
-          cleanConflicts,
-          deleteKeys,
-        }),
-      });
-      if (res.ok) {
-        syncStatus.lastLocalApiOk = true;
-        syncStatus.lastPushAt = new Date().toISOString();
-        const data = await res.json();
-        if (data?.versions && typeof data.versions === 'object') {
-          for (const [vk, vv] of Object.entries(data.versions)) {
-            if (typeof vv === 'number') knownServerVersions.set(vk, vv);
+  // Só chama /api/sync se não tiver sido detectado modo estático (ex: Vercel sem backend Express)
+  if (localApiAvailable !== false) {
+    if (Object.keys(priorityBatch).length > 0 || cleanConflicts || deleteKeys.length > 0) {
+      try {
+        const res = await fetch('/api/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            entries: priorityBatch,
+            forceReplace,
+            cleanConflicts,
+            deleteKeys,
+          }),
+        });
+        const contentType = res.headers.get('content-type') || '';
+        if (res.ok && contentType.includes('application/json')) {
+          localApiAvailable = true;
+          syncStatus.lastLocalApiOk = true;
+          syncStatus.lastPushAt = new Date().toISOString();
+          const data = await res.json();
+          if (data?.versions && typeof data.versions === 'object') {
+            for (const [vk, vv] of Object.entries(data.versions)) {
+              if (typeof vv === 'number') knownServerVersions.set(vk, vv);
+            }
           }
+        } else if (res.status === 404 || res.status === 405 || !contentType.includes('application/json')) {
+          localApiAvailable = false;
+          syncStatus.lastLocalApiOk = false;
         }
+      } catch {
+        syncStatus.lastLocalApiOk = false;
       }
-    } catch {
-      syncStatus.lastLocalApiOk = false;
     }
-  }
 
-  for (const bk of bulkKeys) {
-    const cleanVal = sanitizeSyncValue(bk, entries[bk]);
-    if (!cleanVal) continue;
-    try {
-      const res = await fetch('/api/sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          entries: { [bk]: cleanVal },
-          forceReplace: forceReplace || isAdminAuthoritativeKey(bk),
-        }),
-      });
-      if (res.ok) {
-        syncStatus.lastLocalApiOk = true;
-        syncStatus.lastPushAt = new Date().toISOString();
-        const data = await res.json();
-        if (data?.versions && typeof data.versions === 'object') {
-          for (const [vk, vv] of Object.entries(data.versions)) {
-            if (typeof vv === 'number') knownServerVersions.set(vk, vv);
+    if (localApiAvailable !== false) {
+      for (const bk of bulkKeys) {
+        const cleanVal = sanitizeSyncValue(bk, entries[bk]);
+        if (!cleanVal) continue;
+        try {
+          const res = await fetch('/api/sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              entries: { [bk]: cleanVal },
+              forceReplace: forceReplace || isAdminAuthoritativeKey(bk),
+            }),
+          });
+          if (res.ok) {
+            syncStatus.lastLocalApiOk = true;
+            syncStatus.lastPushAt = new Date().toISOString();
+            const data = await res.json();
+            if (data?.versions && typeof data.versions === 'object') {
+              for (const [vk, vv] of Object.entries(data.versions)) {
+                if (typeof vv === 'number') knownServerVersions.set(vk, vv);
+              }
+            }
           }
+        } catch {
+          // ignore network error
         }
       }
-    } catch {
-      // ignore network error
     }
   }
 
@@ -899,23 +1155,27 @@ async function executePullFromServer(): Promise<boolean> {
     let localApiVersions: Record<string, number> = {};
     let usedStaticFallback = false;
 
-    try {
-      const res = await fetch('/api/sync', { cache: 'no-store' });
-      const contentType = res.headers.get('content-type') || '';
-      if (res.ok && contentType.includes('application/json')) {
-        syncStatus.lastLocalApiOk = true;
-        const data = await res.json();
-        localApiEntries = data?.entries || {};
-        localApiVersions = data?.versions || {};
-      } else {
+    if (localApiAvailable !== false) {
+      try {
+        const res = await fetch('/api/sync', { cache: 'no-store' });
+        const contentType = res.headers.get('content-type') || '';
+        if (res.ok && contentType.includes('application/json')) {
+          localApiAvailable = true;
+          syncStatus.lastLocalApiOk = true;
+          const data = await res.json();
+          localApiEntries = data?.entries || {};
+          localApiVersions = data?.versions || {};
+        } else {
+          localApiAvailable = false;
+          syncStatus.lastLocalApiOk = false;
+        }
+      } catch {
         syncStatus.lastLocalApiOk = false;
       }
-    } catch {
-      syncStatus.lastLocalApiOk = false;
     }
 
-    // Fallback para arquivo estático /certam_sync_db.json caso /api/sync não esteja rodando (ex: deploy estático)
-    if (!syncStatus.lastLocalApiOk) {
+    // Fallback para arquivo estático /certam_sync_db.json apenas na primeira carga caso /api/sync não esteja rodando
+    if (!syncStatus.lastLocalApiOk && memoryStore.size === 0) {
       try {
         const snapRes = await fetch('/certam_sync_db.json', { cache: 'no-store' });
         const snapType = snapRes.headers.get('content-type') || '';
@@ -1105,6 +1365,23 @@ async function executePullFromServer(): Promise<boolean> {
 
       // REGRA DE AUTORIDADE PARA CONCURSOS, LOTES, CANDIDATOS E FAQs:
       if (isAdminAuthoritativeKey(k)) {
+        // PLANO 3 — Merge atômico por candidato em listas certam_candidatos_data_v6_*
+        if (k.startsWith('certam_candidatos_data_v6_') && isNonEmptySerialized(localVal) && isNonEmptySerialized(serverVal)) {
+          const { mergedStr, localHadNewerCandidate } = mergeCandidateArraysJson(localVal, serverVal);
+          if (localHadNewerCandidate) {
+            if (mergedStr !== localVal) {
+              memoryStore.set(k, mergedStr);
+              safeLocalStorageSet(k, mergedStr);
+              changedKeys.push(k);
+            }
+            if (mergedStr !== serverVal) {
+              toPushBack[k] = mergedStr;
+            }
+            if (srvVer) knownServerVersions.set(k, srvVer);
+            continue;
+          }
+        }
+
         if (isCurrentUserAdmin) {
           if (isNonEmptySerialized(localVal)) {
             if (localVal !== serverVal) {
@@ -1364,27 +1641,34 @@ export const cloudSync = {
     memoryStore.set(canonicalKey, strValue);
     lastLocalWriteAt.set(canonicalKey, Date.now());
 
-    try {
-      const res = await fetch('/api/sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          entries: { [canonicalKey]: strValue },
-          forceReplace: Boolean(forceReplace) || isAdminAuthoritativeKey(canonicalKey),
-        }),
-      });
-      if (res.ok) {
-        syncStatus.lastLocalApiOk = true;
-        syncStatus.lastPushAt = new Date().toISOString();
-        const data = await res.json();
-        if (data?.versions && typeof data.versions === 'object') {
-          for (const [vk, vv] of Object.entries(data.versions)) {
-            if (typeof vv === 'number') knownServerVersions.set(vk, vv);
+    if (localApiAvailable !== false) {
+      try {
+        const res = await fetch('/api/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            entries: { [canonicalKey]: strValue },
+            forceReplace: Boolean(forceReplace) || isAdminAuthoritativeKey(canonicalKey),
+          }),
+        });
+        const contentType = res.headers.get('content-type') || '';
+        if (res.ok && contentType.includes('application/json')) {
+          localApiAvailable = true;
+          syncStatus.lastLocalApiOk = true;
+          syncStatus.lastPushAt = new Date().toISOString();
+          const data = await res.json();
+          if (data?.versions && typeof data.versions === 'object') {
+            for (const [vk, vv] of Object.entries(data.versions)) {
+              if (typeof vv === 'number') knownServerVersions.set(vk, vv);
+            }
           }
+        } else if (res.status === 404 || res.status === 405 || !contentType.includes('application/json')) {
+          localApiAvailable = false;
+          syncStatus.lastLocalApiOk = false;
         }
+      } catch {
+        syncStatus.lastLocalApiOk = false;
       }
-    } catch {
-      syncStatus.lastLocalApiOk = false;
     }
 
     await pushEntriesToSupabase({ [canonicalKey]: strValue });
@@ -1399,7 +1683,7 @@ export const cloudSync = {
       const nonEmpty: Record<string, string> = {};
       for (const [k, val] of Object.entries(allLocal)) {
         if (!isNonEmptySerialized(val)) continue;
-        if (!isCurrentUserAdmin && isAdminAuthoritativeKey(k)) {
+        if (!isCurrentUserAdmin && isAdminAuthoritativeKey(k) && !k.startsWith('certam_candidatos_data_v6_')) {
           continue;
         }
         nonEmpty[k] = val;
@@ -1768,16 +2052,130 @@ export const cloudSync = {
     };
   },
 
+  // PLANO 7 — Monitor de Limites Gratuitos (Supabase & Vercel) + Backup Completo em 1 Clique + Keep-Alive
+  getQuotaAndSyncMetrics(): QuotaAndSyncMetrics {
+    const allEntries = getAllLocalSyncEntries();
+    const keys = Object.keys(allEntries);
+    let totalBytes = 0;
+    for (const k of keys) {
+      totalBytes += (allEntries[k] || '').length;
+    }
+    const totalStorageMB = Number((totalBytes / (1024 * 1024)).toFixed(2));
+    const supabaseFreeDbLimitMB = 500;
+    const supabaseDbUsagePercent = Number(
+      Math.min(100, (totalStorageMB / supabaseFreeDbLimitMB) * 100).toFixed(2)
+    );
+
+    return {
+      totalKeys: keys.length,
+      totalStorageBytes: totalBytes,
+      totalStorageMB,
+      supabaseFreeDbLimitMB,
+      supabaseDbUsagePercent,
+      deltaPollsCount: syncTelemetry.deltaPollsCount,
+      keysSkippedByDelta: syncTelemetry.keysSkippedByDelta,
+      estimatedMBDownloaded: Number((syncTelemetry.estimatedBytesDownloaded / (1024 * 1024)).toFixed(2)),
+      estimatedMBSaved: Number((syncTelemetry.estimatedBytesSaved / (1024 * 1024)).toFixed(2)),
+      indexedDbActive: syncTelemetry.indexedDbActive,
+      localApiSkippedInStaticMode: localApiAvailable === false,
+      lastKeepAliveAt: syncTelemetry.lastKeepAliveAt,
+    };
+  },
+
+  exportFullBackupJson(): string {
+    const entries = getAllLocalSyncEntries();
+    const payload = {
+      app: 'CERTAM',
+      version: 'v6',
+      exportedAt: new Date().toISOString(),
+      totalKeys: Object.keys(entries).length,
+      entries,
+    };
+    return JSON.stringify(payload, null, 2);
+  },
+
+  async importFullBackupJson(rawJson: string): Promise<{ ok: boolean; restoredKeys: number; error?: string }> {
+    try {
+      const parsed = JSON.parse(rawJson);
+      const rawEntries: Record<string, any> =
+        parsed && typeof parsed === 'object' && parsed.entries && typeof parsed.entries === 'object'
+          ? parsed.entries
+          : parsed;
+
+      if (!rawEntries || typeof rawEntries !== 'object' || Array.isArray(rawEntries)) {
+        return { ok: false, restoredKeys: 0, error: 'Formato de arquivo JSON inválido.' };
+      }
+
+      const cleanEntries: Record<string, string> = {};
+      for (const [k, v] of Object.entries(rawEntries)) {
+        const canonicalKey = LEGACY_KEY_MIGRATIONS[k] || k;
+        if (!shouldSyncKey(canonicalKey)) continue;
+        const serialized = typeof v === 'string' ? v : JSON.stringify(v);
+        const sanitized = sanitizeSyncValue(canonicalKey, serialized) || serialized;
+        if (isNonEmptySerialized(sanitized)) {
+          cleanEntries[canonicalKey] = sanitized;
+          memoryStore.set(canonicalKey, sanitized);
+          lastLocalWriteAt.set(canonicalKey, Date.now());
+          safeLocalStorageSet(canonicalKey, sanitized);
+        }
+      }
+
+      const restoredKeys = Object.keys(cleanEntries).length;
+      if (restoredKeys === 0) {
+        return { ok: false, restoredKeys: 0, error: 'Nenhuma chave válida do CERTAM encontrada no backup.' };
+      }
+
+      await sendEntriesBatch(cleanEntries, true);
+      dispatchUpdateEvents(Object.keys(cleanEntries));
+      return { ok: true, restoredKeys };
+    } catch (err: any) {
+      return {
+        ok: false,
+        restoredKeys: 0,
+        error: err?.message || 'Erro ao processar arquivo de backup JSON.',
+      };
+    }
+  },
+
+  async triggerKeepAlivePing(): Promise<boolean> {
+    const cfg = resolveSupabaseConfig();
+    if (!cfg) return false;
+    try {
+      const nowIso = new Date().toISOString();
+      const res = await fetch(`${cfg.url}/rest/v1/configuracoes?select=chave&limit=1`, {
+        method: 'GET',
+        headers: getSupabaseHeaders(cfg.anonKey),
+        cache: 'no-store',
+      });
+      if (res.ok) {
+        syncTelemetry.lastKeepAliveAt = nowIso;
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  },
+
   initAutoSync(): void {
     if (initialized || typeof window === 'undefined') return;
     initialized = true;
     migrateAndCleanupLegacyLocalStorage();
-    this.pullFromServer().then(() => {
-      this.pushAllLocal();
+    void idbHydrateMemoryStore().finally(() => {
+      this.pullFromServer().then(() => {
+        this.pushAllLocal();
+      });
+      void this.triggerKeepAlivePing();
     });
+
+    // Polling adaptativo por visibilidade: só consulta em segundo plano quando a aba está visível
     window.setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+        return;
+      }
       this.pullFromServer();
     }, SYNC_INTERVAL_MS);
+
     window.addEventListener('focus', () => {
       this.pullFromServer();
     });

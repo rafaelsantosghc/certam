@@ -392,6 +392,13 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
   const [loteSelecionadoParaEscolha, setLoteSelecionadoParaEscolha] = useState<Lote | null>(null);
   const [modalEscolhaComarcasAberto, setModalEscolhaComarcasAberto] = useState(false);
 
+  // Simulador Inteligente de Posição Efetiva de Chamamento (Plano 5)
+  const [vagasSimuladasChamamento, setVagasSimuladasChamamento] = useState<number>(
+    cargo.vagas_previstas_proximo_lote && cargo.vagas_previstas_proximo_lote > 0
+      ? cargo.vagas_previstas_proximo_lote
+      : 15
+  );
+
   // Cálculo da Ordem de Nomeação (puxa lotes oficiais garantidos + projeta cotas para os demais)
   const listaOrdemNomeacao = useMemo(() => {
     const lotesDesteCargo = lotes.filter(
@@ -401,9 +408,106 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
       candidatos,
       lotesDesteCargo,
       configCotas,
-      cargo.vagas_previstas_proximo_lote || 0
+      vagasSimuladasChamamento || cargo.vagas_previstas_proximo_lote || 0
     );
-  }, [candidatos, lotes, concurso.id, cargo.id, configCotas, cargo.vagas_previstas_proximo_lote]);
+  }, [candidatos, lotes, concurso.id, cargo.id, configCotas, cargo.vagas_previstas_proximo_lote, vagasSimuladasChamamento]);
+
+  // Mapa de Posição Efetiva Líquida descontando Nomeados, Convocados Titulares, Desistentes e Fim de Fila
+  const simulacaoFilaEfetiva = useMemo(() => {
+    const candById = new Map<string, Candidato>();
+    candidatos.forEach((c) => candById.set(c.id, c));
+
+    let jaConvocadosNomeados = 0;
+    let desistentesOuFimDeFila = 0;
+    let contadorFilaLiquida = 0;
+
+    const posEfetivaPorCandidatoId = new Map<
+      string,
+      {
+        posicaoEfetiva: number | null;
+        contempladoSimulacao: boolean;
+        motivoForaDaFila?: 'convocado' | 'desistente' | 'fim_fila';
+        vagaCotaSimulada?: string;
+      }
+    >();
+
+    // Percorre na ordem legal de chamamento (alternância de cotas)
+    for (const item of listaOrdemNomeacao) {
+      const cand = candById.get(item.candidatoId);
+      const status: string = item.status || cand?.status || '';
+      const intencao: string = cand?.intencao || 'Sim';
+
+      const isJaChamado =
+        item.garantido ||
+        status === 'Nomeado' ||
+        status === 'Convocado titular' ||
+        status === 'Convocado Titular' ||
+        status === 'Posse' ||
+        status === 'Exercício';
+
+      const isDesistente =
+        status === 'Desistente' || status === 'Desistência' || intencao === 'Não';
+
+      const isFimFila =
+        status === 'Final de lista' || status === 'Fim de Fila' || intencao === 'final_fila';
+
+      if (isJaChamado) {
+        jaConvocadosNomeados++;
+        posEfetivaPorCandidatoId.set(item.candidatoId, {
+          posicaoEfetiva: null,
+          contempladoSimulacao: false,
+          motivoForaDaFila: 'convocado',
+          vagaCotaSimulada: item.vagaAtribuida,
+        });
+      } else if (isDesistente) {
+        desistentesOuFimDeFila++;
+        posEfetivaPorCandidatoId.set(item.candidatoId, {
+          posicaoEfetiva: null,
+          contempladoSimulacao: false,
+          motivoForaDaFila: 'desistente',
+          vagaCotaSimulada: item.vagaAtribuida,
+        });
+      } else if (isFimFila) {
+        desistentesOuFimDeFila++;
+        posEfetivaPorCandidatoId.set(item.candidatoId, {
+          posicaoEfetiva: null,
+          contempladoSimulacao: false,
+          motivoForaDaFila: 'fim_fila',
+          vagaCotaSimulada: item.vagaAtribuida,
+        });
+      } else {
+        contadorFilaLiquida++;
+        posEfetivaPorCandidatoId.set(item.candidatoId, {
+          posicaoEfetiva: contadorFilaLiquida,
+          contempladoSimulacao: contadorFilaLiquida <= vagasSimuladasChamamento,
+          vagaCotaSimulada: item.vagaAtribuida,
+        });
+      }
+    }
+
+    return {
+      jaConvocadosNomeados,
+      desistentesOuFimDeFila,
+      totalFilaLiquida: contadorFilaLiquida,
+      posEfetivaPorCandidatoId,
+    };
+  }, [candidatos, listaOrdemNomeacao, vagasSimuladasChamamento]);
+
+  // Plano 4 — Adequação à LGPD: Mascaramento de CPF de terceiros para não-administradores
+  const formatarCpfSeguroLgpd = (cpfRaw?: string, candId?: string): string => {
+    if (!cpfRaw) return '';
+    if (isAdmin || (meuCandidato && candId && meuCandidato.id === candId)) {
+      return cpfRaw;
+    }
+    const digitos = cpfRaw.replace(/\D/g, '');
+    if (digitos.length === 11) {
+      return `***.${digitos.slice(3, 6)}.${digitos.slice(6, 9)}-**`;
+    }
+    if (digitos.length >= 6) {
+      return `***.${digitos.slice(0, 3)}.${digitos.slice(3, 6)}-**`;
+    }
+    return '***.***.***-**';
+  };
 
   const ordemNomeacaoFiltrada = useMemo(() => {
     return listaOrdemNomeacao.filter((item) => {
@@ -1210,6 +1314,120 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
             )}
           </div>
 
+          {/* PLANO 5: SIMULADOR INTELIGENTE DE POSIÇÃO REAL DE CHAMAMENTO */}
+          <div className="bg-gradient-to-r from-[#07192B] to-[#0C2640] text-white rounded-2xl p-4 sm:p-5 card-shadow border border-[#135A7A]/60 space-y-4">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+              <div className="space-y-1">
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#2DD4AA]/15 border border-[#2DD4AA]/40 text-[#2DD4AA] text-[10px] font-mono font-bold uppercase">
+                  <Sparkles className="w-3 h-3" />
+                  <span>Simulador Inteligente de Fila Líquida & Chamamento</span>
+                </div>
+                <h3 className="text-sm sm:text-base font-bold font-serif text-white">
+                  Projeção Dinâmica de Posição Real (Descontando Nomeados, Desistências e Alternância de Cotas)
+                </h3>
+                <p className="text-2xs text-slate-300 leading-relaxed max-w-3xl">
+                  Calcula automaticamente a posição real de espera de cada aprovado descontando os candidatos já convocados/nomeados ({simulacaoFilaEfetiva.jaConvocadosNomeados}) e os que declararam desistência ou fim de fila ({simulacaoFilaEfetiva.desistentesOuFimDeFila}).
+                </p>
+              </div>
+
+              {/* Controle Interativo de Vagas Simuladas */}
+              <div className="bg-white/10 backdrop-blur-xs border border-white/15 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center gap-3 shrink-0">
+                <div>
+                  <label className="block text-[10px] font-mono uppercase text-teal-300 font-bold">
+                    Simular Próximo Chamamento:
+                  </label>
+                  <div className="flex items-center gap-2 mt-1">
+                    <input
+                      type="range"
+                      min={1}
+                      max={Math.max(100, simulacaoFilaEfetiva.totalFilaLiquida || 100)}
+                      value={vagasSimuladasChamamento}
+                      onChange={(e) => setVagasSimuladasChamamento(Math.max(1, Number(e.target.value) || 1))}
+                      className="w-28 sm:w-36 accent-[#2DD4AA] cursor-pointer"
+                    />
+                    <input
+                      type="number"
+                      min={1}
+                      max={5000}
+                      value={vagasSimuladasChamamento}
+                      onChange={(e) => setVagasSimuladasChamamento(Math.max(1, Number(e.target.value) || 1))}
+                      className="w-16 px-2 py-1 rounded-lg bg-[#07192B] border border-teal-400/50 text-[#2DD4AA] font-mono font-bold text-xs text-center"
+                    />
+                    <span className="text-xs font-bold text-white">novas vagas</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Resumo de KPIs da Fila Efetiva + Posição do Candidato Logado */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1">
+              <div className="bg-white/5 border border-white/10 rounded-xl p-2.5">
+                <span className="text-[10px] font-mono uppercase text-slate-300 block">Já Convocados / Nomeados</span>
+                <strong className="text-base font-mono font-bold text-teal-300">
+                  {simulacaoFilaEfetiva.jaConvocadosNomeados}
+                </strong>
+              </div>
+              <div className="bg-white/5 border border-white/10 rounded-xl p-2.5">
+                <span className="text-[10px] font-mono uppercase text-slate-300 block">Desistências / Fim de Fila</span>
+                <strong className="text-base font-mono font-bold text-amber-300">
+                  {simulacaoFilaEfetiva.desistentesOuFimDeFila}
+                </strong>
+              </div>
+              <div className="bg-white/5 border border-white/10 rounded-xl p-2.5">
+                <span className="text-[10px] font-mono uppercase text-slate-300 block">Aguardando na Fila Real</span>
+                <strong className="text-base font-mono font-bold text-white">
+                  {simulacaoFilaEfetiva.totalFilaLiquida}
+                </strong>
+              </div>
+              <div className="bg-[#2DD4AA]/15 border border-[#2DD4AA]/40 rounded-xl p-2.5">
+                <span className="text-[10px] font-mono uppercase text-[#2DD4AA] font-bold block">
+                  Sua Posição Efetiva na Fila
+                </span>
+                {meuCandidato ? (
+                  (() => {
+                    const minhaSim = simulacaoFilaEfetiva.posEfetivaPorCandidatoId.get(meuCandidato.id);
+                    if (minhaSim?.motivoForaDaFila === 'convocado') {
+                      return (
+                        <strong className="text-xs font-mono font-bold text-emerald-300 block mt-0.5">
+                          ✓ Já Convocado / Nomeado ({meuCandidato.posicao}º oficial)
+                        </strong>
+                      );
+                    }
+                    if (minhaSim?.posicaoEfetiva) {
+                      return (
+                        <div className="flex items-center justify-between gap-1 mt-0.5">
+                          <strong className="text-sm font-mono font-bold text-white">
+                            {minhaSim.posicaoEfetiva}º na fila real
+                          </strong>
+                          <span
+                            className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold ${
+                              minhaSim.contempladoSimulacao
+                                ? 'bg-emerald-400 text-slate-950'
+                                : 'bg-white/15 text-slate-200'
+                            }`}
+                          >
+                            {minhaSim.contempladoSimulacao
+                              ? `ENTRA NAS +${vagasSimuladasChamamento}`
+                              : `Faltam ${minhaSim.posicaoEfetiva - vagasSimuladasChamamento}`}
+                          </span>
+                        </div>
+                      );
+                    }
+                    return (
+                      <strong className="text-xs font-mono text-amber-200 block mt-0.5">
+                        {meuCandidato.posicao}º oficial (Fora da fila ativa)
+                      </strong>
+                    );
+                  })()
+                ) : (
+                  <span className="text-[11px] text-slate-300 block mt-0.5">
+                    Vincule seu CPF para ver sua projeção
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+
           {/* Filtros da Tabela */}
           <div className="bg-white rounded-2xl border border-slate-200 p-3.5 sm:p-4 card-shadow space-y-3">
             <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
@@ -1438,7 +1656,23 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
                               className="col-span-10 grid grid-cols-subgrid items-center hover:bg-slate-50 transition-colors py-2.5 px-3 group"
                             >
                               <div className="text-center font-mono font-bold text-slate-900 sticky left-0 z-10 bg-white group-hover:bg-slate-50 transition-colors">
-                                {cand.posicao}º
+                                <div>{cand.posicao}º</div>
+                                {(() => {
+                                  const simInfo = simulacaoFilaEfetiva.posEfetivaPorCandidatoId.get(cand.id);
+                                  if (!simInfo || !simInfo.posicaoEfetiva) return null;
+                                  return (
+                                    <span
+                                      className={`inline-block px-1 py-0.2 rounded text-[9px] font-mono font-bold mt-0.5 ${
+                                        simInfo.contempladoSimulacao
+                                          ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                                          : 'bg-slate-100 text-slate-600'
+                                      }`}
+                                      title="Posição efetiva na fila líquida (descontando nomeados, desistentes e aplicando alternância de cotas)"
+                                    >
+                                      Fila: {simInfo.posicaoEfetiva}º
+                                    </span>
+                                  );
+                                })()}
                               </div>
                               <div className="font-bold text-slate-900 pr-2 sticky left-[65px] sm:left-[75px] z-10 bg-white group-hover:bg-slate-50 transition-colors shadow-[2px_0_5px_rgba(0,0,0,0.06)]">
                                 <div className="flex items-center gap-1.5 flex-wrap">
@@ -1455,10 +1689,22 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
                                       </span>
                                     ) : null;
                                   })()}
+                                  {(() => {
+                                    const simInfo = simulacaoFilaEfetiva.posEfetivaPorCandidatoId.get(cand.id);
+                                    if (!simInfo?.contempladoSimulacao) return null;
+                                    return (
+                                      <span
+                                        className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-teal-50 text-teal-800 border border-teal-300 whitespace-nowrap"
+                                        title={`Contemplado na simulação de +${vagasSimuladasChamamento} vagas (${simInfo.vagaCotaSimulada || 'Ampla'})`}
+                                      >
+                                        <span>⚡ Simulado ({simInfo.posicaoEfetiva}º)</span>
+                                      </span>
+                                    );
+                                  })()}
                                 </div>
                                 {isCandidatoAprovado && cand.cpf && (
                                   <span className="text-[10px] font-mono text-slate-400 block font-normal">
-                                    CPF: {cand.cpf}
+                                    CPF: {formatarCpfSeguroLgpd(cand.cpf, cand.id)}
                                   </span>
                                 )}
                               </div>

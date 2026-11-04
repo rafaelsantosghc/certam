@@ -216,6 +216,10 @@ export const lotesStore = {
     const list = [...this.getCandidatos(concursoId, cargoId)];
     const candCpfLimpo = candidato.cpf ? candidato.cpf.replace(/\D/g, '') : '';
     const candEmailNorm = candidato.email ? candidato.email.toLowerCase().trim() : '';
+    const candidatoComTimestamp: Candidato = {
+      ...candidato,
+      updated_at_ms: Date.now(),
+    };
 
     const index = list.findIndex(
       (c) =>
@@ -224,9 +228,9 @@ export const lotesStore = {
         (candEmailNorm && c.email && c.email.toLowerCase().trim() === candEmailNorm)
     );
     if (index >= 0) {
-      list[index] = { ...list[index], ...candidato };
+      list[index] = { ...list[index], ...candidatoComTimestamp };
     } else {
-      list.push(candidato);
+      list.push(candidatoComTimestamp);
     }
     this.salvarCandidatos(concursoId, cargoId, list, false);
   },

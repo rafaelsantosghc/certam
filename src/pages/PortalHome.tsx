@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { certamStore } from '../store/certamStore';
 import { lotesStore } from '../store/lotesStore';
+import { auditStore } from '../store/auditStore';
 import { useAuth } from '../store/authContext';
 import { Concurso, Cargo, Candidato } from '../types';
 import { PerfilCandidatoModal } from '../components/PerfilCandidatoModal';
@@ -421,40 +422,89 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
       </div>
 
       {/* =================================================================== */}
-      {/* SEÇÃO 2A: APROVAÇÕES (Concursos homologados onde o candidato consta) */}
+      {/* SEÇÃO 2A: MEU PAINEL DO APROVADO & LINHA DO TEMPO INDIVIDUAL (Plano 6) */}
       {/* =================================================================== */}
       {usuario && paineisCandidato.aprovacoes.length > 0 && (
-        <div className="bg-white rounded-2xl border border-slate-200/90 card-shadow p-5 sm:p-6 space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-            <div className="flex items-center gap-2">
+        <div className="bg-white rounded-2xl border border-slate-200/90 card-shadow p-5 sm:p-6 space-y-5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-100">
+            <div className="flex items-center gap-2 flex-wrap">
               <BookmarkCheck className="w-5 h-5 text-emerald-600" />
               <h2 className="text-base sm:text-lg font-bold font-serif text-slate-900">
-                Aprovações
+                Meu Painel do Aprovado & Linha do Tempo Individual
               </h2>
               <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-900 text-xs font-bold font-mono">
-                {paineisCandidato.aprovacoes.length} aprovado(s)
+                {paineisCandidato.aprovacoes.length} aprovação(ões) homologada(s)
               </span>
             </div>
-            <span className="text-2xs text-slate-400 hidden sm:inline">
-              Concursos homologados em que você consta na lista oficial de classificação
+            <span className="text-2xs text-slate-400">
+              Posição real descontando nomeados e desistências à sua frente em tempo real
             </span>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             {paineisCandidato.aprovacoes.map((item) => {
               const tipoLot = item.concurso.tipo_lotacao || 'Lotação';
+              const todosCandsCargo = lotesStore.getCandidatos(item.concurso.id, item.cargo.id);
+              const posOficial = item.candidato?.posicao || 1;
+              const statusCand = item.candidato?.status || 'Aguardando';
+              const isJaConvocadoOuNomeado =
+                statusCand === 'Nomeado' ||
+                statusCand === 'Convocado titular' ||
+                statusCand === 'Convocado Titular' ||
+                Boolean(item.candidato?.numero_lote_convocado);
+
+              const candidatosAFrente = todosCandsCargo.filter((c) => c.posicao < posOficial);
+              const jaChamadosFrente = candidatosAFrente.filter(
+                (c) =>
+                  c.status === 'Nomeado' ||
+                  c.status === 'Convocado titular' ||
+                  c.status === 'Convocado Titular' ||
+                  Boolean(c.numero_lote_convocado)
+              ).length;
+              const desistentesFrente = candidatosAFrente.filter(
+                (c) =>
+                  c.status === 'Desistente' ||
+                  c.status === 'Desistência' ||
+                  c.status === 'Final de lista' ||
+                  c.status === 'Fim de Fila' ||
+                  c.intencao === 'Não' ||
+                  c.intencao === 'final_fila'
+              ).length;
+
+              const aguardandoAtivosFrente = Math.max(
+                0,
+                candidatosAFrente.length - jaChamadosFrente - desistentesFrente
+              );
+              const posicaoEfetivaFila = isJaConvocadoOuNomeado ? 0 : aguardandoAtivosFrente + 1;
+              const avancoPercentual = isJaConvocadoOuNomeado
+                ? 100
+                : posOficial <= 1
+                ? 95
+                : Math.min(
+                    98,
+                    Math.max(
+                      8,
+                      Math.round(((jaChamadosFrente + desistentesFrente) / Math.max(1, posOficial - 1)) * 100)
+                    )
+                  );
+
+              const temPreferenciaSalva = Boolean(
+                item.candidato?.comarca_desejada_1 ||
+                  (item.candidato?.escolhas_comarcas && item.candidato.escolhas_comarcas.length > 0)
+              );
+
               return (
                 <div
                   key={`${item.concurso.id}_${item.cargo.id}`}
-                  className="p-5 rounded-2xl bg-gradient-to-br from-slate-50 to-teal-50/20 border border-teal-200/80 shadow-2xs space-y-4 flex flex-col justify-between"
+                  className="p-5 rounded-2xl bg-gradient-to-br from-slate-50 to-teal-50/25 border border-teal-200/80 shadow-2xs space-y-4 flex flex-col justify-between"
                 >
-                  <div className="space-y-3">
+                  <div className="space-y-3.5">
                     <div className="flex items-center justify-between gap-2">
                       <span className="px-2.5 py-0.5 rounded-md bg-[#07192B] text-teal-300 text-xs font-bold font-mono uppercase">
                         {item.concurso.orgao} • {item.concurso.ano}
                       </span>
-                      <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-100 text-emerald-800">
-                        {item.candidato?.status || 'Aprovado'}
+                      <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-900 border border-emerald-300">
+                        {statusCand}
                       </span>
                     </div>
 
@@ -468,25 +518,102 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
                       </div>
                     </div>
 
-                    <div className="p-3 bg-white rounded-xl border border-slate-200/80 grid grid-cols-2 gap-2 text-xs">
+                    {/* Cards de Métricas Individuais (Oficial vs Fila Líquida) */}
+                    <div className="p-3 bg-white rounded-xl border border-slate-200/80 grid grid-cols-3 gap-2 text-xs">
                       <div>
                         <span className="text-[10px] uppercase text-slate-400 font-bold block">
-                          Classificação Oficial
+                          Posição Oficial
                         </span>
-                        <span className="font-bold text-[#135A7A] text-sm font-mono">
-                          {item.candidato ? `${item.candidato.posicao}º lugar` : 'Homologado'}
+                        <span className="font-bold text-slate-900 text-sm font-mono">
+                          {posOficial}º lugar
                         </span>
                       </div>
 
-                      <div>
+                      <div className="border-l border-slate-100 pl-2">
+                        <span className="text-[10px] uppercase text-teal-700 font-bold block">
+                          Posição Efetiva
+                        </span>
+                        <span className="font-bold text-[#135A7A] text-sm font-mono">
+                          {isJaConvocadoOuNomeado ? 'Convocado ✓' : `${posicaoEfetivaFila}º da fila`}
+                        </span>
+                      </div>
+
+                      <div className="border-l border-slate-100 pl-2">
                         <span className="text-[10px] uppercase text-slate-400 font-bold block">
-                          {tipoLot} Preferencial
+                          {tipoLot} 1ª Opção
                         </span>
                         <span className="font-semibold text-slate-800 text-xs truncate block">
-                          {item.candidato?.comarca_desejada_1 ||
+                          {item.candidato?.comarca_definitiva ||
+                            item.candidato?.comarca_desejada_1 ||
                             item.candidato?.escolhas_comarcas?.[0] ||
-                            'Pendente de escolha'}
+                            'Definir opção'}
                         </span>
+                      </div>
+                    </div>
+
+                    {/* Barra de Progresso Individual até a Convocação */}
+                    <div className="p-3 bg-[#07192B] text-white rounded-xl space-y-2">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="font-semibold text-teal-300">
+                          {isJaConvocadoOuNomeado
+                            ? `Contemplado ${item.candidato?.numero_lote_convocado ? `no Lote ${item.candidato.numero_lote_convocado}` : 'oficialmente'}`
+                            : `Faltam ${aguardandoAtivosFrente} candidato(s) ativo(s) à sua frente`}
+                        </span>
+                        <span className="font-mono font-bold text-[#2DD4AA]">{avancoPercentual}%</span>
+                      </div>
+                      <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-gradient-to-r from-teal-400 to-emerald-400 rounded-full transition-all"
+                          style={{ width: `${avancoPercentual}%` }}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between text-[10px] text-slate-300 font-mono">
+                        <span>Chamados à frente: {jaChamadosFrente}</span>
+                        <span>Desistências/Fim de fila: {desistentesFrente}</span>
+                      </div>
+                    </div>
+
+                    {/* Linha do Tempo Individual em 4 Etapas */}
+                    <div className="grid grid-cols-4 gap-1.5 pt-1 text-center">
+                      <div className="p-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-900">
+                        <div className="text-[10px] font-mono font-bold">1. Homologado</div>
+                        <div className="text-[9px] text-emerald-700">✓ {posOficial}º Lugar</div>
+                      </div>
+                      <div
+                        className={`p-1.5 rounded-lg border ${
+                          temPreferenciaSalva
+                            ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                            : 'bg-amber-50 border-amber-200 text-amber-900'
+                        }`}
+                      >
+                        <div className="text-[10px] font-mono font-bold">2. Lotações</div>
+                        <div className="text-[9px]">
+                          {temPreferenciaSalva ? '✓ Definidas' : 'Pendente'}
+                        </div>
+                      </div>
+                      <div
+                        className={`p-1.5 rounded-lg border ${
+                          isJaConvocadoOuNomeado
+                            ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                            : 'bg-teal-50/70 border-teal-200 text-teal-900'
+                        }`}
+                      >
+                        <div className="text-[10px] font-mono font-bold">3. Chamamento</div>
+                        <div className="text-[9px]">
+                          {isJaConvocadoOuNomeado ? '✓ Convocado' : `${posicaoEfetivaFila}º na fila`}
+                        </div>
+                      </div>
+                      <div
+                        className={`p-1.5 rounded-lg border ${
+                          statusCand === 'Nomeado'
+                            ? 'bg-emerald-100 border-emerald-300 text-emerald-950'
+                            : 'bg-slate-100 border-slate-200 text-slate-500'
+                        }`}
+                      >
+                        <div className="text-[10px] font-mono font-bold">4. Nomeação</div>
+                        <div className="text-[9px]">
+                          {statusCand === 'Nomeado' ? '✓ Nomeado' : 'Aguardando'}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -506,7 +633,7 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
                         className="text-xs font-semibold bg-white hover:bg-slate-100 text-slate-700 px-3 py-1.5 rounded-lg border border-slate-200 transition-colors cursor-pointer flex items-center gap-1"
                       >
                         <ListOrdered className="w-3.5 h-3.5 text-slate-500" />
-                        <span>Classificação</span>
+                        <span>Simular Fila</span>
                       </button>
 
                       <button
@@ -515,13 +642,13 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
                           onNavigate('concurso', {
                             concursoId: item.concurso.id,
                             cargoId: item.cargo.id,
-                            tab: 'lotes',
+                            tab: 'candidato',
                           })
                         }
                         className="text-xs font-semibold bg-white hover:bg-slate-100 text-slate-700 px-3 py-1.5 rounded-lg border border-slate-200 transition-colors cursor-pointer flex items-center gap-1"
                       >
                         <Layers className="w-3.5 h-3.5 text-slate-500" />
-                        <span>Lotes</span>
+                        <span>Escolher {tipoLot}s</span>
                       </button>
                     </div>
 
