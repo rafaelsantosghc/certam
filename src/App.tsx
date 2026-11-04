@@ -15,6 +15,7 @@ import { NotificationToast } from './components/NotificationToast';
 import { AdminOverlay } from './components/AdminOverlay';
 import { NotificationProvider } from './store/notificationContext';
 import { OfflineIndicator } from './components/PWAInstallButton';
+import { ThemeProvider } from './store/themeContext';
 
 interface ErrorBoundaryState {
   hasError: boolean;
@@ -280,7 +281,7 @@ export const AppContent: React.FC = () => {
   }, [currentView, concursoId, cargoId]);
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#F4F6F9] text-[#0F172A]">
+    <div className="min-h-screen flex flex-col bg-[var(--certam-light-bg)] text-[var(--certam-text-primary)] transition-colors duration-200">
       {/* Sidebar Lateral (#07192B) */}
       <Sidebar
         currentView={currentView}
@@ -413,11 +414,13 @@ export const AppContent: React.FC = () => {
 export default function App() {
   return (
     <ErrorBoundary>
-      <AuthProvider>
-        <NotificationProvider>
-          <AppContent />
-        </NotificationProvider>
-      </AuthProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <NotificationProvider>
+            <AppContent />
+          </NotificationProvider>
+        </AuthProvider>
+      </ThemeProvider>
     </ErrorBoundary>
   );
 }

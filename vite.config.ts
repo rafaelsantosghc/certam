@@ -534,8 +534,7 @@ export default defineConfig(({ mode }) => ({
     VitePWA({
       registerType: 'autoUpdate',
       devOptions: {
-        enabled: true,
-        type: 'module',
+        enabled: false,
       },
       includeAssets: ['icon.svg', 'apple-touch-icon.png'],
       manifest: {
@@ -580,10 +579,7 @@ export default defineConfig(({ mode }) => ({
     host: '0.0.0.0',
     port: 3000,
     strictPort: true,
-    hmr: {
-      clientPort: 3000,
-      host: 'localhost',
-    },
+    hmr: false,
     watch: {
       ignored: ['**/.certam_sync_db.json', '**/certam_sync_db.json'],
     },

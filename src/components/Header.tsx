@@ -9,6 +9,7 @@ import { GoogleAuthModal } from './GoogleAuthModal';
 import { matchFonético } from '../utils/phoneticSearch';
 import { isDebugMode } from '../utils/environment';
 import { PWAInstallButton } from './PWAInstallButton';
+import { useTheme } from '../store/themeContext';
 import {
   Menu,
   Share2,
@@ -23,6 +24,8 @@ import {
   Search,
   Bell,
   SlidersHorizontal,
+  Sun,
+  Moon,
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -43,6 +46,7 @@ export const Header: React.FC<HeaderProps> = ({
   concursoAtualId,
 }) => {
   const { usuario, isAdmin, loginGoogle, redirecionarGoogleOAuth, logout, alternarModoAdminPreview } = useAuth();
+  const { isDark, toggleTheme } = useTheme();
   const [copiado, setCopiado] = useState(false);
 
   // Modais do Cabeçalho
@@ -228,6 +232,27 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* Botão de Instalação PWA */}
           <PWAInstallButton />
+
+          {/* Alternador de Tema Claro / Escuro */}
+          <button
+            type="button"
+            onClick={toggleTheme}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-[var(--certam-border)] bg-[var(--certam-surface-alt)] hover:bg-[var(--certam-surface-muted)] text-[var(--certam-text-primary)] text-xs font-semibold transition-colors cursor-pointer"
+            title={isDark ? 'Alternar para Modo Claro' : 'Alternar para Modo Escuro'}
+            aria-label={isDark ? 'Alternar para Modo Claro' : 'Alternar para Modo Escuro'}
+          >
+            {isDark ? (
+              <>
+                <Sun className="w-4 h-4 text-amber-400" />
+                <span className="hidden xl:inline">Modo Claro</span>
+              </>
+            ) : (
+              <>
+                <Moon className="w-4 h-4 text-[var(--certam-teal)]" />
+                <span className="hidden xl:inline">Modo Escuro</span>
+              </>
+            )}
+          </button>
 
           {/* Central de Notificações Internas */}
           <NotificationBell onNavigate={onNavigate} concursoAtualId={concursoAtualId} />

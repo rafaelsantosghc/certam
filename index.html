@@ -3,6 +3,42 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script>
+    (function () {
+      var OriginalWebSocket = window.WebSocket;
+      if (!OriginalWebSocket) return;
+      function SafeWebSocket(url, protocols) {
+        if (protocols === 'vite-hmr' || (typeof url === 'string' && url.indexOf('token=') !== -1)) {
+          return {
+            url: url,
+            readyState: 1,
+            OPEN: 1,
+            CONNECTING: 0,
+            CLOSING: 2,
+            CLOSED: 3,
+            protocol: 'vite-hmr',
+            extensions: '',
+            bufferedAmount: 0,
+            binaryType: 'blob',
+            addEventListener: function () {},
+            removeEventListener: function () {},
+            dispatchEvent: function () { return true; },
+            send: function () {},
+            close: function () {}
+          };
+        }
+        return protocols !== undefined
+          ? new OriginalWebSocket(url, protocols)
+          : new OriginalWebSocket(url);
+      }
+      SafeWebSocket.prototype = OriginalWebSocket.prototype;
+      SafeWebSocket.CONNECTING = OriginalWebSocket.CONNECTING;
+      SafeWebSocket.OPEN = OriginalWebSocket.OPEN;
+      SafeWebSocket.CLOSING = OriginalWebSocket.CLOSING;
+      SafeWebSocket.CLOSED = OriginalWebSocket.CLOSED;
+      window.WebSocket = SafeWebSocket;
+    })();
+  </script>
   <title>CERTAM | Portal do Concurseiro</title>
   <meta name="description" content="Portal oficial de acompanhamento de certames, escolha de lotação e classificação de concursos públicos.">
   <meta property="og:title" content="CERTAM | Portal do Concurseiro">
@@ -29,7 +65,7 @@
   <!-- Google Identity Services (GIS) SDK -->
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
-<body class="min-h-screen bg-[#F4F6F9] text-[#0F172A] antialiased selection:bg-[#2DD4AA] selection:text-slate-950 font-sans">
+<body class="min-h-screen bg-[var(--certam-light-bg)] text-[var(--certam-text-primary)] antialiased selection:bg-[var(--certam-mint)] selection:text-slate-950 font-sans transition-colors duration-200">
   <div id="root"></div>
   <script type="module" src="/src/main.tsx"></script>
 </body>
