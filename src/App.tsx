@@ -14,6 +14,7 @@ import { PerfilCandidatoModal } from './components/PerfilCandidatoModal';
 import { NotificationToast } from './components/NotificationToast';
 import { AdminOverlay } from './components/AdminOverlay';
 import { NotificationProvider } from './store/notificationContext';
+import { OfflineIndicator } from './components/PWAInstallButton';
 
 interface ErrorBoundaryState {
   hasError: boolean;
@@ -291,6 +292,7 @@ export const AppContent: React.FC = () => {
 
       {/* Conteúdo Principal com compensação de largura da sidebar (lg:pl-64) */}
       <div className="flex-1 flex flex-col min-w-0 lg:pl-64">
+        <OfflineIndicator />
         {/* Top Header */}
         <Header
           onOpenMobileSidebar={() => setSidebarMobileOpen(true)}

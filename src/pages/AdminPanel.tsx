@@ -2129,14 +2129,42 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 Visualize e gerencie todos os usuários cadastrados no portal e todos os candidatos importados via planilha (vinculáveis automaticamente por CPF ou nome completo no primeiro acesso).
               </p>
             </div>
-            <button
-              type="button"
-              onClick={handleAbrirNovoUsuario}
-              className="px-4 py-2.5 bg-[#07192B] hover:bg-[#0C2640] text-[#2DD4AA] font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-1.5 shrink-0"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Novo Cadastro Manual</span>
-            </button>
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  const rows = usuariosGerais.map((u) => ({
+                    ID: u.id,
+                    'Nome Completo': u.nome,
+                    CPF: u.cpf || '',
+                    'E-mail': u.email || u.email_contato || '',
+                    'Telefone / WhatsApp': u.telefone || u.whatsapp || '',
+                    Perfil: u.role === 'admin' ? 'Admin' : 'Candidato',
+                    'Situação Cadastral': u.bloqueado ? 'Bloqueado' : u.status_cadastro || 'Ativo',
+                    'Órgão / Concurso': u.orgao || u.concurso_id || 'Portal Geral',
+                    Cargo: u.cargo_nome || u.cargo_id || '-',
+                  }));
+                  const ws = XLSX.utils.json_to_sheet(rows);
+                  const wb = XLSX.utils.book_new();
+                  XLSX.utils.book_append_sheet(wb, ws, 'CadastroGeral');
+                  XLSX.writeFile(wb, `certam-cadastro-geral-${new Date().toISOString().split('T')[0]}.xlsx`);
+                  showToast('Planilha consolidada do Cadastro Geral (.XLSX) exportada com sucesso!');
+                }}
+                className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
+              >
+                <Download className="w-4 h-4" />
+                <span>Exportar Cadastro (.XLSX)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleAbrirNovoUsuario}
+                className="px-4 py-2.5 bg-[#07192B] hover:bg-[#0C2640] text-[#2DD4AA] font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Novo Cadastro Manual</span>
+              </button>
+            </div>
           </div>
 
           {/* Filtros de Busca e Status */}
@@ -4516,6 +4544,34 @@ NOTIFY pgrst, 'reload schema';`;
                     <option key={cg.id} value={cg.id}>{cg.nome}</option>
                   ))}
               </select>
+              <button
+                type="button"
+                onClick={() => {
+                  const cands = lotesStore.getCandidatos(classifAdminConcursoId, classifAdminCargoId);
+                  const rows = cands.map((c) => ({
+                    Posição: c.posicao,
+                    Nome: c.nome,
+                    CPF: c.cpf || '',
+                    'Nota Final': c.nota_final,
+                    Cota: (c.cotas && c.cotas.length > 0 ? c.cotas.join(' / ') : c.cota) || 'Ampla',
+                    Status: c.status || 'Aguardando Convocação',
+                    Intenção: c.intencao || 'Sim',
+                    'Lotação Definitiva': c.comarca_definitiva || '',
+                    'Preferências de Comarca': c.escolhas_comarcas?.join(', ') || c.comarca_desejada_1 || '',
+                    'E-mail': c.email || '',
+                    WhatsApp: c.whatsapp || '',
+                  }));
+                  const ws = XLSX.utils.json_to_sheet(rows);
+                  const wb = XLSX.utils.book_new();
+                  XLSX.utils.book_append_sheet(wb, ws, 'Classificacao');
+                  XLSX.writeFile(wb, `certam-classificacao-${classifAdminConcursoId}-${classifAdminCargoId}.xlsx`);
+                  showToast('Lista de classificação exportada em Excel (.XLSX)!');
+                }}
+                className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 cursor-pointer shadow-xs"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Exportar Planilha (.XLSX)</span>
+              </button>
             </div>
           </div>
 

@@ -28,6 +28,8 @@ import { MensagensPrivadasDrawer } from '../components/MensagensPrivadasDrawer';
 import { ModalEditarCandidatoAdmin } from '../components/ModalEditarCandidatoAdmin';
 import { ModalGerenciarDropdowns } from '../components/ModalGerenciarDropdowns';
 import { ModalAdicionarCandidatoAdmin } from '../components/ModalAdicionarCandidatoAdmin';
+import { FerramentasAprovadoPanel } from '../components/FerramentasAprovadoPanel';
+import * as XLSX from 'xlsx';
 import {
   BarChart3,
   ListOrdered,
@@ -67,6 +69,10 @@ import {
   Sparkles,
   Percent,
   MapPin,
+  Download,
+  Printer,
+  Award,
+  Flame,
 } from 'lucide-react';
 
 interface ConcursoCargoDashboardProps {
@@ -392,12 +398,63 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
   const [loteSelecionadoParaEscolha, setLoteSelecionadoParaEscolha] = useState<Lote | null>(null);
   const [modalEscolhaComarcasAberto, setModalEscolhaComarcasAberto] = useState(false);
 
-  // Simulador Inteligente de Posição Efetiva de Chamamento (Plano 5)
+  // Simulador Inteligente de Posição Efetiva de Chamamento (Plano 5 + Melhoria 6: Dupla Aprovação)
   const [vagasSimuladasChamamento, setVagasSimuladasChamamento] = useState<number>(
     cargo.vagas_previstas_proximo_lote && cargo.vagas_previstas_proximo_lote > 0
       ? cargo.vagas_previstas_proximo_lote
       : 15
   );
+  const [descontarDuplaAprovacao, setDescontarDuplaAprovacao] = useState<boolean>(false);
+
+  // MELHORIA 6: Detecção Inteligente de "Dupla Aprovação" Entre Cargos/Concursos
+  const mapaDuplaAprovacao = useMemo(() => {
+    const mapa = new Map<string, { orgao: string; cargoNome: string; posicao: number; status?: string }[]>();
+    const todosConcursos = certamStore.getConcursos();
+    const porCpf = new Map<string, { concursoId: string; cargoId: string; orgao: string; cargoNome: string; posicao: number; status?: string }[]>();
+    const porNome = new Map<string, { concursoId: string; cargoId: string; orgao: string; cargoNome: string; posicao: number; status?: string }[]>();
+
+    todosConcursos.forEach((conc) => {
+      conc.cargos?.forEach((cg) => {
+        if (conc.id === concurso.id && cg.id === cargo.id) return;
+        const lista = lotesStore.getCandidatos(conc.id, cg.id);
+        lista.forEach((c) => {
+          const item = {
+            concursoId: conc.id,
+            cargoId: cg.id,
+            orgao: conc.orgao,
+            cargoNome: cg.nome,
+            posicao: c.posicao,
+            status: c.status,
+          };
+          const cpfLimpo = c.cpf ? c.cpf.replace(/\D/g, '') : '';
+          if (cpfLimpo.length >= 6) {
+            const arr = porCpf.get(cpfLimpo) || [];
+            arr.push(item);
+            porCpf.set(cpfLimpo, arr);
+          }
+          const nomeNorm = c.nome ? normalizarTexto(c.nome) : '';
+          if (nomeNorm.length >= 5) {
+            const arr = porNome.get(nomeNorm) || [];
+            arr.push(item);
+            porNome.set(nomeNorm, arr);
+          }
+        });
+      });
+    });
+
+    candidatos.forEach((cand) => {
+      const cpfLimpo = cand.cpf ? cand.cpf.replace(/\D/g, '') : '';
+      const nomeNorm = cand.nome ? normalizarTexto(cand.nome) : '';
+      const matches =
+        (cpfLimpo.length >= 6 ? porCpf.get(cpfLimpo) : undefined) ||
+        (nomeNorm.length >= 5 ? porNome.get(nomeNorm) : undefined);
+      if (matches && matches.length > 0) {
+        mapa.set(cand.id, matches);
+      }
+    });
+
+    return mapa;
+  }, [candidatos, concurso.id, cargo.id]);
 
   // Cálculo da Ordem de Nomeação (puxa lotes oficiais garantidos + projeta cotas para os demais)
   const listaOrdemNomeacao = useMemo(() => {
@@ -412,7 +469,7 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
     );
   }, [candidatos, lotes, concurso.id, cargo.id, configCotas, cargo.vagas_previstas_proximo_lote, vagasSimuladasChamamento]);
 
-  // Mapa de Posição Efetiva Líquida descontando Nomeados, Convocados Titulares, Desistentes e Fim de Fila
+  // Mapa de Posição Efetiva Líquida descontando Nomeados, Convocados Titulares, Desistentes, Fim de Fila e Dupla Aprovação (opcional)
   const simulacaoFilaEfetiva = useMemo(() => {
     const candById = new Map<string, Candidato>();
     candidatos.forEach((c) => candById.set(c.id, c));
@@ -436,6 +493,10 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
       const cand = candById.get(item.candidatoId);
       const status: string = item.status || cand?.status || '';
       const intencao: string = cand?.intencao || 'Sim';
+      const outrosCargos = mapaDuplaAprovacao.get(item.candidatoId) || [];
+      const jaNomeadoOutroCargo =
+        descontarDuplaAprovacao &&
+        outrosCargos.some((oc) => oc.status === 'Nomeado' || oc.posicao <= 25);
 
       const isJaChamado =
         item.garantido ||
@@ -446,7 +507,7 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
         status === 'Exercício';
 
       const isDesistente =
-        status === 'Desistente' || status === 'Desistência' || intencao === 'Não';
+        status === 'Desistente' || status === 'Desistência' || intencao === 'Não' || jaNomeadoOutroCargo;
 
       const isFimFila =
         status === 'Final de lista' || status === 'Fim de Fila' || intencao === 'final_fila';
@@ -491,7 +552,37 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
       totalFilaLiquida: contadorFilaLiquida,
       posEfetivaPorCandidatoId,
     };
-  }, [candidatos, listaOrdemNomeacao, vagasSimuladasChamamento]);
+  }, [candidatos, listaOrdemNomeacao, vagasSimuladasChamamento, mapaDuplaAprovacao, descontarDuplaAprovacao]);
+
+  // MELHORIA 5: Exportar Lista de Classificação para Planilha Excel (.XLSX)
+  const handleExportarClassificacaoXlsx = () => {
+    const linhasExportacao = candidatosFiltrados.map((c) => {
+      const simInfo = simulacaoFilaEfetiva.posEfetivaPorCandidatoId.get(c.id);
+      const outros = mapaDuplaAprovacao.get(c.id);
+      return {
+        'Posição Oficial': c.posicao,
+        'Posição Fila Líquida': simInfo?.posicaoEfetiva ?? '-',
+        'Nome do Candidato': c.nome,
+        CPF: isCandidatoAprovado ? formatarCpfSeguroLgpd(c.cpf, c.id) : 'Restrito',
+        Cota: (c.cotas && c.cotas.length > 0 ? c.cotas.join(' / ') : c.cota) || 'Ampla',
+        'Nota Final': isCandidatoAprovado ? c.nota_final : 'Restrito',
+        Status: c.status || 'Aguardando',
+        Intenção: c.intencao || 'Sim',
+        'Lotação Definitiva': c.comarca_definitiva || '-',
+        'Preferências de Comarca':
+          c.escolhas_comarcas && c.escolhas_comarcas.length > 0
+            ? c.escolhas_comarcas.join(', ')
+            : c.comarca_desejada_1 || '-',
+        'Dupla Aprovação': outros ? outros.map((o) => `${o.orgao} - ${o.cargoNome} (${o.posicao}º)`).join(' | ') : '-',
+      };
+    });
+
+    const ws = XLSX.utils.json_to_sheet(linhasExportacao);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Classificacao');
+    XLSX.writeFile(wb, `classificacao-${concurso.orgao.toLowerCase()}-${cargo.id}.xlsx`);
+    showToast('Planilha Excel (.XLSX) exportada com sucesso!');
+  };
 
   // Plano 4 — Adequação à LGPD: Mascaramento de CPF de terceiros para não-administradores
   const formatarCpfSeguroLgpd = (cpfRaw?: string, candId?: string): string => {
@@ -1330,8 +1421,8 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
                 </p>
               </div>
 
-              {/* Controle Interativo de Vagas Simuladas */}
-              <div className="bg-white/10 backdrop-blur-xs border border-white/15 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center gap-3 shrink-0">
+              {/* Controle Interativo de Vagas Simuladas + Dupla Aprovação + Exportação */}
+              <div className="bg-white/10 backdrop-blur-xs border border-white/15 rounded-xl p-3 flex flex-col gap-2.5 shrink-0">
                 <div>
                   <label className="block text-[10px] font-mono uppercase text-teal-300 font-bold">
                     Simular Próximo Chamamento:
@@ -1355,6 +1446,18 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
                     />
                     <span className="text-xs font-bold text-white">novas vagas</span>
                   </div>
+                </div>
+
+                <div className="flex items-center justify-between gap-3 pt-1 border-t border-white/10">
+                  <label className="flex items-center gap-1.5 text-[11px] text-slate-200 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={descontarDuplaAprovacao}
+                      onChange={(e) => setDescontarDuplaAprovacao(e.target.checked)}
+                      className="rounded accent-[#2DD4AA] cursor-pointer"
+                    />
+                    <span>Descontar aprovados em outro cargo ({mapaDuplaAprovacao.size})</span>
+                  </label>
                 </div>
               </div>
             </div>
@@ -1492,6 +1595,34 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
                 <option value="Final de lista">Final de lista</option>
                 <option value="Desistente">Desistente</option>
               </select>
+            </div>
+
+            {/* MELHORIA 5: Barra de Exportação Oficial (.XLSX e PDF / Impressão) */}
+            <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2 text-xs no-print">
+              <span className="text-[11px] text-slate-500">
+                Exibindo <strong>{candidatosFiltrados.length}</strong> candidatos conforme filtros ativos
+                {mapaDuplaAprovacao.size > 0 && ` • ${mapaDuplaAprovacao.size} com dupla aprovação identificada`}
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleExportarClassificacaoXlsx}
+                  className="px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-200 font-bold text-xs flex items-center gap-1.5 cursor-pointer transition-colors"
+                  title="Baixar planilha Excel (.XLSX) com a lista filtrada e posição na fila líquida"
+                >
+                  <Download className="w-3.5 h-3.5 text-emerald-700" />
+                  <span>Exportar Lista (.XLSX)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 font-bold text-xs flex items-center gap-1.5 cursor-pointer transition-colors"
+                  title="Imprimir ou salvar relatório da classificação em PDF"
+                >
+                  <Printer className="w-3.5 h-3.5 text-slate-700" />
+                  <span>Imprimir / Salvar PDF</span>
+                </button>
+              </div>
             </div>
           </div>
 
@@ -1698,6 +1829,20 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
                                         title={`Contemplado na simulação de +${vagasSimuladasChamamento} vagas (${simInfo.vagaCotaSimulada || 'Ampla'})`}
                                       >
                                         <span>⚡ Simulado ({simInfo.posicaoEfetiva}º)</span>
+                                      </span>
+                                    );
+                                  })()}
+                                  {(() => {
+                                    const outros = mapaDuplaAprovacao.get(cand.id);
+                                    if (!outros || outros.length === 0) return null;
+                                    const prim = outros[0];
+                                    return (
+                                      <span
+                                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-indigo-50 text-indigo-900 border border-indigo-200 whitespace-nowrap"
+                                        title={`Também aprovado em: ${outros.map((o) => `${o.orgao} - ${o.cargoNome} (${o.posicao}º)`).join(' | ')}`}
+                                      >
+                                        <Award className="w-2.5 h-2.5 text-indigo-600 shrink-0" />
+                                        <span>★ {prim.orgao}: {prim.cargoNome} ({prim.posicao}º)</span>
                                       </span>
                                     );
                                   })()}
@@ -2596,28 +2741,63 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
 
               {/* Construtor de Lista de Comarcas */}
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                {/* Comarcas Disponíveis */}
+                {/* Comarcas Disponíveis com Termômetro de Disputa (Melhoria 1) */}
                 <div className="lg:col-span-6 bg-slate-50 rounded-2xl border border-slate-200 p-4 space-y-3">
-                  <span className="text-xs font-bold text-slate-800 uppercase tracking-wider block">
-                    Comarcas do Estado ({COMARCAS_RS.length})
-                  </span>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-bold text-slate-800 uppercase tracking-wider block">
+                      Comarcas do Estado ({COMARCAS_RS.length})
+                    </span>
+                    <span className="inline-flex items-center gap-1 text-[10px] font-mono font-bold text-teal-800 bg-teal-50 border border-teal-200 px-2 py-0.5 rounded-md">
+                      <Flame className="w-3 h-3 text-amber-500" />
+                      <span>Termômetro de Disputa Ativo</span>
+                    </span>
+                  </div>
                   <div className="max-h-[420px] overflow-y-auto space-y-1.5 pr-1">
                     {COMARCAS_RS.map((comarca) => {
                       const jaEscolhida = minhasEscolhas.includes(comarca.nome);
+                      const minhaPos = meuCandidato?.posicao ?? 999999;
+                      const concorrentesNaFrente = candidatos.filter((c) => {
+                        if (c.posicao >= minhaPos) return false;
+                        if (c.intencao === 'Não' || c.status === 'Desistência' || c.status === 'Desistente' || c.status === 'Nomeado') return false;
+                        const primOpcao = c.escolhas_comarcas?.[0] || c.comarca_desejada_1 || '';
+                        return normalizarTexto(primOpcao) === normalizarTexto(comarca.nome);
+                      }).length;
+                      const vagasDaComarca = Math.max(1, comarca.vagas_total || 1);
+
                       return (
                         <div
                           key={comarca.id}
-                          className="p-2.5 bg-white rounded-xl border border-slate-200 flex items-center justify-between text-xs hover:border-teal-400 transition-colors"
+                          className="p-2.5 bg-white rounded-xl border border-slate-200 flex items-center justify-between gap-2 text-xs hover:border-teal-400 transition-colors"
                         >
-                          <div>
-                            <span className="font-bold text-slate-800">{comarca.nome}</span>
-                            <span className="text-2xs text-slate-400 ml-2">({comarca.regiao})</span>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="font-bold text-slate-800">{comarca.nome}</span>
+                              <span className="text-2xs text-slate-400">({comarca.regiao})</span>
+                            </div>
+                            <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                              <span className="text-[10px] font-mono text-slate-500">
+                                {vagasDaComarca} {vagasDaComarca === 1 ? 'vaga ref.' : 'vagas ref.'}
+                              </span>
+                              {concorrentesNaFrente < vagasDaComarca ? (
+                                <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                                  🟢 Alta Chance ({concorrentesNaFrente} à frente em 1ª op.)
+                                </span>
+                              ) : concorrentesNaFrente === vagasDaComarca ? (
+                                <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                                  🟡 Disputa Moderada ({concorrentesNaFrente} à frente)
+                                </span>
+                              ) : (
+                                <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-rose-50 text-rose-800 border border-rose-200">
+                                  🔴 Alta Concorrência ({concorrentesNaFrente} à frente)
+                                </span>
+                              )}
+                            </div>
                           </div>
                           <button
                             type="button"
                             disabled={jaEscolhida}
                             onClick={() => adicionarComarca(comarca.nome)}
-                            className="px-2.5 py-1 bg-teal-50 hover:bg-teal-100 text-teal-800 font-bold text-[11px] rounded-lg transition-colors cursor-pointer disabled:opacity-40"
+                            className="px-2.5 py-1 bg-teal-50 hover:bg-teal-100 text-teal-800 font-bold text-[11px] rounded-lg transition-colors cursor-pointer disabled:opacity-40 shrink-0"
                           >
                             {jaEscolhida ? 'Adicionada' : '+ Adicionar'}
                           </button>
@@ -2704,6 +2884,14 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
                   </div>
                 </div>
               </div>
+
+              {/* MELHORIAS 2, 3 e 4: Calculadora de Posse (.ICS), Checklist Interativo e Simulador Salarial */}
+              <FerramentasAprovadoPanel
+                concurso={concurso}
+                cargo={cargo}
+                usuarioEmail={usuario.email}
+                meuCandidato={meuCandidato}
+              />
             </div>
           )}
         </section>

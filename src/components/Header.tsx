@@ -8,6 +8,7 @@ import { MensagensPrivadasDrawer } from './MensagensPrivadasDrawer';
 import { GoogleAuthModal } from './GoogleAuthModal';
 import { matchFonético } from '../utils/phoneticSearch';
 import { isDebugMode } from '../utils/environment';
+import { PWAInstallButton } from './PWAInstallButton';
 import {
   Menu,
   Share2,
@@ -224,6 +225,9 @@ export const Header: React.FC<HeaderProps> = ({
             {copiado ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Share2 className="w-3.5 h-3.5" />}
             <span>{copiado ? 'Copiado!' : 'Compartilhar'}</span>
           </button>
+
+          {/* Botão de Instalação PWA */}
+          <PWAInstallButton />
 
           {/* Central de Notificações Internas */}
           <NotificationBell onNavigate={onNavigate} concursoAtualId={concursoAtualId} />
