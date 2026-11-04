@@ -101,7 +101,7 @@ export function buscarTodasAprovacoesCandidato(dados: {
         return true;
       }
     }
-    if (emailLimpo && c.email && c.email.trim().toLowerCase() === emailLimpo) {
+    if (emailLimpo && c.email && String(c.email).trim().toLowerCase() === emailLimpo) {
       return true;
     }
     if (nomeNorm.length >= 3 && c.nome && normalizarTexto(c.nome) === nomeNorm) {
@@ -145,7 +145,7 @@ export function buscarTodasAprovacoesCandidato(dados: {
 
       if (!canonicalMap.has(canonicalKey)) {
         const concObj = concursos.find((c) => c.id === concId);
-        const cargoObj = concObj?.cargos.find((cg) => cg.id === cargoId);
+        const cargoObj = concObj?.cargos?.find((cg) => cg.id === cargoId);
 
         const concNome = concObj?.nome || (concId.startsWith('mprs') ? 'MPRS 2025' : 'TJRS 2025');
         const cargoNome =

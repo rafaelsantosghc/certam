@@ -16,10 +16,12 @@ import { AdminOverlay } from './components/AdminOverlay';
 import { NotificationProvider } from './store/notificationContext';
 import { OfflineIndicator } from './components/PWAInstallButton';
 import { ThemeProvider } from './store/themeContext';
+import { errorLogStore } from './store/errorLogStore';
 
 interface ErrorBoundaryState {
   hasError: boolean;
   error?: Error;
+  logId?: string;
 }
 
 class ErrorBoundary extends React.Component<{ children: React.ReactNode }, ErrorBoundaryState> {
@@ -34,6 +36,15 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, Error
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
     console.error('CERTAM ErrorBoundary:', error, errorInfo);
+    void errorLogStore
+      .logError({
+        error,
+        componentStack: errorInfo.componentStack,
+        origem: 'ErrorBoundary',
+      })
+      .then((entry) => {
+        this.setState({ logId: entry.id });
+      });
   }
 
   render() {
@@ -46,8 +57,18 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, Error
             </div>
             <h2 className="text-xl font-bold font-serif">CERTAM • Portal do Concurseiro</h2>
             <p className="text-xs text-slate-300 leading-relaxed">
-              Foi identificado um estado inconsistente no cache do navegador. Clique no botão abaixo para restaurar o portal com segurança.
+              Foi identificado um erro inesperado na interface. O relatório técnico foi enviado automaticamente ao painel de monitoramento do administrador no Supabase.
             </p>
+            {this.state.error?.message && (
+              <div className="p-2.5 rounded-xl bg-slate-950/60 border border-rose-500/30 text-[11px] font-mono text-rose-300 text-left break-words">
+                <div>Falha: {this.state.error.message}</div>
+                {this.state.logId && (
+                  <div className="text-[10px] text-teal-300 mt-1">
+                    Protocolo de Log: {this.state.logId}
+                  </div>
+                )}
+              </div>
+            )}
             <button
               type="button"
               onClick={() => {
@@ -86,6 +107,7 @@ export const AppContent: React.FC = () => {
   const [modalPerfilObrigatorioAberto, setModalPerfilObrigatorioAberto] = useState(false);
 
   useEffect(() => {
+    errorLogStore.initGlobalListeners();
     const handleAbrirObrigatorio = () => {
       setModalPerfilObrigatorioAberto(true);
     };

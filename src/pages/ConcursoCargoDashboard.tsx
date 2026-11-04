@@ -1687,8 +1687,8 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
 
             return (
               <>
-                {/* BARRA DE GESTÃO DE CLASSIFICAÇÃO PARA ADMIN (Exclusivo isDebugMode) */}
-                {isAdmin && isDebugMode() && (
+                {/* BARRA DE GESTÃO DE CLASSIFICAÇÃO PARA ADMIN */}
+                {isAdmin && (
                   <div className="bg-amber-50/90 border border-amber-300 rounded-2xl p-3 sm:p-4 flex flex-wrap items-center justify-between gap-3 shadow-xs">
                     <div className="flex items-center gap-2.5">
                       <div className="w-8 h-8 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center font-bold text-sm shadow-2xs">
@@ -1936,7 +1936,7 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
                               </div>
                               <div className="text-center">
                                 <div className="flex items-center justify-center gap-1">
-                                  {isAdmin && isDebugMode() && (
+                                  {isAdmin && (
                                     <>
                                       <button
                                         type="button"

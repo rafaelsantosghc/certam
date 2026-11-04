@@ -11,8 +11,8 @@ export const MASTER_CADASTRO_GERAL: Candidato[] = [];
 /**
  * Remove acentuação, pontuações e converte para caixa baixa para matching tolerante
  */
-export const normalizarTexto = (str: string = ''): string => {
-  return str
+export const normalizarTexto = (str: unknown = ''): string => {
+  return String(str ?? '')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .trim()
@@ -22,8 +22,8 @@ export const normalizarTexto = (str: string = ''): string => {
 /**
  * Remove qualquer caractere não numérico do CPF
  */
-export const limparCpf = (cpfStr: string = ''): string => {
-  return cpfStr.replace(/\D/g, '');
+export const limparCpf = (cpfStr: unknown = ''): string => {
+  return String(cpfStr ?? '').replace(/\D/g, '');
 };
 
 /**

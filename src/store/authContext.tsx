@@ -64,6 +64,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (stored) {
         const parsed = JSON.parse(stored);
         if (parsed && typeof parsed === 'object') {
+          if (!isAiStudioPreview() && parsed.candidato_id === 'admin-preview-master') {
+            localStorage.removeItem(AUTH_STORAGE_KEY);
+            return null;
+          }
           try {
             const fromRegistry =
               (parsed.id && userRegistryStore.getUserById(parsed.id)) ||
@@ -456,6 +460,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const atualizarDadosUsuario = (dados: Partial<Usuario>) => {
+    let paraSalvar: Usuario | null = null;
     setUsuario((prev) => {
       if (!prev) return null;
       const atualizado: Usuario = {
@@ -465,10 +470,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         cpf: dados.cpf !== undefined ? dados.cpf : prev.cpf,
         status_cadastro: 'ativo',
       };
-      // Persiste diretamente no userRegistryStore preservando as mudanças explícitas
-      const salvo = userRegistryStore.salvarUsuario(atualizado);
-      return salvo;
+      paraSalvar = atualizado;
+      return atualizado;
     });
+    if (paraSalvar) {
+      userRegistryStore.salvarUsuario(paraSalvar);
+    }
   };
 
   // Leitura de Notificações
@@ -496,6 +503,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const inscreverConcurso = (concursoId: string, cargoId: string) => {
+    let paraSalvar: Usuario | null = null;
     setUsuario((prev) => {
       if (!prev) return null;
       const inscritos = prev.concursos_inscritos || [];
@@ -512,12 +520,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           },
         ],
       };
-      userRegistryStore.salvarUsuario(atualizado);
+      paraSalvar = atualizado;
       return atualizado;
     });
+    if (paraSalvar) {
+      userRegistryStore.salvarUsuario(paraSalvar);
+    }
   };
 
   const desinscreverConcurso = (concursoId: string, cargoId: string) => {
+    let paraSalvar: Usuario | null = null;
     setUsuario((prev) => {
       if (!prev) return null;
       const inscritos = (prev.concursos_inscritos || []).filter(
@@ -527,12 +539,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         ...prev,
         concursos_inscritos: inscritos,
       };
-      userRegistryStore.salvarUsuario(atualizado);
+      paraSalvar = atualizado;
       return atualizado;
     });
+    if (paraSalvar) {
+      userRegistryStore.salvarUsuario(paraSalvar);
+    }
   };
 
   const acompanharConcurso = (concursoId: string) => {
+    let paraSalvar: Usuario | null = null;
     setUsuario((prev) => {
       if (!prev) return null;
       const acompanhados = new Set(prev.concursos_acompanhados || []);
@@ -541,12 +557,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         ...prev,
         concursos_acompanhados: Array.from(acompanhados),
       };
-      userRegistryStore.salvarUsuario(atualizado);
+      paraSalvar = atualizado;
       return atualizado;
     });
+    if (paraSalvar) {
+      userRegistryStore.salvarUsuario(paraSalvar);
+    }
   };
 
   const desacompanharConcurso = (concursoId: string) => {
+    let paraSalvar: Usuario | null = null;
     setUsuario((prev) => {
       if (!prev) return null;
       const acompanhados = (prev.concursos_acompanhados || []).filter((id) => id !== concursoId);
@@ -554,9 +574,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         ...prev,
         concursos_acompanhados: acompanhados,
       };
-      userRegistryStore.salvarUsuario(atualizado);
+      paraSalvar = atualizado;
       return atualizado;
     });
+    if (paraSalvar) {
+      userRegistryStore.salvarUsuario(paraSalvar);
+    }
   };
 
   const logout = () => {

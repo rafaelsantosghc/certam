@@ -182,6 +182,7 @@ const SYNC_PREFIXES = [
   'certam_faq_',
   'certam_chat_',
   'certam_dm_',
+  'certam_error_logs_',
   SUPABASE_CONFIG_KEY,
 ];
 
@@ -197,6 +198,7 @@ const PRIORITY_PREFIXES = [
   'certam_contact_',
   'certam_notifications_',
   'certam_faq_',
+  'certam_error_logs_',
   SUPABASE_CONFIG_KEY,
 ];
 
@@ -207,6 +209,7 @@ const APPEND_QUEUE_PREFIXES = [
   'certam_vinculacoes_',
   'certam_contact_',
   'certam_notifications_',
+  'certam_error_logs_',
 ];
 
 const LEGACY_KEY_MIGRATIONS: Record<string, string> = {
@@ -1143,6 +1146,9 @@ function dispatchUpdateEvents(changedKeys: string[]): void {
   if (changedKeys.some((k) => k.startsWith('certam_faq_'))) {
     window.dispatchEvent(new CustomEvent('certam_faqs_updated'));
   }
+  if (changedKeys.some((k) => k.startsWith('certam_error_logs_'))) {
+    window.dispatchEvent(new CustomEvent('certam_error_logs_updated'));
+  }
 }
 
 async function executePullFromServer(): Promise<boolean> {
@@ -1891,6 +1897,37 @@ export const cloudSync = {
         latencyMs: Math.round(performance.now() - stConf),
         error: err?.message || 'Erro de rede',
       });
+    }
+
+    // 2.1.b Verificar a tabela dedicada de logs centralizados de erros: public.error_logs
+    const stErr = performance.now();
+    try {
+      const errRes = await fetch(`${cfg.url}/rest/v1/error_logs?select=id&limit=100`, {
+        method: 'GET',
+        headers: getSupabaseHeaders(cfg.anonKey),
+        cache: 'no-store',
+      });
+      const errLat = Math.round(performance.now() - stErr);
+      if (errRes.ok) {
+        const errRows = await errRes.json().catch(() => []);
+        report.supabase.tables.push({
+          table: 'error_logs (Logs de Falhas ErrorBoundary)',
+          ok: true,
+          rowCount: Array.isArray(errRows) ? errRows.length : 0,
+          latencyMs: errLat,
+          conflictKeys: [],
+        });
+      } else if (errRes.status === 404) {
+        report.supabase.tables.push({
+          table: 'error_logs (Logs de Falhas ErrorBoundary)',
+          ok: false,
+          rowCount: 0,
+          latencyMs: errLat,
+          error: 'Tabela opcional (use o SQL abaixo para criar public.error_logs)',
+        });
+      }
+    } catch {
+      // ignore
     }
 
     // 2.2 Verificar se tabelas do outro site ainda existem no banco

@@ -106,25 +106,46 @@ export const PerfilCandidatoModal: React.FC<PerfilCandidatoModalProps> = ({
 
   const ultimaSolicitacao = useMemo(() => {
     if (!usuario) return null;
-    const emailUser = usuario.email?.toLowerCase().trim();
-    const cpfLimpo = (usuario.cpf || cpf)?.replace(/\D/g, '') || '';
+    const emailUser = String(usuario.email || '').toLowerCase().trim();
+    const cpfLimpo = String(usuario.cpf || cpf || '').replace(/\D/g, '');
     return todasSolicitacoes.find(
       (r) =>
-        (emailUser && r.usuario_email?.toLowerCase().trim() === emailUser) ||
-        (cpfLimpo && r.cpf && r.cpf.replace(/\D/g, '') === cpfLimpo)
+        (emailUser && String(r.usuario_email || '').toLowerCase().trim() === emailUser) ||
+        (cpfLimpo && r.cpf && String(r.cpf).replace(/\D/g, '') === cpfLimpo)
     );
   }, [usuario, cpf, todasSolicitacoes]);
 
   // Identificação automática de todas as aprovações do candidato
   const aprovacoesIdentificadas: AprovacaoDetectada[] = useMemo(() => {
     return buscarTodasAprovacoesCandidato({
-      cpf: cpf || usuario?.cpf,
-      nome: nome || usuario?.nome,
-      email: emailContato || usuario?.email,
+      cpf: String(cpf || usuario?.cpf || ''),
+      nome: String(nome || usuario?.nome || ''),
+      email: String(emailContato || usuario?.email || ''),
       candidato_id: usuario?.candidato_id,
       outros_concursos: outrosConcursos,
     });
   }, [cpf, nome, emailContato, usuario, outrosConcursos]);
+
+  // Verificação em tempo real do CPF digitado no 1º acesso (deve ficar antes de qualquer return condicional)
+  const statusCpfDigitado = useMemo(() => {
+    const digits = String(cpf || '').replace(/\D/g, '');
+    if (digits.length < 11) return null;
+    const reg = userRegistryStore.getUserByCpf(cpf);
+    const aprovs = buscarTodasAprovacoesCandidato({ cpf });
+    if (reg || aprovs.length > 0) {
+      return {
+        existe: true,
+        nomeEncontrado: reg?.nome || aprovs[0]?.concurso_nome || 'Cadastro existente',
+        concursoInfo:
+          aprovs.length > 0
+            ? `${aprovs[0].concurso_nome} (${aprovs[0].cargo_nome} • ${aprovs[0].posicao}º lugar)`
+            : reg?.orgao
+            ? `${reg.orgao} (${reg.cargo_nome || ''})`
+            : 'Cadastro Geral do Portal',
+      };
+    }
+    return { existe: false };
+  }, [cpf]);
 
   if (!aberto || !usuario) return null;
 
@@ -163,74 +184,53 @@ export const PerfilCandidatoModal: React.FC<PerfilCandidatoModalProps> = ({
   const calcularDiffs = (): AlteracaoCampoItem[] => {
     const diffs: AlteracaoCampoItem[] = [];
 
-    if (nome.trim() !== (usuario.nome || '').trim()) {
+    if (nome.trim() !== String(usuario.nome || '').trim()) {
       diffs.push({
         campo: 'nome',
         campo_label: 'Nome Completo',
-        valor_antigo: usuario.nome || '(não informado)',
+        valor_antigo: String(usuario.nome || '(não informado)'),
         valor_novo: nome.trim(),
       });
     }
 
-    if (cpf.trim() !== (usuario.cpf || '').trim()) {
+    if (cpf.trim() !== String(usuario.cpf || '').trim()) {
       diffs.push({
         campo: 'cpf',
         campo_label: 'CPF',
-        valor_antigo: usuario.cpf || '(não informado)',
+        valor_antigo: String(usuario.cpf || '(não informado)'),
         valor_novo: cpf.trim(),
       });
     }
 
-    if (dataNascimento !== (usuario.data_nascimento || '')) {
+    if (dataNascimento !== String(usuario.data_nascimento || '')) {
       diffs.push({
         campo: 'data_nascimento',
         campo_label: 'Data de Nascimento',
-        valor_antigo: usuario.data_nascimento || '(não informado)',
+        valor_antigo: String(usuario.data_nascimento || '(não informado)'),
         valor_novo: dataNascimento || '(não informado)',
       });
     }
 
-    if (whatsapp.trim() !== (usuario.whatsapp || usuario.telefone || '').trim()) {
+    if (whatsapp.trim() !== String(usuario.whatsapp || usuario.telefone || '').trim()) {
       diffs.push({
         campo: 'whatsapp',
         campo_label: 'WhatsApp de Contato',
-        valor_antigo: usuario.whatsapp || usuario.telefone || '(não informado)',
+        valor_antigo: String(usuario.whatsapp || usuario.telefone || '(não informado)'),
         valor_novo: whatsapp.trim(),
       });
     }
 
-    if (emailContato.trim() !== (usuario.email_contato || usuario.email || '').trim()) {
+    if (emailContato.trim() !== String(usuario.email_contato || usuario.email || '').trim()) {
       diffs.push({
         campo: 'email_contato',
         campo_label: 'E-mail para Comunicação',
-        valor_antigo: usuario.email_contato || usuario.email || '(não informado)',
+        valor_antigo: String(usuario.email_contato || usuario.email || '(não informado)'),
         valor_novo: emailContato.trim(),
       });
     }
 
     return diffs;
   };
-
-  // Verificação em tempo real do CPF digitado no 1º acesso
-  const statusCpfDigitado = useMemo(() => {
-    const digits = cpf.replace(/\D/g, '');
-    if (digits.length < 11) return null;
-    const reg = userRegistryStore.getUserByCpf(cpf);
-    const aprovs = buscarTodasAprovacoesCandidato({ cpf });
-    if (reg || aprovs.length > 0) {
-      return {
-        existe: true,
-        nomeEncontrado: reg?.nome || aprovs[0]?.concurso_nome || 'Cadastro existente',
-        concursoInfo:
-          aprovs.length > 0
-            ? `${aprovs[0].concurso_nome} (${aprovs[0].cargo_nome} • ${aprovs[0].posicao}º lugar)`
-            : reg?.orgao
-            ? `${reg.orgao} (${reg.cargo_nome || ''})`
-            : 'Cadastro Geral do Portal',
-      };
-    }
-    return { existe: false };
-  }, [cpf]);
 
   const handleSubmeterOuSalvar = (e: React.FormEvent) => {
     e.preventDefault();

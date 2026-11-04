@@ -12,7 +12,7 @@ interface QuadroVagasViewProps {
 
 export const QuadroVagasView: React.FC<QuadroVagasViewProps> = ({ concurso, cargoIdSelecionado }) => {
   const { isAdmin } = useAuth();
-  const podeEditar = isAdmin && isDebugMode();
+  const podeEditar = isAdmin;
   const [cargos, setCargos] = useState<Cargo[]>(() => concurso.cargos || []);
   const [catalogoLotacoes, setCatalogoLotacoes] = useState<LotacaoItem[]>(() => concurso.catalogo_lotacoes || []);
 

@@ -39,12 +39,6 @@ export const AdminOverlay: React.FC<AdminOverlayProps> = ({
   concursoAtualId = 'tjrs_2025',
   cargoAtualId = 'analista_judiciario',
 }) => {
-  // Renderiza EXCLUSIVAMENTE quando o modo de depuração/preview estiver ativo (variável de ambiente ou ?admin=1)
-  // Bloqueio absoluto para NUNCA ser renderizado no build de produção
-  if (!isDebugMode()) {
-    return null;
-  }
-
   const { usuario, isAdmin, alternarModoAdminPreview, loginAdminPreview } = useAuth();
   const { dispararNotificacao, exibirToast } = useNotifications();
   
@@ -106,6 +100,11 @@ export const AdminOverlay: React.FC<AdminOverlayProps> = ({
       window.removeEventListener('storage', handleAuditUpdate);
     };
   }, []);
+
+  // Renderiza EXCLUSIVAMENTE no visualizador do Google AI Studio (isDebugMode)
+  if (!isDebugMode()) {
+    return null;
+  }
 
   const handleDispararNotificacaoTeste = (tipo: 'info' | 'sucesso' | 'alerta') => {
     let item: any;

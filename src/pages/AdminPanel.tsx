@@ -6,6 +6,7 @@ import { auditStore } from '../store/auditStore';
 import { contactStore } from '../store/contactStore';
 import { notificationStore } from '../store/notificationStore';
 import { cloudSync, FullSyncDiagnosticsReport } from '../store/cloudSync';
+import { errorLogStore, ErrorLogEntry } from '../store/errorLogStore';
 import { useAuth } from '../store/authContext';
 import {
   Concurso,
@@ -91,6 +92,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     | 'importar'
     | 'faq'
     | 'supabase'
+    | 'logs_erros'
     | 'documentos_admin'
     | 'classificacao_admin'
     | 'vagas_admin'
@@ -105,6 +107,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [supabaseKeyInput, setSupabaseKeyInput] = useState<string>(
     () => cloudSync.getSupabaseConfig()?.anonKey || ''
   );
+
+  // Estados do Monitor Centralizado de Erros (ErrorBoundary -> Supabase public.error_logs)
+  const [errorLogs, setErrorLogs] = useState<ErrorLogEntry[]>(() => errorLogStore.getLogs());
+  const [errorTableStatus, setErrorTableStatus] = useState<{ tableExists: boolean; error?: string }>({
+    tableExists: false,
+  });
+  const [loadingErrorLogs, setLoadingErrorLogs] = useState(false);
+  const [sqlErrorTableCopiado, setSqlErrorTableCopiado] = useState(false);
+  const [filtroErroStatus, setFiltroErroStatus] = useState<'todos' | 'pendentes' | 'resolvidos'>('todos');
+  const [buscaErroLog, setBuscaErroLog] = useState('');
 
   const [concursos, setConcursos] = useState<Concurso[]>(() => certamStore.getConcursos());
   const [lotesLista, setLotesLista] = useState<Lote[]>(() => lotesStore.getLotes());
@@ -176,6 +188,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
     const handleConcursos = () => setConcursos(certamStore.getConcursos());
     const handleLotes = () => setLotesLista(lotesStore.getLotes());
+    const handleErrorLogs = () => setErrorLogs(errorLogStore.getLogs());
 
     const handleStorage = () => {
       setAuditRequests(auditStore.getAuditRequests());
@@ -185,6 +198,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       setConcursos(certamStore.getConcursos());
       setLotesLista(lotesStore.getLotes());
       setUsuariosGerais(userRegistryStore.getAllUsers());
+      setErrorLogs(errorLogStore.getLogs());
     };
 
     window.addEventListener('certam_audit_updated', handleAudit);
@@ -194,6 +208,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     window.addEventListener('certam_users_updated', handleUsers);
     window.addEventListener('certam_concursos_updated', handleConcursos);
     window.addEventListener('certam_lotes_updated', handleLotes);
+    window.addEventListener('certam_error_logs_updated', handleErrorLogs);
     window.addEventListener('storage', handleStorage);
 
     const refreshInterval = window.setInterval(() => {
@@ -204,6 +219,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       setUsuariosGerais(userRegistryStore.getAllUsers());
       setConcursos(certamStore.getConcursos());
       setLotesLista(lotesStore.getLotes());
+      setErrorLogs(errorLogStore.getLogs());
     }, 3500);
 
     return () => {
@@ -215,6 +231,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       window.removeEventListener('certam_users_updated', handleUsers);
       window.removeEventListener('certam_concursos_updated', handleConcursos);
       window.removeEventListener('certam_lotes_updated', handleLotes);
+      window.removeEventListener('certam_error_logs_updated', handleErrorLogs);
       window.removeEventListener('storage', handleStorage);
     };
   }, []);
@@ -230,6 +247,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       setConcursos(certamStore.getConcursos());
       setLotesLista(lotesStore.getLotes());
       setUsuariosGerais(userRegistryStore.getAllUsers());
+      setErrorLogs(errorLogStore.getLogs());
+      if (abaAdmin === 'logs_erros' || abaAdmin === 'supabase') {
+        const res = await errorLogStore.fetchFromSupabaseTable();
+        setErrorLogs(res.logs);
+        setErrorTableStatus({ tableExists: res.tableExists, error: res.error });
+      }
     };
     syncAndRefresh();
   }, [abaAdmin]);
@@ -811,6 +834,42 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     return { totalConcursos, totalCargos, pendentesAudit, pendentesVinc, contatosAbertos };
   }, [concursos, auditRequests, vinculacoes, contatos]);
 
+  const usuariosGeraisFiltrados = useMemo(() => {
+    return usuariosGerais.filter((u) => {
+      if (!u || typeof u !== 'object') return false;
+      const q = buscaUsuario.trim().toLowerCase();
+      const qDigits = buscaUsuario.replace(/\D/g, '');
+      const uNome = String(u.nome || '').toLowerCase();
+      const uEmail = String(u.email || '').toLowerCase();
+      const uCpfDigits = String(u.cpf || '').replace(/\D/g, '');
+      const uTel = String(u.telefone || u.whatsapp || '');
+
+      const matchBusca =
+        !q ||
+        uNome.includes(q) ||
+        uEmail.includes(q) ||
+        (qDigits.length > 0 && uCpfDigits.includes(qDigits)) ||
+        uTel.includes(buscaUsuario.trim());
+
+      const isPrimeiroAcesso =
+        u.status_cadastro === 'primeiro_acesso' ||
+        u.status_cadastro === 'aguardando_primeiro_acesso' ||
+        u.status_cadastro === 'aguardando_vinculacao';
+
+      const matchStatus =
+        filtroStatusUsuario === 'todos' ||
+        (filtroStatusUsuario === 'bloqueado' && u.bloqueado) ||
+        (filtroStatusUsuario === 'ativo' && !u.bloqueado && u.status_cadastro === 'ativo') ||
+        (filtroStatusUsuario === 'aguardando' && !u.bloqueado && isPrimeiroAcesso);
+
+      const uRole = u.role || (u.is_admin ? 'admin' : 'candidato');
+      const matchRole =
+        filtroRoleUsuario === 'todos' || uRole === filtroRoleUsuario;
+
+      return matchBusca && matchStatus && matchRole;
+    });
+  }, [usuariosGerais, buscaUsuario, filtroStatusUsuario, filtroRoleUsuario]);
+
   // Se não estiver logado como admin
   if (!isAdmin) {
     return (
@@ -854,7 +913,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
     // 1. Extrair todas as mudanças aprovadas
     const mudancas: any = {};
-    req.alteracoes.forEach((alt) => {
+    (req.alteracoes || []).forEach((alt) => {
       if (alt.campo === 'nome') mudancas.nome = alt.valor_novo;
       if (alt.campo === 'cpf') mudancas.cpf = alt.valor_novo;
       if (alt.campo === 'data_nascimento') mudancas.data_nascimento = alt.valor_novo;
@@ -969,7 +1028,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         });
         if (matchIndex >= 0) {
           const mod = { ...cands[matchIndex] };
-          req.alteracoes.forEach((alt) => {
+          (req.alteracoes || []).forEach((alt) => {
             if (alt.campo === 'nome') mod.nome = alt.valor_novo;
             if (alt.campo === 'cpf') mod.cpf = alt.valor_novo;
             if (alt.campo === 'data_nascimento') mod.data_nascimento = alt.valor_novo;
@@ -992,7 +1051,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       );
     });
     if (masterIdx >= 0) {
-      req.alteracoes.forEach((alt) => {
+      (req.alteracoes || []).forEach((alt) => {
         if (alt.campo === 'nome') MASTER_CADASTRO_GERAL[masterIdx].nome = alt.valor_novo;
         if (alt.campo === 'cpf') MASTER_CADASTRO_GERAL[masterIdx].cpf = alt.valor_novo;
         if (alt.campo === 'data_nascimento') MASTER_CADASTRO_GERAL[masterIdx].data_nascimento = alt.valor_novo;
@@ -1007,10 +1066,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
     // 8. Disparar eventos globais para sincronização de abas e telas abertas
     window.dispatchEvent(new CustomEvent('certam_audit_approved', { detail: { req, mudancas } }));
-    window.dispatchEvent(new CustomEvent('certam_profile_updated', { detail: { req, mudancas } }));
 
     // 9. Notificar o candidato sobre o deferimento das alterações
-    const camposAlteradosStr = req.alteracoes.map((a) => a.campo_label).join(', ');
+    const camposAlteradosStr = (req.alteracoes || []).map((a) => a.campo_label).join(', ');
     notificationStore.criarNotificacao({
       destinatario_email: mudancas.email || req.usuario_email,
       destinatario_nome: mudancas.nome || req.usuario_nome,
@@ -1320,11 +1378,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   // -------------------------------------------------------------
   const handleAbrirEditarUsuario = (u: any) => {
     setUsuarioEditando(u);
-    setUserFormNome(u.nome || '');
-    setUserFormCpf(u.cpf || '');
-    setUserFormEmail(u.email || '');
-    setUserFormTelefone(u.telefone || u.whatsapp || '');
-    setUserFormRole(u.role || 'candidato');
+    setUserFormNome(String(u.nome || ''));
+    setUserFormCpf(String(u.cpf || ''));
+    setUserFormEmail(String(u.email || ''));
+    setUserFormTelefone(String(u.telefone || u.whatsapp || ''));
+    setUserFormRole(u.role || (u.is_admin ? 'admin' : 'candidato'));
     setUserFormStatus(u.status_cadastro || 'ativo');
     setUserFormBloqueado(Boolean(u.bloqueado));
     setModalEditarUsuarioAberto(true);
@@ -1341,6 +1399,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       telefone: userFormTelefone.trim() || undefined,
       whatsapp: userFormTelefone.trim() || undefined,
       role: userFormRole,
+      is_admin: userFormRole === 'admin',
+      tipo_usuario: userFormRole,
       status_cadastro: userFormStatus,
       bloqueado: userFormBloqueado,
     };
@@ -1355,7 +1415,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     const isCurrentActive =
       (usuario?.id && salvo.id && usuario.id === salvo.id) ||
       (usuario?.candidato_id && salvo.candidato_id && usuario.candidato_id === salvo.candidato_id) ||
-      (usuario?.email && salvo.email && usuario.email.toLowerCase().trim() === salvo.email.toLowerCase().trim()) ||
+      (usuario?.email && salvo.email && String(usuario.email).toLowerCase().trim() === String(salvo.email).toLowerCase().trim()) ||
       (activeCpfLimpo.length >= 7 && updCpfLimpo.length >= 7 && activeCpfLimpo === updCpfLimpo);
 
     if (isCurrentActive) {
@@ -1414,33 +1474,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setModalNovoUsuarioAberto(false);
     showToast(`Usuário ${userFormNome.trim()} cadastrado com sucesso!`);
   };
-
-  const usuariosGeraisFiltrados = useMemo(() => {
-    return usuariosGerais.filter((u) => {
-      const matchBusca =
-        !buscaUsuario.trim() ||
-        (u.nome && u.nome.toLowerCase().includes(buscaUsuario.toLowerCase())) ||
-        (u.email && u.email.toLowerCase().includes(buscaUsuario.toLowerCase())) ||
-        (u.cpf && u.cpf.replace(/\D/g, '').includes(buscaUsuario.replace(/\D/g, ''))) ||
-        (u.telefone && u.telefone.includes(buscaUsuario.trim()));
-
-      const isPrimeiroAcesso =
-        u.status_cadastro === 'primeiro_acesso' ||
-        u.status_cadastro === 'aguardando_primeiro_acesso' ||
-        u.status_cadastro === 'aguardando_vinculacao';
-
-      const matchStatus =
-        filtroStatusUsuario === 'todos' ||
-        (filtroStatusUsuario === 'bloqueado' && u.bloqueado) ||
-        (filtroStatusUsuario === 'ativo' && !u.bloqueado && u.status_cadastro === 'ativo') ||
-        (filtroStatusUsuario === 'aguardando' && !u.bloqueado && isPrimeiroAcesso);
-
-      const matchRole =
-        filtroRoleUsuario === 'todos' || u.role === filtroRoleUsuario;
-
-      return matchBusca && matchStatus && matchRole;
-    });
-  }, [usuariosGerais, buscaUsuario, filtroStatusUsuario, filtroRoleUsuario]);
 
   return (
     <div className="space-y-6 max-w-[1880px] w-full mx-auto">
@@ -1655,6 +1688,31 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           >
             <Sparkles className="w-4 h-4 text-emerald-500" />
             <span>Supabase & Sincronização</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={async () => {
+              setAbaAdmin('logs_erros');
+              setLoadingErrorLogs(true);
+              const res = await errorLogStore.fetchFromSupabaseTable();
+              setErrorLogs(res.logs);
+              setErrorTableStatus({ tableExists: res.tableExists, error: res.error });
+              setLoadingErrorLogs(false);
+            }}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap relative ${
+              abaAdmin === 'logs_erros'
+                ? 'bg-[#0C2640] text-[#2DD4AA]'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            <AlertTriangle className="w-4 h-4 text-rose-500" />
+            <span>Logs de Erros (Tempo Real)</span>
+            {errorLogs.filter((l) => !l.resolvido).length > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-rose-600 text-white font-bold font-mono">
+                {errorLogs.filter((l) => !l.resolvido).length}
+              </span>
+            )}
           </button>
 
           <button
@@ -4266,11 +4324,7 @@ NOTIFY pgrst, 'reload schema';`;
                         <strong>Table Editor</strong>.
                       </li>
                       <li>
-                        Verifique a tabela <code className="font-mono text-slate-800">public.configuracoes</code>: ela armazena em tempo real as chaves{' '}
-                        <code className="font-mono text-slate-800">certam_concursos_cargos_v6</code>,{' '}
-                        <code className="font-mono text-slate-800">certam_lotes_data_v6</code>,{' '}
-                        <code className="font-mono text-slate-800">certam_perfil_audit_requests_v5</code> e{' '}
-                        <code className="font-mono text-slate-800">certam_contact_messages_v5</code>.
+                        Verifique a tabela <code className="font-mono text-slate-800">public.configuracoes</code> e a tabela dedicada de telemetria de erros <code className="font-mono text-slate-800">public.error_logs</code>.
                       </li>
                       <li>
                         Cole a <strong>Project URL</strong> e a <strong>Anon Key</strong> no quadro acima e clique em{' '}
@@ -4282,6 +4336,350 @@ NOTIFY pgrst, 'reload schema';`;
               </div>
             </div>
           )}
+        </section>
+      )}
+
+      {/* ============================================================== */}
+      {/* ABA: MONITOR CENTRALIZADO DE LOGS DE ERROS (SUPABASE REAL-TIME) */}
+      {/* ============================================================== */}
+      {abaAdmin === 'logs_erros' && (
+        <section className="space-y-6 bg-white rounded-2xl p-6 sm:p-8 border border-slate-200 card-shadow">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-200 pb-4">
+            <div>
+              <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-md text-[11px] font-mono font-bold bg-rose-50 text-rose-700 border border-rose-200 mb-2">
+                <AlertTriangle className="w-3.5 h-3.5 text-rose-600" />
+                <span>TELEMETRIA CENTRALIZADA • ERRORBOUNDARY → SUPABASE (public.error_logs)</span>
+              </div>
+              <h2 className="text-xl font-bold font-serif text-slate-900 flex items-center gap-2">
+                <span>Monitoramento de Erros e Exceções em Tempo Real</span>
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Todas as falhas capturadas pelo <code className="font-mono text-slate-700">ErrorBoundary</code> e exceções globais de execução são enviadas automaticamente para a tabela <code className="font-mono text-slate-700">public.error_logs</code> no Supabase e sincronizadas em tempo real.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={async () => {
+                  setLoadingErrorLogs(true);
+                  await errorLogStore.logError({
+                    error: new Error('Falha simulada pelo Administrador para verificação de telemetria ErrorBoundary -> Supabase'),
+                    componentStack: '\n    at ErrorBoundarySimulationButton (src/pages/AdminPanel.tsx)\n    at AdminPanel (src/pages/AdminPanel.tsx)\n    at AppContent (src/App.tsx)',
+                    origem: 'TesteAdmin',
+                  });
+                  const res = await errorLogStore.fetchFromSupabaseTable();
+                  setErrorLogs(res.logs);
+                  setErrorTableStatus({ tableExists: res.tableExists, error: res.error });
+                  setLoadingErrorLogs(false);
+                  showToast('Log de teste disparado e sincronizado com o Supabase!');
+                }}
+                className="px-3.5 py-2 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-xl text-xs transition-all cursor-pointer flex items-center gap-1.5 shadow-sm"
+              >
+                <AlertCircle className="w-3.5 h-3.5" />
+                <span>Simular Falha ErrorBoundary</span>
+              </button>
+
+              <button
+                type="button"
+                disabled={loadingErrorLogs}
+                onClick={async () => {
+                  setLoadingErrorLogs(true);
+                  const res = await errorLogStore.fetchFromSupabaseTable();
+                  setErrorLogs(res.logs);
+                  setErrorTableStatus({ tableExists: res.tableExists, error: res.error });
+                  setLoadingErrorLogs(false);
+                  showToast('Logs sincronizados em tempo real com o Supabase!');
+                }}
+                className="px-3.5 py-2 bg-[#0C2640] hover:bg-[#13385C] text-[#2DD4AA] font-bold rounded-xl text-xs transition-all cursor-pointer flex items-center gap-1.5"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>{loadingErrorLogs ? 'Consultando Supabase...' : 'Atualizar de public.error_logs'}</span>
+              </button>
+
+              {errorLogs.length > 0 && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await errorLogStore.limparTodosLogs();
+                    setErrorLogs([]);
+                    showToast('Todos os logs de erro foram removidos.');
+                  }}
+                  className="px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold rounded-xl text-xs transition-all cursor-pointer flex items-center gap-1.5"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Limpar Histórico</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Cards de Status da Tabela e Contadores */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="p-4 rounded-xl bg-slate-50 border border-slate-200">
+              <span className="text-[10px] font-mono uppercase font-bold text-slate-500 block">
+                Total de Ocorrências Capturadas
+              </span>
+              <div className="text-2xl font-bold text-slate-900 mt-1">{errorLogs.length}</div>
+              <span className="text-[11px] text-slate-500">Histórico consolidado em nuvem</span>
+            </div>
+
+            <div className="p-4 rounded-xl bg-rose-50/60 border border-rose-200">
+              <span className="text-[10px] font-mono uppercase font-bold text-rose-700 block">
+                Falhas Pendentes de Análise
+              </span>
+              <div className="text-2xl font-bold text-rose-700 mt-1">
+                {errorLogs.filter((l) => !l.resolvido).length}
+              </div>
+              <span className="text-[11px] text-rose-600">Aguardando revisão do admin</span>
+            </div>
+
+            <div className="p-4 rounded-xl bg-emerald-50/60 border border-emerald-200">
+              <span className="text-[10px] font-mono uppercase font-bold text-emerald-700 block">
+                Problemas Resolvidos
+              </span>
+              <div className="text-2xl font-bold text-emerald-700 mt-1">
+                {errorLogs.filter((l) => l.resolvido).length}
+              </div>
+              <span className="text-[11px] text-emerald-600">Marcados como solucionados</span>
+            </div>
+
+            <div
+              className={`p-4 rounded-xl border ${
+                errorTableStatus.tableExists
+                  ? 'bg-teal-50/60 border-teal-200'
+                  : 'bg-amber-50/60 border-amber-200'
+              }`}
+            >
+              <span className="text-[10px] font-mono uppercase font-bold text-slate-700 block">
+                Status da Tabela public.error_logs
+              </span>
+              <div className="text-sm font-bold mt-1.5 flex items-center gap-1.5">
+                {errorTableStatus.tableExists ? (
+                  <span className="text-teal-800 flex items-center gap-1">
+                    <CheckCircle2 className="w-4 h-4 text-teal-600" />
+                    Tabela Dedicada Ativa
+                  </span>
+                ) : (
+                  <span className="text-amber-900 flex items-center gap-1">
+                    <AlertTriangle className="w-4 h-4 text-amber-600" />
+                    Espelhado via CloudSync
+                  </span>
+                )}
+              </div>
+              <span className="text-[11px] text-slate-600 block mt-0.5">
+                {errorTableStatus.tableExists
+                  ? 'Gravando direto em REST /rest/v1/error_logs'
+                  : 'Execute o SQL abaixo para criar a tabela dedicada'}
+              </span>
+            </div>
+          </div>
+
+          {/* Instrução SQL para criação da tabela dedicada no Supabase caso ainda não exista */}
+          <div className="p-4 bg-slate-900 text-slate-100 rounded-2xl border border-slate-800 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <h3 className="text-xs font-bold font-mono uppercase tracking-wider text-teal-400">
+                  Estrutura SQL da Tabela Dedicada no Supabase (public.error_logs)
+                </h3>
+                <p className="text-[11px] text-slate-300 mt-0.5">
+                  O sistema envia cada falha automaticamente via <code className="text-teal-300">POST /rest/v1/error_logs</code> e também faz fallback automático em <code className="text-teal-300">public.configuracoes</code>. Caso deseje criar ou recriar a tabela relacional dedicada no Supabase SQL Editor, copie o script abaixo:
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(errorLogStore.getSqlCreateTableScript());
+                  setSqlErrorTableCopiado(true);
+                  showToast('Script SQL copiado para a área de transferência!');
+                  setTimeout(() => setSqlErrorTableCopiado(false), 3000);
+                }}
+                className="px-3.5 py-2 bg-teal-600 hover:bg-teal-500 text-white font-bold rounded-xl text-xs transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 self-start sm:self-auto"
+              >
+                <Check className="w-3.5 h-3.5" />
+                <span>{sqlErrorTableCopiado ? 'SQL Copiado!' : 'Copiar Script SQL'}</span>
+              </button>
+            </div>
+            <pre className="text-[11px] font-mono bg-slate-950 text-teal-300 p-3 rounded-xl overflow-x-auto border border-slate-800 max-h-40">
+              {errorLogStore.getSqlCreateTableScript()}
+            </pre>
+          </div>
+
+          {/* Barra de Filtros e Busca de Logs */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2">
+            <div className="flex items-center gap-1.5">
+              {(['todos', 'pendentes', 'resolvidos'] as const).map((st) => (
+                <button
+                  key={st}
+                  type="button"
+                  onClick={() => setFiltroErroStatus(st)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer capitalize ${
+                    filtroErroStatus === st
+                      ? 'bg-[#0C2640] text-[#2DD4AA]'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  {st === 'todos' ? 'Todos os Logs' : st === 'pendentes' ? 'Não Resolvidos' : 'Resolvidos'}
+                </button>
+              ))}
+            </div>
+
+            <div className="relative flex-1 max-w-md">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Filtrar por mensagem, origem, e-mail, URL ou protocolo..."
+                value={buscaErroLog}
+                onChange={(e) => setBuscaErroLog(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs"
+              />
+            </div>
+          </div>
+
+          {/* Lista de Logs Capturados */}
+          <div className="space-y-3">
+            {errorLogs
+              .filter((log) => {
+                if (filtroErroStatus === 'pendentes' && log.resolvido) return false;
+                if (filtroErroStatus === 'resolvidos' && !log.resolvido) return false;
+                if (!buscaErroLog.trim()) return true;
+                const q = buscaErroLog.toLowerCase();
+                return (
+                  log.mensagem.toLowerCase().includes(q) ||
+                  log.origem.toLowerCase().includes(q) ||
+                  log.id.toLowerCase().includes(q) ||
+                  (log.usuario_email && log.usuario_email.toLowerCase().includes(q)) ||
+                  (log.usuario_nome && log.usuario_nome.toLowerCase().includes(q)) ||
+                  log.url.toLowerCase().includes(q)
+                );
+              })
+              .map((log) => (
+                <div
+                  key={log.id}
+                  className={`p-4 rounded-2xl border transition-all ${
+                    log.resolvido
+                      ? 'bg-slate-50/70 border-slate-200 opacity-80'
+                      : 'bg-white border-rose-200 shadow-sm'
+                  }`}
+                >
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-100">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span
+                        className={`px-2 py-0.5 rounded-md text-[10px] font-mono font-bold uppercase ${
+                          log.origem === 'ErrorBoundary'
+                            ? 'bg-rose-100 text-rose-800 border border-rose-200'
+                            : log.origem === 'TesteAdmin'
+                            ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                            : 'bg-indigo-100 text-indigo-800 border border-indigo-200'
+                        }`}
+                      >
+                        {log.origem}
+                      </span>
+                      <span className="text-xs font-mono font-bold text-slate-700">{log.data_hora}</span>
+                      <span className="text-[11px] font-mono text-slate-400">ID: {log.id}</span>
+                      {log.enviado_supabase_tabela && (
+                        <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-semibold bg-teal-50 text-teal-700 border border-teal-200">
+                          Gravado em public.error_logs
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await errorLogStore.marcarComoResolvido(log.id, !log.resolvido);
+                          setErrorLogs(errorLogStore.getLogs());
+                          showToast(
+                            !log.resolvido
+                              ? 'Erro marcado como resolvido!'
+                              : 'Erro reaberto para análise.'
+                          );
+                        }}
+                        className={`px-3 py-1 rounded-lg text-xs font-bold cursor-pointer transition-all flex items-center gap-1 ${
+                          log.resolvido
+                            ? 'bg-slate-200 text-slate-700 hover:bg-slate-300'
+                            : 'bg-emerald-600 text-white hover:bg-emerald-500'
+                        }`}
+                      >
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        <span>{log.resolvido ? 'Resolvido (Reabrir)' : 'Marcar como Resolvido'}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await errorLogStore.excluirLog(log.id);
+                          setErrorLogs(errorLogStore.getLogs());
+                          showToast('Registro de erro excluído.');
+                        }}
+                        className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg cursor-pointer"
+                        title="Excluir log"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="mt-2.5 space-y-2">
+                    <div className="text-xs sm:text-sm font-bold text-slate-900 font-mono break-words">
+                      {log.mensagem}
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-slate-600">
+                      <span>
+                        <strong>Usuário:</strong> {log.usuario_nome || 'Visitante'} ({log.usuario_email || 'Anônimo'})
+                      </span>
+                      <span>
+                        <strong>URL:</strong> <code className="font-mono">{log.url}</code>
+                      </span>
+                    </div>
+
+                    {(log.stack || log.component_stack) && (
+                      <details className="mt-2 group">
+                        <summary className="text-[11px] font-mono font-bold text-teal-700 cursor-pointer hover:underline select-none">
+                          Inspecionar Stack Trace & React Component Stack
+                        </summary>
+                        <div className="mt-2 space-y-2">
+                          {log.stack && (
+                            <div>
+                              <span className="text-[10px] font-mono uppercase font-bold text-slate-500 block mb-1">
+                                Error Stack Trace:
+                              </span>
+                              <pre className="p-2.5 rounded-xl bg-slate-900 text-rose-300 font-mono text-[10px] overflow-x-auto max-h-44">
+                                {log.stack}
+                              </pre>
+                            </div>
+                          )}
+                          {log.component_stack && (
+                            <div>
+                              <span className="text-[10px] font-mono uppercase font-bold text-slate-500 block mb-1">
+                                React ErrorBoundary Component Stack:
+                              </span>
+                              <pre className="p-2.5 rounded-xl bg-slate-900 text-amber-300 font-mono text-[10px] overflow-x-auto max-h-44">
+                                {log.component_stack}
+                              </pre>
+                            </div>
+                          )}
+                        </div>
+                      </details>
+                    )}
+                  </div>
+                </div>
+              ))}
+
+            {errorLogs.length === 0 && (
+              <div className="p-10 text-center bg-slate-50 border border-dashed border-slate-200 rounded-2xl space-y-2">
+                <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto" />
+                <h3 className="text-sm font-bold text-slate-800">
+                  Nenhuma falha registrada no ErrorBoundary até o momento
+                </h3>
+                <p className="text-xs text-slate-500 max-w-md mx-auto">
+                  O sistema está monitorando exceções de renderização e falhas globais em tempo real. Você pode clicar em <strong>"Simular Falha ErrorBoundary"</strong> no topo para testar o envio imediato ao Supabase.
+                </p>
+              </div>
+            )}
+          </div>
         </section>
       )}
 

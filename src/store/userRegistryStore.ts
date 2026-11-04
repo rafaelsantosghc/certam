@@ -6,21 +6,21 @@ import { calcularSimilaridadeNome } from '../utils/phoneticSearch';
 
 const REGISTRY_STORAGE_KEY = 'certam_users_registry_v2';
 
-const normalizarTexto = (str: string = ''): string => {
-  return str
+const normalizarTexto = (str: unknown = ''): string => {
+  return String(str ?? '')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .trim()
     .toLowerCase();
 };
 
-const limparCpf = (cpfStr: string = ''): string => {
-  return cpfStr.replace(/\D/g, '');
+const limparCpf = (cpfStr: unknown = ''): string => {
+  return String(cpfStr ?? '').replace(/\D/g, '');
 };
 
-const isFakeEmail = (email?: string): boolean => {
+const isFakeEmail = (email?: unknown): boolean => {
   if (!email) return true;
-  const lower = email.toLowerCase().trim();
+  const lower = String(email).toLowerCase().trim();
   return lower === '' || lower.endsWith('@portalcertam.com.br') || lower.startsWith('cand-pre-');
 };
 
