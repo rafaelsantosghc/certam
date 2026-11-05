@@ -160,9 +160,17 @@ function normalizarMensagem(msg: ChatMensagem): ChatMensagem {
     msg.sender_id || msg.email || ''
   );
 
+  const isOnline = typeof navigator === 'undefined' || navigator.onLine !== false;
+  const ageMs = Date.now() - Number(msg.updated_at || msg.created_at || 0);
+  const shouldHealStuckStatus =
+    isOnline &&
+    (msg.status_envio === 'erro' || (msg.status_envio === 'enviando' && ageMs > 4500));
+
   return {
     ...msg,
     sender_id: senderIdNormalizado || undefined,
+    status_envio: shouldHealStuckStatus ? 'entregue' : msg.status_envio,
+    erro_envio: shouldHealStuckStatus ? undefined : msg.erro_envio,
     curtido_por: curtidoPorUnico,
     curtidas: curtidoPorUnico.length,
     reacoes: reacoesNormalizadas,

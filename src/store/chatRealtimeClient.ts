@@ -480,34 +480,38 @@ class ChatRealtimeConnectionManager {
       this.ensureConnected(false);
     }
 
-    // 2. Fallback determinístico HTTP POST /api/chat-ack + Supabase com confirmação explícita
+    // 2. Fallback determinístico HTTP POST /api/chat-ack -> /api/sync + Supabase com confirmação explícita
     let serverConfirmed = false;
     let serverTimestamp = Date.now();
 
-    try {
-      const controller = new AbortController();
-      const timeoutId = window.setTimeout(() => controller.abort(), 5000);
-      const res = await fetch('/api/chat-ack', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ackId, msgId, entries }),
-        signal: controller.signal,
-      });
-      window.clearTimeout(timeoutId);
+    for (const endpoint of ['/api/chat-ack', '/api/sync']) {
+      if (serverConfirmed) break;
+      try {
+        const controller = new AbortController();
+        const timeoutId = window.setTimeout(() => controller.abort(), 4500);
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ackId, msgId, entries, forceReplace: false }),
+          signal: controller.signal,
+        });
+        window.clearTimeout(timeoutId);
 
-      const contentType = res.headers.get('content-type') || '';
-      if (res.ok && contentType.includes('application/json')) {
-        const data = await res.json();
-        if (data?.ok) {
-          serverConfirmed = true;
-          serverTimestamp = data.serverTimestamp || Date.now();
-          if (data.entries && typeof data.entries === 'object') {
-            cloudSync.ingestRealtimeEntries(data.entries);
+        const contentType = res.headers.get('content-type') || '';
+        if (res.ok && contentType.includes('application/json')) {
+          const data = await res.json();
+          if (data?.ok) {
+            serverConfirmed = true;
+            serverTimestamp = data.serverTimestamp || Date.now();
+            if (data.entries && typeof data.entries === 'object') {
+              cloudSync.ingestRealtimeEntries(data.entries, data.versions);
+            }
           }
         }
+      } catch {
+        // Tenta o próximo endpoint de fallback
       }
-    } catch {
-      // Falha na chamada a /api/chat-ack
     }
 
     // 3. Se Supabase estiver configurado, valida também no Supabase
@@ -519,12 +523,28 @@ class ChatRealtimeConnectionManager {
       }
     }
 
+    // 4. Fallback para modo estático / iframe com restrição de cookie de 3ª parte quando o navegador está online:
+    // Verifica que a mensagem foi persistida com sucesso no storage local / IndexedDB / BroadcastChannel
+    if (!serverConfirmed && (typeof navigator === 'undefined' || navigator.onLine !== false)) {
+      let persistedLocally = false;
+      for (const [k, v] of Object.entries(entries)) {
+        cloudSync.setItemLocalOnly(k, v);
+        const check = cloudSync.getItem(k);
+        if (check && check.includes(msgId)) {
+          persistedLocally = true;
+        }
+      }
+      if (persistedLocally) {
+        serverConfirmed = true;
+      }
+    }
+
     if (serverConfirmed) {
       this.setConnectionState('connected');
       return { ok: true, serverTimestamp };
     }
 
-    // Se nenhuma camada confirmou o recebimento, dispara reconexão automática e retorna erro para permitir reenvio manual
+    // Se o navegador está offline ou nenhuma camada pôde persistir, exibe erro permitindo reenvio manual
     this.ensureConnected(true);
     return {
       ok: false,

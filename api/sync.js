@@ -302,8 +302,11 @@ export default async function handler(req, res) {
     try {
       const payload = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : req.body || {};
       const incoming = payload?.entries || {};
+      const ackId = payload?.ackId;
+      const msgId = payload?.msgId;
       const keysToDelete = Array.isArray(payload?.deleteKeys) ? payload.deleteKeys : [];
       const now = Date.now();
+      const updatedEntries = {};
 
       for (const delKey of keysToDelete) {
         if (typeof delKey === 'string' && delKey in db.entries) {
@@ -318,9 +321,39 @@ export default async function handler(req, res) {
         if (rawKey === '_test_ping') continue;
         const k = LEGACY_KEY_MIGRATIONS[rawKey] || rawKey;
         if (typeof v === 'string') {
-          const sanitized = sanitizeSyncEntryValue(k, v);
+          let sanitized = sanitizeSyncEntryValue(k, v);
+          if (
+            (k.startsWith('certam_chat_') || k.startsWith('certam_dm_')) &&
+            db.entries[k] &&
+            db.entries[k].startsWith('[') &&
+            sanitized.startsWith('[')
+          ) {
+            try {
+              const existingArr = JSON.parse(db.entries[k]);
+              const incomingArr = JSON.parse(sanitized);
+              if (Array.isArray(existingArr) && Array.isArray(incomingArr)) {
+                const map = new Map();
+                existingArr.forEach((item) => {
+                  if (item && typeof item === 'object' && (item.id || item.email)) {
+                    map.set(String(item.id || item.email), item);
+                  }
+                });
+                incomingArr.forEach((item) => {
+                  if (item && typeof item === 'object' && (item.id || item.email)) {
+                    const keyId = String(item.id || item.email);
+                    const prev = map.get(keyId);
+                    map.set(keyId, prev ? { ...prev, ...item } : item);
+                  }
+                });
+                sanitized = JSON.stringify(Array.from(map.values()));
+              }
+            } catch {
+              // fallback to sanitized
+            }
+          }
           db.entries[k] = sanitized;
           db.versions[k] = now;
+          updatedEntries[k] = sanitized;
           if (activeSupCfg && k !== SUPABASE_CONFIG_KEY) {
             await upsertRowToSupabase(activeSupCfg, k, sanitized);
           }
@@ -331,6 +364,10 @@ export default async function handler(req, res) {
 
       return res.status(200).json({
         ok: true,
+        ackId,
+        msgId,
+        serverTimestamp: now,
+        entries: updatedEntries,
         versions: db.versions,
         totalKeys: Object.keys(db.entries).length,
         serverTime: new Date().toISOString(),

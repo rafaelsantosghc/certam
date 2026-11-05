@@ -4,6 +4,10 @@
   "cleanUrls": true,
   "rewrites": [
     {
+      "source": "/api/chat-ack",
+      "destination": "/api/sync.js"
+    },
+    {
       "source": "/api/sync",
       "destination": "/api/sync.js"
     },

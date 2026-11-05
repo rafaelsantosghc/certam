@@ -900,6 +900,7 @@ function certamSyncPlugin(): Plugin {
       attachMiddleware(server.middlewares);
     },
     configurePreviewServer(server) {
+      attachChatWebSocketServer(server.httpServer);
       attachMiddleware(server.middlewares);
     },
   };
