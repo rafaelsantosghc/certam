@@ -80,7 +80,14 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     (item: NotificacaoItem) => {
       if (!item) return;
 
-      // Impede exibição de toast caso a conversa/concurso/canal esteja silenciado no localStorage
+      // Notificações de chat utilizam o balão compacto flutuante no canto inferior direito (PersistentChatWidget), não o toast grande superior
+      const isChatNotif =
+        item.tipo === 'chat' ||
+        String(item.id || '').startsWith('notif-chat-');
+      if (isChatNotif) {
+        return;
+      }
+
       if (isNotificacaoChatSilenciada(item, usuario?.canais_silenciados)) {
         return;
       }

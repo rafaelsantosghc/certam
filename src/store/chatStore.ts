@@ -182,6 +182,8 @@ function extrairTimestampOrdenacao(m: ChatMensagem, fallbackIndex: number): numb
   return fallbackIndex;
 }
 
+const selfSentMessageIds = new Set<string>();
+
 export const chatStore = {
   initRealtime(): void {
     chatRealtimeClient.init();
@@ -197,6 +199,51 @@ export const chatStore = {
 
   obterIdentificadorUsuario(usuarioOuEmail?: string | Usuario | null): string {
     return obterIdentificadorUsuarioChat(usuarioOuEmail);
+  },
+
+  isMensagemDoProprioUsuario(
+    msg: ChatMensagem,
+    usuarioOuEmail?: string | Usuario | null
+  ): boolean {
+    if (!msg) return false;
+    if (selfSentMessageIds.has(msg.id)) return true;
+
+    const meuId = obterIdentificadorUsuarioChat(usuarioOuEmail);
+    const msgEmailNorm = String(msg.email || '').trim().toLowerCase();
+    if (msgEmailNorm && msgEmailNorm === meuId) return true;
+
+    if (usuarioOuEmail && typeof usuarioOuEmail === 'object') {
+      const userEmailNorm = String(usuarioOuEmail.email || '').trim().toLowerCase();
+      if (userEmailNorm && msgEmailNorm === userEmailNorm) return true;
+
+      const userNomeNorm = String(usuarioOuEmail.nome || '').trim().toLowerCase();
+      const msgAutorNorm = String(msg.autor || '').trim().toLowerCase();
+      if (
+        userNomeNorm &&
+        userNomeNorm !== 'candidato' &&
+        msgAutorNorm === userNomeNorm &&
+        (!msgEmailNorm || !userEmailNorm || msgEmailNorm === userEmailNorm)
+      ) {
+        return true;
+      }
+    }
+
+    if (typeof window !== 'undefined') {
+      try {
+        const rawAuth = localStorage.getItem('certam_auth_user_v8');
+        if (rawAuth) {
+          const parsed = JSON.parse(rawAuth);
+          if (parsed && typeof parsed === 'object') {
+            const storedEmail = String(parsed.email || '').trim().toLowerCase();
+            if (storedEmail && msgEmailNorm === storedEmail) return true;
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    return false;
   },
 
   usuarioCurtiuMensagem(msg: ChatMensagem, usuarioOuEmail?: string | Usuario | null): boolean {
@@ -531,6 +578,7 @@ export const chatStore = {
       };
     }
 
+    selfSentMessageIds.add(nova.id);
     msgs.push(nova);
     // 1. Insere otimisticamente com status 'enviando'
     this.salvarMensagensLocalmente(concursoId, cargoId, canalId, msgs);
