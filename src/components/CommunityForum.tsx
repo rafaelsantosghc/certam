@@ -27,6 +27,10 @@ import {
   Sparkles,
   Volume2,
   VolumeX,
+  AlertCircle,
+  RotateCcw,
+  CheckCheck,
+  Loader2,
 } from 'lucide-react';
 
 interface CommunityForumProps {
@@ -109,6 +113,7 @@ export const CommunityForum: React.FC<CommunityForumProps> = ({
   };
 
   useEffect(() => {
+    chatStore.initRealtime();
     carregarMensagens();
     void cloudSync.pullFromServer();
 
@@ -122,19 +127,12 @@ export const CommunityForum: React.FC<CommunityForumProps> = ({
     window.addEventListener('certam_emojis_updated', handleEmojiUpdate);
     window.addEventListener('storage', handleUpdate);
 
-    // Sincronização em tempo real contínua para conversa fluida
-    const rtInterval = window.setInterval(() => {
-      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
-      void cloudSync.pullFromServer();
-    }, 2500);
-
     return () => {
       window.removeEventListener('certam_chat_updated', handleUpdate);
       window.removeEventListener('certam_blocked_updated', handleUpdate);
       window.removeEventListener('certam_chat_mute_updated', handleMuteUpdate);
       window.removeEventListener('certam_emojis_updated', handleEmojiUpdate);
       window.removeEventListener('storage', handleUpdate);
-      window.clearInterval(rtInterval);
     };
   }, [concursoId, cargoId, canalAtivo, usuario]);
 
@@ -244,6 +242,11 @@ export const CommunityForum: React.FC<CommunityForumProps> = ({
   const mensagensRegulares = mensagensFiltradas.filter((m) => !m.is_fixado);
   const canalInfo = CANAIS.find((c) => c.id === canalAtivo) || CANAIS[0];
 
+  const handleReenviar = async (msgId: string) => {
+    await chatStore.reenviarMensagem(concursoId, cargoId, canalAtivo, msgId);
+    carregarMensagens();
+  };
+
   const renderMessageActionsAndReactions = (msg: ChatMensagem) => {
     const jaCurtiu = chatStore.usuarioCurtiuMensagem(msg, usuario);
     const minhaReacao = chatStore.obterReacaoDoUsuario(msg, usuario);
@@ -254,8 +257,44 @@ export const CommunityForum: React.FC<CommunityForumProps> = ({
 
     return (
       <div className="pt-2 border-t border-slate-100 space-y-2">
+        {/* Indicador de Confirmação de Recebimento (ACK) ou Erro com Reenvio Manual */}
+        {msg.status_envio === 'enviando' && (
+          <div className="flex items-center gap-1.5 text-[11px] font-medium text-slate-500 bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-200/80">
+            <Loader2 className="w-3.5 h-3.5 animate-spin text-teal-600" />
+            <span>Aguardando confirmação do servidor...</span>
+          </div>
+        )}
+
+        {msg.status_envio === 'erro' && (
+          <div className="flex items-center justify-between gap-2 bg-rose-50 border border-rose-200 rounded-xl px-3 py-2 text-rose-800">
+            <div className="flex items-center gap-1.5 text-xs font-semibold">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+              <span>
+                {msg.erro_envio || 'Falha ao confirmar recebimento pelo servidor.'}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => handleReenviar(msg.id)}
+              className="inline-flex items-center gap-1 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold px-2.5 py-1 rounded-lg transition-colors cursor-pointer shrink-0 shadow-2xs"
+              title="Reenviar mensagem manualmente"
+            >
+              <RotateCcw className="w-3 h-3" />
+              <span>Reenviar</span>
+            </button>
+          </div>
+        )}
+
         <div className="flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center flex-wrap gap-1.5 relative">
+            {msg.status_envio !== 'enviando' && msg.status_envio !== 'erro' && (
+              <span
+                className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-full"
+                title="Recebimento confirmado pelo servidor"
+              >
+                <CheckCheck className="w-3 h-3 text-emerald-600" />
+              </span>
+            )}
             {/* Botão Curtir (Toggle único por usuário) */}
             <button
               type="button"

@@ -299,6 +299,9 @@ export interface ChatMensagem {
   reacoes?: Record<string, string[]>;
   created_at?: number;
   updated_at?: number;
+  status_envio?: 'enviando' | 'entregue' | 'erro';
+  ack_at?: number;
+  erro_envio?: string;
 }
 
 export interface OutroConcursoAprovado {

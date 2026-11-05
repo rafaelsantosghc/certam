@@ -5,6 +5,8 @@ import { VitePWA } from 'vite-plugin-pwa';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import crypto from 'node:crypto';
+import type { Duplex } from 'node:stream';
 
 const TMP_SYNC_DB_FILE = path.join(os.tmpdir(), 'certam_sync_db.json');
 const PUBLIC_SYNC_DB_FILE = path.join(process.cwd(), 'public', 'certam_sync_db.json');
@@ -450,8 +452,295 @@ function mergeSyncValues(
   return incomingStr;
 }
 
+const wsClients = new Set<Duplex>();
+
+function encodeWsTextFrame(text: string): Buffer {
+  const payload = Buffer.from(text, 'utf-8');
+  const len = payload.length;
+  let header: Buffer;
+  if (len < 126) {
+    header = Buffer.alloc(2);
+    header[0] = 0x81;
+    header[1] = len;
+  } else if (len < 65536) {
+    header = Buffer.alloc(4);
+    header[0] = 0x81;
+    header[1] = 126;
+    header.writeUInt16BE(len, 2);
+  } else {
+    header = Buffer.alloc(10);
+    header[0] = 0x81;
+    header[1] = 127;
+    header.writeBigUInt64BE(BigInt(len), 2);
+  }
+  return Buffer.concat([header, payload]);
+}
+
+function sendWsJson(socket: Duplex, data: any): void {
+  if (socket.destroyed || !socket.writable) return;
+  try {
+    socket.write(encodeWsTextFrame(JSON.stringify(data)));
+  } catch {
+    wsClients.delete(socket);
+  }
+}
+
+function broadcastWsJson(data: any, excludeSocket?: Duplex): void {
+  const frame = encodeWsTextFrame(JSON.stringify(data));
+  for (const client of wsClients) {
+    if (client === excludeSocket) continue;
+    if (client.destroyed || !client.writable) {
+      wsClients.delete(client);
+      continue;
+    }
+    try {
+      client.write(frame);
+    } catch {
+      wsClients.delete(client);
+    }
+  }
+}
+
+function attachChatWebSocketServer(httpServer: any): void {
+  if (!httpServer || (httpServer as any).__certamChatWsAttached) return;
+  (httpServer as any).__certamChatWsAttached = true;
+
+  httpServer.on('upgrade', (req: any, socket: Duplex) => {
+    const url = String(req.url || '');
+    if (!url.startsWith('/api/chat-ws')) return;
+
+    const key = req.headers['sec-websocket-key'];
+    if (!key || typeof key !== 'string') {
+      socket.destroy();
+      return;
+    }
+
+    const acceptKey = crypto
+      .createHash('sha1')
+      .update(key + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11')
+      .digest('base64');
+
+    const headers = [
+      'HTTP/1.1 101 Switching Protocols',
+      'Upgrade: websocket',
+      'Connection: Upgrade',
+      `Sec-WebSocket-Accept: ${acceptKey}`,
+      '\r\n',
+    ];
+
+    try {
+      socket.write(headers.join('\r\n'));
+    } catch {
+      socket.destroy();
+      return;
+    }
+
+    wsClients.add(socket);
+
+    // Envia confirmação imediata de conexão estabelecida
+    sendWsJson(socket, {
+      type: 'chat:connected',
+      serverTimestamp: Date.now(),
+    });
+
+    let buffer = Buffer.alloc(0);
+
+    socket.on('data', (chunk: Buffer) => {
+      buffer = Buffer.concat([buffer, chunk]);
+
+      while (buffer.length >= 2) {
+        const firstByte = buffer[0];
+        const secondByte = buffer[1];
+        const opcode = firstByte & 0x0f;
+        const isMasked = Boolean(secondByte & 0x80);
+        let payloadLen = secondByte & 0x7f;
+        let offset = 2;
+
+        if (payloadLen === 126) {
+          if (buffer.length < 4) return;
+          payloadLen = buffer.readUInt16BE(2);
+          offset = 4;
+        } else if (payloadLen === 127) {
+          if (buffer.length < 10) return;
+          payloadLen = Number(buffer.readBigUInt64BE(2));
+          offset = 10;
+        }
+
+        const maskLen = isMasked ? 4 : 0;
+        if (buffer.length < offset + maskLen + payloadLen) {
+          return;
+        }
+
+        const maskKey = isMasked ? buffer.subarray(offset, offset + 4) : null;
+        offset += maskLen;
+        const payload = Buffer.from(buffer.subarray(offset, offset + payloadLen));
+        buffer = buffer.subarray(offset + payloadLen);
+
+        if (opcode === 0x08) {
+          // Close frame
+          wsClients.delete(socket);
+          socket.end();
+          return;
+        }
+
+        if (opcode === 0x09) {
+          // Ping -> Pong
+          if (!socket.destroyed && socket.writable) {
+            const pong = Buffer.alloc(2 + payload.length);
+            pong[0] = 0x8a;
+            pong[1] = payload.length;
+            payload.copy(pong, 2);
+            socket.write(pong);
+          }
+          continue;
+        }
+
+        if (opcode !== 0x01) continue;
+
+        if (isMasked && maskKey) {
+          for (let i = 0; i < payload.length; i++) {
+            payload[i] ^= maskKey[i % 4];
+          }
+        }
+
+        try {
+          const msgStr = payload.toString('utf-8');
+          const packet = JSON.parse(msgStr);
+
+          if (packet?.type === 'chat:ping') {
+            sendWsJson(socket, {
+              type: 'chat:pong',
+              ts: packet.ts || Date.now(),
+              serverTimestamp: Date.now(),
+            });
+            continue;
+          }
+
+          if (packet?.type === 'chat:send') {
+            const { ackId, msgId, entries } = packet;
+            const now = Date.now();
+            const db = loadSyncDb();
+            let modified = false;
+            const updatedEntries: Record<string, string> = {};
+
+            if (entries && typeof entries === 'object') {
+              for (const [rawKey, v] of Object.entries(entries)) {
+                if (typeof v !== 'string') continue;
+                const k = LEGACY_KEY_MIGRATIONS[rawKey] || rawKey;
+                const nextVal = mergeSyncValues(db.entries[k], v, false, k);
+                db.entries[k] = nextVal;
+                db.versions[k] = now;
+                updatedEntries[k] = nextVal;
+                modified = true;
+              }
+            }
+
+            if (modified) {
+              saveSyncDb(db);
+            }
+
+            // Envia ACK determinístico de confirmação ao remetente
+            sendWsJson(socket, {
+              type: 'chat:ack',
+              ackId,
+              msgId,
+              ok: true,
+              serverTimestamp: now,
+              entries: updatedEntries,
+            });
+
+            // Propaga instantaneamente para todos os outros clientes conectados via WebSocket
+            if (Object.keys(updatedEntries).length > 0) {
+              broadcastWsJson(
+                {
+                  type: 'chat:broadcast',
+                  msgId,
+                  entries: updatedEntries,
+                  versions: db.versions,
+                  serverTimestamp: now,
+                },
+                socket
+              );
+            }
+          }
+        } catch {
+          // ignore malformed frame
+        }
+      }
+    });
+
+    socket.on('close', () => {
+      wsClients.delete(socket);
+    });
+    socket.on('error', () => {
+      wsClients.delete(socket);
+    });
+  });
+}
+
 function certamSyncPlugin(): Plugin {
   const attachMiddleware = (middlewares: any) => {
+    // Endpoint dedicado para envio de mensagem com confirmação de recebimento (ACK) imediata
+    middlewares.use('/api/chat-ack', (req: any, res: any, next: any) => {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+      if (req.method === 'POST') {
+        const chunks: Buffer[] = [];
+        req.on('data', (chunk: any) => {
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        });
+        req.on('end', () => {
+          try {
+            const body = Buffer.concat(chunks).toString('utf-8');
+            const payload = JSON.parse(body || '{}');
+            const { ackId, msgId, entries } = payload;
+            const now = Date.now();
+            const db = loadSyncDb();
+            let modified = false;
+            const updatedEntries: Record<string, string> = {};
+
+            if (entries && typeof entries === 'object') {
+              for (const [rawKey, v] of Object.entries(entries)) {
+                if (typeof v !== 'string') continue;
+                const k = LEGACY_KEY_MIGRATIONS[rawKey] || rawKey;
+                const nextVal = mergeSyncValues(db.entries[k], v, false, k);
+                db.entries[k] = nextVal;
+                db.versions[k] = now;
+                updatedEntries[k] = nextVal;
+                modified = true;
+              }
+            }
+
+            if (modified) {
+              saveSyncDb(db);
+              broadcastWsJson({
+                type: 'chat:broadcast',
+                msgId,
+                entries: updatedEntries,
+                versions: db.versions,
+                serverTimestamp: now,
+              });
+            }
+
+            res.setHeader('Content-Type', 'application/json; charset=utf-8');
+            res.end(
+              JSON.stringify({
+                ok: true,
+                ackId,
+                msgId,
+                serverTimestamp: now,
+                entries: updatedEntries,
+              })
+            );
+          } catch {
+            res.statusCode = 400;
+            res.end(JSON.stringify({ ok: false }));
+          }
+        });
+        return;
+      }
+      next();
+    });
+
     middlewares.use('/api/sync', (req: any, res: any, next: any) => {
       res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
       if (req.method === 'GET') {
@@ -482,6 +771,7 @@ function certamSyncPlugin(): Plugin {
             let db = loadSyncDb();
             let modified = false;
             const now = Date.now();
+            const chatChangedEntries: Record<string, string> = {};
 
             if (cleanConflicts) {
               const normalized = normalizeAndMigrateDb(db);
@@ -518,11 +808,22 @@ function certamSyncPlugin(): Plugin {
                   db.entries[k] = nextVal;
                   db.versions[k] = now;
                   modified = true;
+                  if (k.startsWith('certam_chat_') || k.startsWith('certam_dm_')) {
+                    chatChangedEntries[k] = nextVal;
+                  }
                 }
               }
             }
             if (modified) {
               saveSyncDb(db);
+              if (Object.keys(chatChangedEntries).length > 0) {
+                broadcastWsJson({
+                  type: 'chat:broadcast',
+                  entries: chatChangedEntries,
+                  versions: db.versions,
+                  serverTimestamp: now,
+                });
+              }
             }
             res.setHeader('Content-Type', 'application/json; charset=utf-8');
             res.end(
@@ -555,6 +856,7 @@ function certamSyncPlugin(): Plugin {
       );
     },
     configureServer(server) {
+      attachChatWebSocketServer(server.httpServer);
       server.middlewares.use((req: any, res: any, next: any) => {
         const url = String(req.url || '');
         if (url && !url.startsWith('/api/')) {

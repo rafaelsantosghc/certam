@@ -1,5 +1,6 @@
 import { ChatMensagem, CanalChatId, Usuario } from '../types';
 import { cloudSync } from './cloudSync';
+import { chatRealtimeClient, ChatConnectionState } from './chatRealtimeClient';
 
 const CHAT_KEY = 'certam_chat_messages_v5';
 const MUTED_ROOMS_STORAGE_KEY = 'certam_chat_muted_rooms_v1';
@@ -182,6 +183,18 @@ function extrairTimestampOrdenacao(m: ChatMensagem, fallbackIndex: number): numb
 }
 
 export const chatStore = {
+  initRealtime(): void {
+    chatRealtimeClient.init();
+  },
+
+  getConnectionState(): ChatConnectionState {
+    return chatRealtimeClient.getConnectionState();
+  },
+
+  reconectarAgora(): void {
+    chatRealtimeClient.ensureConnected(true);
+  },
+
   obterIdentificadorUsuario(usuarioOuEmail?: string | Usuario | null): string {
     return obterIdentificadorUsuarioChat(usuarioOuEmail);
   },
@@ -284,6 +297,50 @@ export const chatStore = {
       .map((entry) => entry.msg);
   },
 
+  salvarMensagensLocalmente(
+    concursoId: string,
+    cargoId: string,
+    canalId: CanalChatId,
+    msgs: ChatMensagem[]
+  ): Record<string, string> {
+    const normalizedMsgs = msgs.map((m) => normalizarMensagem(m));
+    const serialized = JSON.stringify(normalizedMsgs);
+    const canonicalKey = `${CHAT_KEY}_${concursoId}_geral_${canalId}`;
+    const specificKey = `${CHAT_KEY}_${concursoId}_${cargoId || 'geral'}_${canalId}`;
+    const entries: Record<string, string> = {
+      [canonicalKey]: serialized,
+    };
+
+    cloudSync.setItemLocalOnly(canonicalKey, normalizedMsgs);
+    if (specificKey !== canonicalKey) {
+      cloudSync.setItemLocalOnly(specificKey, normalizedMsgs);
+      entries[specificKey] = serialized;
+    }
+
+    try {
+      const prefix = `${CHAT_KEY}_${concursoId}_`;
+      const suffix = `_${canalId}`;
+      for (const k of cloudSync.getAllKeys()) {
+        if (k.startsWith(prefix) && k.endsWith(suffix) && k !== canonicalKey && k !== specificKey) {
+          cloudSync.setItemLocalOnly(k, normalizedMsgs);
+          entries[k] = serialized;
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('certam_chat_updated', {
+          detail: { concursoId, cargoId, canalId, msgs: normalizedMsgs },
+        })
+      );
+    }
+
+    return entries;
+  },
+
   salvarMensagens(
     concursoId: string,
     cargoId: string,
@@ -324,6 +381,88 @@ export const chatStore = {
     }
   },
 
+  /**
+   * Aguarda confirmação de recebimento (ACK) do servidor para uma mensagem específica.
+   * Caso o servidor confirme, marca `status_envio = 'entregue'`.
+   * Caso falhe ou dê timeout, marca `status_envio = 'erro'` permitindo reenvio manual pelo usuário.
+   */
+  async confirmarRecebimentoMensagem(
+    concursoId: string,
+    cargoId: string,
+    canalId: CanalChatId,
+    msgId: string
+  ): Promise<boolean> {
+    const msgsAtuais = this.getMensagens(concursoId, cargoId, canalId);
+    const alvo = msgsAtuais.find((m) => m.id === msgId);
+    if (!alvo) return false;
+
+    // Prepara payload para o servidor já com status 'entregue' caso seja persistido com sucesso
+    const msgsParaServidor = msgsAtuais.map((m) =>
+      m.id === msgId
+        ? {
+            ...m,
+            status_envio: 'entregue' as const,
+            erro_envio: undefined,
+            updated_at: Date.now(),
+          }
+        : m
+    );
+
+    const canonicalKey = `${CHAT_KEY}_${concursoId}_geral_${canalId}`;
+    const specificKey = `${CHAT_KEY}_${concursoId}_${cargoId || 'geral'}_${canalId}`;
+    const serialized = JSON.stringify(msgsParaServidor);
+    const entries: Record<string, string> = {
+      [canonicalKey]: serialized,
+    };
+    if (specificKey !== canonicalKey) {
+      entries[specificKey] = serialized;
+    }
+
+    const ackResult = await chatRealtimeClient.sendEntriesWithAck(msgId, entries);
+
+    const msgsPosAck = this.getMensagens(concursoId, cargoId, canalId);
+    const item = msgsPosAck.find((m) => m.id === msgId);
+    if (!item) return ackResult.ok;
+
+    if (ackResult.ok) {
+      item.status_envio = 'entregue';
+      item.ack_at = ackResult.serverTimestamp || Date.now();
+      item.erro_envio = undefined;
+      item.updated_at = Date.now();
+      this.salvarMensagensLocalmente(concursoId, cargoId, canalId, msgsPosAck);
+      return true;
+    } else {
+      item.status_envio = 'erro';
+      item.erro_envio =
+        ackResult.error ||
+        'Não foi possível confirmar o recebimento pelo servidor. Clique para reenviar.';
+      item.updated_at = Date.now();
+      this.salvarMensagensLocalmente(concursoId, cargoId, canalId, msgsPosAck);
+      return false;
+    }
+  },
+
+  /**
+   * Reenvia manualmente uma mensagem que apresentou falha de confirmação (ACK).
+   */
+  async reenviarMensagem(
+    concursoId: string,
+    cargoId: string,
+    canalId: CanalChatId,
+    msgId: string
+  ): Promise<boolean> {
+    const msgs = this.getMensagens(concursoId, cargoId, canalId);
+    const item = msgs.find((m) => m.id === msgId);
+    if (!item) return false;
+
+    item.status_envio = 'enviando';
+    item.erro_envio = undefined;
+    item.updated_at = Date.now();
+    this.salvarMensagensLocalmente(concursoId, cargoId, canalId, msgs);
+
+    return this.confirmarRecebimentoMensagem(concursoId, cargoId, canalId, msgId);
+  },
+
   enviarMensagem(
     concursoId: string,
     cargoId: string,
@@ -338,6 +477,7 @@ export const chatStore = {
       comarcaPreferida?: string;
     }
   ): ChatMensagem {
+    chatRealtimeClient.init();
     const msgs = this.getMensagens(concursoId, cargoId, canalId);
     const now = new Date();
     const nowMs = now.getTime();
@@ -372,6 +512,7 @@ export const chatStore = {
         comarca_preferida: extra?.comarcaPreferida,
         created_at: nowMs,
         updated_at: nowMs,
+        status_envio: 'enviando',
       };
     } else {
       nova = {
@@ -386,11 +527,17 @@ export const chatStore = {
         reacoes: {},
         created_at: nowMs,
         updated_at: nowMs,
+        status_envio: 'enviando',
       };
     }
 
     msgs.push(nova);
-    this.salvarMensagens(concursoId, cargoId, canalId, msgs, false);
+    // 1. Insere otimisticamente com status 'enviando'
+    this.salvarMensagensLocalmente(concursoId, cargoId, canalId, msgs);
+
+    // 2. Aguarda confirmação de recebimento (ACK) do servidor
+    void this.confirmarRecebimentoMensagem(concursoId, cargoId, canalId, nova.id);
+
     return nova;
   },
 

@@ -1658,6 +1658,54 @@ export const cloudSync = {
     }
   },
 
+  setItemLocalOnly(key: string, value: any): void {
+    const canonicalKey = LEGACY_KEY_MIGRATIONS[key] || key;
+    const rawStr = typeof value === 'string' ? value : JSON.stringify(value);
+    const strValue = sanitizeSyncValue(canonicalKey, rawStr) || rawStr;
+    memoryStore.set(canonicalKey, strValue);
+    lastLocalWriteAt.set(canonicalKey, Date.now());
+    safeLocalStorageSet(canonicalKey, strValue);
+    if (realtimeBroadcastChannel) {
+      try {
+        realtimeBroadcastChannel.postMessage({
+          type: 'kv_update',
+          key: canonicalKey,
+          value: strValue,
+          ts: Date.now(),
+        });
+      } catch {
+        // ignore
+      }
+    }
+  },
+
+  ingestRealtimeEntries(entries: Record<string, string>, versions?: Record<string, number>): void {
+    if (!entries || typeof entries !== 'object') return;
+    const changedKeys: string[] = [];
+    for (const [rawKey, rawVal] of Object.entries(entries)) {
+      if (typeof rawVal !== 'string') continue;
+      const k = LEGACY_KEY_MIGRATIONS[rawKey] || rawKey;
+      if (!shouldSyncKey(k)) continue;
+      const sanitized = sanitizeSyncValue(k, rawVal) || rawVal;
+      const prev = memoryStore.get(k);
+      if (prev !== sanitized) {
+        memoryStore.set(k, sanitized);
+        safeLocalStorageSet(k, sanitized);
+        changedKeys.push(k);
+      }
+      if (versions && typeof versions[k] === 'number') {
+        knownServerVersions.set(k, versions[k]);
+      }
+    }
+    if (changedKeys.length > 0) {
+      dispatchUpdateEvents(changedKeys);
+    }
+  },
+
+  async pushEntriesToSupabaseWithAck(entries: Record<string, string>): Promise<boolean> {
+    return pushEntriesToSupabase(entries);
+  },
+
   setItem(key: string, value: any, forceReplace?: boolean): void {
     const canonicalKey = LEGACY_KEY_MIGRATIONS[key] || key;
     const rawStr = typeof value === 'string' ? value : JSON.stringify(value);

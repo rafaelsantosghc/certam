@@ -5,7 +5,6 @@ import {
   CATALOGO_EMOJIS_CATEGORIAS,
   TODOS_EMOJIS_CHAT,
 } from '../store/chatStore';
-import { cloudSync } from '../store/cloudSync';
 import { useAuth } from '../store/authContext';
 import { useNotifications } from '../store/notificationContext';
 import { Concurso, ChatMensagem, CanalChatId } from '../types';
@@ -26,6 +25,10 @@ import {
   Volume2,
   VolumeX,
   X,
+  AlertCircle,
+  RotateCcw,
+  CheckCheck,
+  Loader2,
 } from 'lucide-react';
 
 interface PersistentChatWidgetProps {
@@ -219,17 +222,13 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
       setEmojisFrequentes(chatStore.getEmojisFrequentes(8));
     };
 
+    chatStore.initRealtime();
+
     window.addEventListener('certam_chat_updated', verificarNovasMensagensGlobal);
     window.addEventListener('certam_concursos_updated', verificarNovasMensagensGlobal);
     window.addEventListener('certam_chat_mute_updated', handleMuteChanged);
     window.addEventListener('certam_emojis_updated', handleEmojisChanged);
     window.addEventListener('storage', verificarNovasMensagensGlobal);
-
-    // Polling rápido de 2.5s para entrega em tempo real entre usuários em dispositivos distintos
-    const pollInterval = window.setInterval(() => {
-      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
-      void cloudSync.pullFromServer();
-    }, 2500);
 
     return () => {
       window.removeEventListener('certam_chat_updated', verificarNovasMensagensGlobal);
@@ -237,7 +236,6 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
       window.removeEventListener('certam_chat_mute_updated', handleMuteChanged);
       window.removeEventListener('certam_emojis_updated', handleEmojisChanged);
       window.removeEventListener('storage', verificarNovasMensagensGlobal);
-      window.clearInterval(pollInterval);
     };
   }, [concursoAtivoId, canalAtivo, isOpen, exibirToast, resumoBanner]);
 
@@ -297,6 +295,11 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
     chatStore.reagirEmoji(concursoAtivoId, 'geral', canalAtivo, msgId, emoji, usuario);
     setEmojisFrequentes(chatStore.getEmojisFrequentes(8));
     setEmojiPickerMsgId(null);
+    carregarMensagensAtivas();
+  };
+
+  const handleReenviar = async (msgId: string) => {
+    await chatStore.reenviarMensagem(concursoAtivoId, 'geral', canalAtivo, msgId);
     carregarMensagensAtivas();
   };
 
@@ -644,9 +647,45 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
                       {msg.texto}
                     </p>
 
+                    {/* Estado de Confirmação (ACK) / Erro de Envio com Botão de Reenvio Manual */}
+                    {msg.status_envio === 'enviando' && (
+                      <div className="mb-2 flex items-center gap-1.5 text-[10px] font-medium text-slate-500 bg-slate-50 px-2 py-1 rounded-lg border border-slate-200/80">
+                        <Loader2 className="w-3 h-3 animate-spin text-teal-600" />
+                        <span>Aguardando confirmação do servidor...</span>
+                      </div>
+                    )}
+
+                    {msg.status_envio === 'erro' && (
+                      <div className="mb-2 flex items-center justify-between gap-1.5 bg-rose-50 border border-rose-200 rounded-lg px-2.5 py-1.5 text-rose-800">
+                        <div className="flex items-center gap-1 text-[11px] font-semibold min-w-0">
+                          <AlertCircle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                          <span className="truncate">
+                            {msg.erro_envio || 'Falha ao confirmar recebimento.'}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleReenviar(msg.id)}
+                          className="inline-flex items-center gap-1 bg-rose-600 hover:bg-rose-700 text-white text-[10px] font-bold px-2 py-1 rounded-md transition-colors cursor-pointer shrink-0"
+                          title="Reenviar mensagem manualmente"
+                        >
+                          <RotateCcw className="w-2.5 h-2.5" />
+                          <span>Reenviar</span>
+                        </button>
+                      </div>
+                    )}
+
                     {/* Barra de Curtida Única (Toggle) + Reações de Emojis */}
                     <div className="flex items-center justify-between gap-1 pt-1.5 border-t border-slate-100 flex-wrap">
                       <div className="flex items-center gap-1 flex-wrap relative">
+                        {msg.status_envio !== 'enviando' && msg.status_envio !== 'erro' && (
+                          <span
+                            className="inline-flex items-center text-emerald-600 px-1"
+                            title="Recebimento confirmado pelo servidor"
+                          >
+                            <CheckCheck className="w-3 h-3" />
+                          </span>
+                        )}
                         <button
                           type="button"
                           onClick={() => handleCurtir(msg.id)}
