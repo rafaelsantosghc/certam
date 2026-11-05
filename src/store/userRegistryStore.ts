@@ -457,11 +457,13 @@ export const userRegistryStore = {
       (usuario.cpf && this.findRegistryKey(usuario.cpf)) ||
       null;
 
-    const finalId = usuario.id || existingKey || `user-${Date.now().toString(36)}`;
-    const dictKey = existingKey || finalId.toLowerCase().trim();
-
     const cleanEmail =
       usuario.email && !isFakeEmail(usuario.email) ? usuario.email.toLowerCase().trim() : '';
+
+    const cpfLimpo = usuario.cpf ? limparCpf(usuario.cpf) : '';
+    // Quando o usuário possuir CPF com 9+ dígitos, o ID canônico oficial passa a ser exatamente o CPF limpo (chave única)
+    const finalId = (cpfLimpo.length >= 9 ? cpfLimpo : usuario.id || existingKey || `user-${Date.now().toString(36)}`);
+    const dictKey = (cpfLimpo.length >= 9 ? cpfLimpo : existingKey || finalId).toLowerCase().trim();
 
     const defaultStatus = cleanEmail ? 'ativo' : 'primeiro_acesso';
 
@@ -475,6 +477,10 @@ export const userRegistryStore = {
         ? 'bloqueado'
         : usuario.status_cadastro || defaultStatus,
     };
+
+    if (existingKey && existingKey !== dictKey) {
+      delete reg[existingKey];
+    }
 
     reg[dictKey] = finalUser;
     this.salvarRegistry(reg);
@@ -719,10 +725,9 @@ export const userRegistryStore = {
     }
 
     // Novo usuário que acabou de logar: se cruzar com aprovado na lista de classificação, vincula automaticamente!
+    const cpfFinalLimpo = usuario.cpf ? limparCpf(usuario.cpf) : (matchFromLotes?.cand.cpf ? limparCpf(matchFromLotes.cand.cpf) : '');
     const newId =
-      matchFromLotes?.cand.id ||
-      usuario.id ||
-      `user-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 5)}`;
+      (cpfFinalLimpo.length >= 9 ? cpfFinalLimpo : matchFromLotes?.cand.id || usuario.id || `user-${Date.now().toString(36)}`);
     const inscricoesIniciais = [...(usuario.concursos_inscritos || [])];
     (matchFromLotes?.inscricoes || []).forEach((ins) => {
       if (
@@ -755,6 +760,72 @@ export const userRegistryStore = {
     reg[newId.toLowerCase()] = novoRegistro;
     this.salvarRegistry(reg);
     return novoRegistro;
+  },
+
+  /**
+   * Registra um acesso e a duração da sessão para auditoria e exibição no painel admin.
+   */
+  registrarAcessoUsuario(chave: string, duracaoSegundos: number): void {
+    if (!chave) return;
+    const targetKey = this.findRegistryKey(chave);
+    if (!targetKey) return;
+    const reg = { ...this.getRegistry() };
+    const user = reg[targetKey];
+    if (!user) return;
+
+    const dataHoraStr = new Date().toLocaleString('pt-BR');
+    const minutos = Math.floor(duracaoSegundos / 60);
+    const segundos = duracaoSegundos % 60;
+    const duracaoFmt = minutos > 0 ? `${minutos}m ${segundos}s` : `${segundos}s`;
+
+    const novoAcesso = {
+      id: `acc-${Date.now().toString(36)}`,
+      data_hora: dataHoraStr,
+      duracao_segundos: duracaoSegundos,
+      duracao_formatada: duracaoFmt,
+      dispositivo: typeof navigator !== 'undefined' ? (navigator.userAgent.includes('Mobile') ? 'Mobile' : 'Desktop') : 'Web',
+    };
+
+    const historico = [novoAcesso, ...(user.historico_acessos || [])].slice(0, 30);
+    const tempoTotal = (user.tempo_ativo_total_segundos || 0) + duracaoSegundos;
+
+    reg[targetKey] = {
+      ...user,
+      historico_acessos: historico,
+      tempo_ativo_total_segundos: tempoTotal,
+      ultimo_acesso: dataHoraStr,
+    };
+    this.salvarRegistry(reg);
+  },
+
+  /**
+   * Registra uma modificação feita pelo usuário para histórico e auditoria.
+   */
+  registrarModificacaoUsuario(chave: string, acao: string, detalhe: string, campo?: string, valorAnterior?: string, valorNovo?: string): void {
+    if (!chave) return;
+    const targetKey = this.findRegistryKey(chave);
+    if (!targetKey) return;
+    const reg = { ...this.getRegistry() };
+    const user = reg[targetKey];
+    if (!user) return;
+
+    const novaMod = {
+      id: `mod-${Date.now().toString(36)}`,
+      data_hora: new Date().toLocaleString('pt-BR'),
+      acao,
+      detalhe,
+      campo,
+      valor_anterior: valorAnterior,
+      valor_novo: valorNovo,
+    };
+
+    const historico = [novaMod, ...(user.historico_modificacoes || [])].slice(0, 50);
+
+    reg[targetKey] = {
+      ...user,
+      historico_modificacoes: historico,
+    };
+    this.salvarRegistry(reg);
   },
 
   /**

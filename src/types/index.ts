@@ -343,6 +343,29 @@ export interface Usuario {
   cpf_verificado?: boolean;
   admin_concursos?: string[];
   admin_cargos?: { concurso_id: string; cargo_id: string }[];
+  historico_acessos?: RegistroAcessoUsuario[];
+  historico_modificacoes?: RegistroModificacaoUsuario[];
+  tempo_ativo_total_segundos?: number;
+  ultimo_acesso?: string;
+}
+
+export interface RegistroAcessoUsuario {
+  id: string;
+  data_hora: string;
+  duracao_segundos: number;
+  duracao_formatada?: string;
+  dispositivo?: string;
+  ip_origem?: string;
+}
+
+export interface RegistroModificacaoUsuario {
+  id: string;
+  data_hora: string;
+  acao: string;
+  detalhe: string;
+  campo?: string;
+  valor_anterior?: string;
+  valor_novo?: string;
 }
 
 // -------------------------------------------------------------

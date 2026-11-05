@@ -124,6 +124,42 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [usuario]);
 
+  // Registra início de sessão e contabiliza tempo ativo acumulado do usuário para auditoria
+  useEffect(() => {
+    if (!usuario) return;
+    const chaveUser = usuario.cpf || usuario.email || usuario.id;
+    if (!chaveUser) return;
+
+    const sessionStart = Date.now();
+    let gravado = false;
+
+    // Registra o acesso inicial caso ainda não haja acessos hoje
+    userRegistryStore.registrarAcessoUsuario(chaveUser, 60);
+
+    const interval = window.setInterval(() => {
+      const segundosAtivos = Math.round((Date.now() - sessionStart) / 1000);
+      if (segundosAtivos >= 60) {
+        userRegistryStore.registrarAcessoUsuario(chaveUser, segundosAtivos);
+      }
+    }, 60000);
+
+    const salvarAoSair = () => {
+      if (gravado) return;
+      gravado = true;
+      const segundosAtivos = Math.round((Date.now() - sessionStart) / 1000);
+      if (segundosAtivos >= 10) {
+        userRegistryStore.registrarAcessoUsuario(chaveUser, segundosAtivos);
+      }
+    };
+
+    window.addEventListener('beforeunload', salvarAoSair);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('beforeunload', salvarAoSair);
+      salvarAoSair();
+    };
+  }, [usuario?.id, usuario?.cpf, usuario?.email]);
+
   // Processamento do retorno do Google OAuth (Implicit Flow com #access_token)
   useEffect(() => {
     try {

@@ -269,8 +269,8 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
           )}
 
-          {/* Modo Administrador no Preview e Botão de Teste de Notificação (Exclusivo para isDebugMode) */}
-          {isDebugMode() && (
+          {/* Modo Administrador no Preview e Botão de Teste de Notificação (Exclusivo para isDebugMode com is_admin === true) */}
+          {isDebugMode() && isAdmin && usuario?.is_admin && (
             <div className="flex items-center gap-1.5 bg-amber-50/80 border border-amber-300 rounded-xl px-2 py-1 shadow-2xs">
               <button
                 type="button"

@@ -58,7 +58,9 @@ import {
   Upload,
   Layers,
   Briefcase,
+  Eye,
 } from 'lucide-react';
+import { ModalDetalhesCandidatoAdmin } from '../components/ModalDetalhesCandidatoAdmin';
 import { userRegistryStore } from '../store/userRegistryStore';
 import { MASTER_CADASTRO_GERAL, normalizarTexto, limparCpf } from '../data/defaultCandidates';
 import { ModalEditarConcurso } from '../components/ModalEditarConcurso';
@@ -194,6 +196,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [modalEditarUsuarioAberto, setModalEditarUsuarioAberto] = useState(false);
   const [usuarioEditando, setUsuarioEditando] = useState<any | null>(null);
   const [modalNovoUsuarioAberto, setModalNovoUsuarioAberto] = useState(false);
+  const [modalDetalhesUsuarioAberto, setModalDetalhesUsuarioAberto] = useState(false);
+  const [usuarioDetalhes, setUsuarioDetalhes] = useState<any | null>(null);
   const [userFormNome, setUserFormNome] = useState('');
   const [userFormCpf, setUserFormCpf] = useState('');
   const [userFormEmail, setUserFormEmail] = useState('');
@@ -910,8 +914,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     });
   }, [usuariosGerais, buscaUsuario, filtroStatusUsuario, filtroRoleUsuario]);
 
-  // Se não estiver logado como admin
-  if (!isAdmin) {
+  // Se não for o administrador oficial autorizado com is_admin === true, bloqueia imediatamente
+  if (!isAdmin || !usuario?.is_admin) {
     return (
       <div className="max-w-md mx-auto my-12 p-6 sm:p-8 bg-white rounded-2xl shadow-xl border border-slate-200 text-center space-y-4">
         <div className="w-12 h-12 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center mx-auto">
@@ -2379,7 +2383,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       <tr key={u.id} className={`hover:bg-slate-50/80 transition-colors ${u.bloqueado ? 'bg-rose-50/30' : ''}`}>
                         <td className="py-3 px-4">
                           <div className="font-bold text-slate-900">{u.nome}</div>
-                          <span className="text-[10px] font-mono text-slate-400">ID: {u.id}</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setUsuarioDetalhes(u);
+                              setModalDetalhesUsuarioAberto(true);
+                            }}
+                            className="mt-0.5 inline-flex items-center gap-1 text-[11px] font-semibold text-teal-700 hover:text-teal-900 hover:underline cursor-pointer"
+                          >
+                            <Eye className="w-3 h-3" />
+                            <span>Ver Dossiê e Histórico</span>
+                          </button>
                         </td>
                         <td className="py-3 px-3 font-mono text-slate-700">
                           {u.cpf || <span className="text-slate-400 italic">Não informado</span>}
@@ -2463,6 +2477,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         </td>
                         <td className="py-3 px-4 text-right">
                           <div className="inline-flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setUsuarioDetalhes(u);
+                                setModalDetalhesUsuarioAberto(true);
+                              }}
+                              className="px-2.5 py-1 bg-teal-50 hover:bg-teal-100 text-teal-800 rounded-lg font-bold text-[11px] transition-colors cursor-pointer flex items-center gap-1 border border-teal-200"
+                              title="Visualizar ficha completa, situação nos concursos, histórico de acessos e modificações"
+                            >
+                              <Eye className="w-3 h-3 text-teal-600" />
+                              <span>Mais Info</span>
+                            </button>
                             <button
                               type="button"
                               onClick={() => handleAbrirEditarUsuario(u)}
@@ -2687,6 +2713,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               </div>
             </div>
           )}
+
+          {/* Modal de Detalhes Completos do Candidato (Dossiê, Acessos e Modificações) */}
+          <ModalDetalhesCandidatoAdmin
+            usuario={usuarioDetalhes}
+            aberto={modalDetalhesUsuarioAberto}
+            onClose={() => {
+              setModalDetalhesUsuarioAberto(false);
+              setUsuarioDetalhes(null);
+            }}
+            onEditar={(u) => handleAbrirEditarUsuario(u)}
+          />
         </section>
       )}
 

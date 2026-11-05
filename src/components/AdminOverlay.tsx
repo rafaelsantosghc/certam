@@ -101,8 +101,9 @@ export const AdminOverlay: React.FC<AdminOverlayProps> = ({
     };
   }, []);
 
-  // Renderiza EXCLUSIVAMENTE no visualizador do Google AI Studio (isDebugMode)
-  if (!isDebugMode()) {
+  // Renderiza EXCLUSIVAMENTE se for o administrador oficial autorizado (is_admin === true)
+  // Oculta completamente qualquer interface administrativa de teste para usuários comuns mesmo em desenvolvimento
+  if (!isAdmin || !usuario?.is_admin || !isDebugMode()) {
     return null;
   }
 
