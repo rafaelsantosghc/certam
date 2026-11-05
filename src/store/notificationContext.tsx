@@ -1,8 +1,39 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { NotificacaoItem } from '../types';
 import { notificationStore } from './notificationStore';
+import { chatStore } from './chatStore';
 import { useAuth } from './authContext';
 import { podeExibirNotificacaoParaUsuario } from '../utils/notificationUtils';
+
+function isNotificacaoChatSilenciada(item: NotificacaoItem, canaisSilenciadosUsuario?: string[]): boolean {
+  if (!item) return false;
+  const isChatNotif =
+    item.tipo === 'chat' ||
+    String(item.id || '').startsWith('notif-chat-') ||
+    String(item.link_destino || '').includes('tab=forum');
+
+  if (!isChatNotif) return false;
+
+  const concId = item.concurso_id || '';
+  const canalId = item.canal_id || 'geral';
+
+  if (concId && chatStore.isSalaSilenciada(concId, canalId)) {
+    return true;
+  }
+  if (concId && chatStore.isSalaSilenciada(`${concId}_${canalId}`)) {
+    return true;
+  }
+  if (Array.isArray(canaisSilenciadosUsuario) && canaisSilenciadosUsuario.length > 0) {
+    if (
+      (concId && canaisSilenciadosUsuario.includes(concId)) ||
+      (concId && canaisSilenciadosUsuario.includes(`${concId}_${canalId}`)) ||
+      canaisSilenciadosUsuario.includes(canalId)
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
 
 interface NotificationContextType {
   notificacoes: NotificacaoItem[];
@@ -45,26 +76,34 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     [usuario, isAdmin]
   );
 
-  const exibirToast = useCallback((item: NotificacaoItem) => {
-    if (!item) return;
+  const exibirToast = useCallback(
+    (item: NotificacaoItem) => {
+      if (!item) return;
 
-    if (toastTimerRef.current) {
-      clearTimeout(toastTimerRef.current);
-    }
+      // Impede exibição de toast caso a conversa/concurso/canal esteja silenciado no localStorage
+      if (isNotificacaoChatSilenciada(item, usuario?.canais_silenciados)) {
+        return;
+      }
 
-    try {
-      sessionStorage.setItem(`certam_toast_shown_${item.id}`, 'true');
-    } catch {
-      // ignore
-    }
+      if (toastTimerRef.current) {
+        clearTimeout(toastTimerRef.current);
+      }
 
-    setToastAtivo(item);
+      try {
+        sessionStorage.setItem(`certam_toast_shown_${item.id}`, 'true');
+      } catch {
+        // ignore
+      }
 
-    // Mantém exibição do resumo pelo período exato de 5 segundos (5000ms)
-    toastTimerRef.current = setTimeout(() => {
-      setToastAtivo(null);
-    }, 5000);
-  }, []);
+      setToastAtivo(item);
+
+      // Mantém exibição do resumo pelo período exato de 5 segundos (5000ms)
+      toastTimerRef.current = setTimeout(() => {
+        setToastAtivo(null);
+      }, 5000);
+    },
+    [usuario?.canais_silenciados]
+  );
 
   const fecharToast = useCallback(() => {
     if (toastTimerRef.current) {
@@ -73,16 +112,27 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     setToastAtivo(null);
   }, []);
 
-  // Se o usuário trocar de perfil/sessão e o toast ativo não pertencer a ele, fecha imediatamente
+  // Se o usuário trocar de perfil/sessão ou silenciar a conversa atual, fecha imediatamente o toast
   useEffect(() => {
     if (
       toastAtivo &&
-      !String(toastAtivo.id ?? '').startsWith('notif-teste-') &&
-      !podeExibirNotificacaoParaUsuario(toastAtivo, usuario, isAdmin)
+      ((!String(toastAtivo.id ?? '').startsWith('notif-teste-') &&
+        !podeExibirNotificacaoParaUsuario(toastAtivo, usuario, isAdmin)) ||
+        isNotificacaoChatSilenciada(toastAtivo, usuario?.canais_silenciados))
     ) {
       fecharToast();
     }
   }, [usuario, isAdmin, toastAtivo, fecharToast]);
+
+  useEffect(() => {
+    const handleMuteUpdated = () => {
+      if (toastAtivo && isNotificacaoChatSilenciada(toastAtivo, usuario?.canais_silenciados)) {
+        fecharToast();
+      }
+    };
+    window.addEventListener('certam_chat_mute_updated', handleMuteUpdated);
+    return () => window.removeEventListener('certam_chat_mute_updated', handleMuteUpdated);
+  }, [toastAtivo, usuario?.canais_silenciados, fecharToast]);
 
   // Escuta os eventos no ciclo de vida de AppContent e captura o estado mais recente
   useEffect(() => {

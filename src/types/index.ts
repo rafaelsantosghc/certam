@@ -297,6 +297,8 @@ export interface ChatMensagem {
   curtidas?: number;
   curtido_por?: string[];
   reacoes?: Record<string, string[]>;
+  created_at?: number;
+  updated_at?: number;
 }
 
 export interface OutroConcursoAprovado {
@@ -493,6 +495,7 @@ export interface NotificacaoItem {
   id: string;
   concurso_id?: string;
   cargo_id?: string;
+  canal_id?: string;
   destinatario_papel?: DestinatarioPapelNotificacao;
   destinatario_usuario_id?: string;
   destinatario_cpf?: string;

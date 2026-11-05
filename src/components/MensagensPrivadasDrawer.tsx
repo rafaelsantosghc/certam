@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../store/authContext';
 import { dmStore } from '../store/dmStore';
+import { chatStore } from '../store/chatStore';
+import { cloudSync } from '../store/cloudSync';
 import { MensagemPrivada } from '../types';
 import { sanitizeInput } from '../utils/security';
 import {
@@ -37,10 +39,11 @@ export const MensagensPrivadasDrawer: React.FC<MensagensPrivadasDrawerProps> = (
   const [texto, setTexto] = useState('');
   const [filtroBusca, setFiltroBusca] = useState('');
   const [isBloqueado, setIsBloqueado] = useState(false);
-  const [silenciado, setSilenciado] = useState(false);
+  const [, setMuteVersion] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const meuEmail = usuario?.email || '';
+  const silenciado = contatoAtivoEmail ? chatStore.isDmSilenciada(contatoAtivoEmail) : false;
 
   // Carregar lista de conversas
   const recarregarConversas = () => {
@@ -51,6 +54,9 @@ export const MensagensPrivadasDrawer: React.FC<MensagensPrivadasDrawerProps> = (
 
   useEffect(() => {
     recarregarConversas();
+    if (aberto) {
+      void cloudSync.pullFromServer();
+    }
     const handleUpdate = () => {
       recarregarConversas();
       if (contatoAtivoEmail) {
@@ -58,13 +64,27 @@ export const MensagensPrivadasDrawer: React.FC<MensagensPrivadasDrawerProps> = (
         setIsBloqueado(dmStore.isUsuarioBloqueado(meuEmail, contatoAtivoEmail));
       }
     };
+    const handleMuteUpdate = () => setMuteVersion((v) => v + 1);
     window.addEventListener('certam_dm_updated', handleUpdate);
     window.addEventListener('certam_blocked_updated', handleUpdate);
+    window.addEventListener('certam_chat_mute_updated', handleMuteUpdate);
+    window.addEventListener('storage', handleUpdate);
+
+    const pollInterval = aberto
+      ? window.setInterval(() => {
+          if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+          void cloudSync.pullFromServer();
+        }, 2500)
+      : null;
+
     return () => {
       window.removeEventListener('certam_dm_updated', handleUpdate);
       window.removeEventListener('certam_blocked_updated', handleUpdate);
+      window.removeEventListener('certam_chat_mute_updated', handleMuteUpdate);
+      window.removeEventListener('storage', handleUpdate);
+      if (pollInterval) window.clearInterval(pollInterval);
     };
-  }, [meuEmail, contatoAtivoEmail]);
+  }, [meuEmail, contatoAtivoEmail, aberto]);
 
   // Se abrir com um destinatário específico (ex: clicou em mensagem no perfil ou ranking)
   useEffect(() => {
@@ -228,11 +248,16 @@ export const MensagensPrivadasDrawer: React.FC<MensagensPrivadasDrawerProps> = (
                   <div className="flex items-center gap-1">
                     <button
                       type="button"
-                      onClick={() => setSilenciado(!silenciado)}
+                      onClick={() => {
+                        if (contatoAtivoEmail) {
+                          chatStore.alternarSilenciarDm(contatoAtivoEmail);
+                          setMuteVersion((v) => v + 1);
+                        }
+                      }}
                       className={`p-1.5 rounded-lg text-xs cursor-pointer ${
                         silenciado ? 'text-amber-600 bg-amber-50' : 'text-slate-400 hover:text-slate-700'
                       }`}
-                      title={silenciado ? 'Desilenciar notificações' : 'Silenciar notificações'}
+                      title={silenciado ? 'Desilenciar notificações desta conversa' : 'Silenciar notificações desta conversa'}
                     >
                       {silenciado ? <BellOff className="w-4 h-4" /> : <Bell className="w-4 h-4" />}
                     </button>

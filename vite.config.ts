@@ -326,7 +326,14 @@ function isResolvedModerationStatus(status: unknown): boolean {
 }
 
 function mergeKeyedObjectItems(existingItem: any, incomingItem: any): any {
-  const merged = { ...existingItem, ...incomingItem };
+  const existingUpdatedAt = Number(existingItem?.updated_at || 0);
+  const incomingUpdatedAt = Number(incomingItem?.updated_at || 0);
+  const incomingIsNewerOrEqual = incomingUpdatedAt >= existingUpdatedAt;
+
+  const merged = incomingIsNewerOrEqual
+    ? { ...existingItem, ...incomingItem }
+    : { ...incomingItem, ...existingItem };
+
   if (
     isResolvedModerationStatus(existingItem?.status) &&
     (incomingItem?.status === 'pendente' || incomingItem?.status === 'aberto')
@@ -347,7 +354,8 @@ function mergeKeyedObjectItems(existingItem: any, incomingItem: any): any {
 function mergeSyncValues(
   existingStr: string | undefined,
   incomingStr: string,
-  forceReplace?: boolean
+  forceReplace?: boolean,
+  keyName?: string
 ): string {
   if (!existingStr || existingStr === incomingStr) return incomingStr;
   if ((incomingStr === '[]' || incomingStr === '{}') && existingStr.length > 2 && !forceReplace) {
@@ -370,17 +378,37 @@ function mergeSyncValues(
         if (!hasKeyedItems) {
           return incomingStr;
         }
+        const isChronologicalChatOrDm =
+          Boolean(keyName) &&
+          (keyName!.startsWith('certam_chat_') || keyName!.startsWith('certam_dm_'));
+
         const map = new Map<string, any>();
-        // Novos itens submetidos vêm na frente na fila (como em unshift de auditoria)
-        incomingArr.forEach((item: any) => {
-          const k = item.id || item.email;
-          map.set(String(k), item);
-        });
-        existingArr.forEach((item: any) => {
-          const k = item.id || item.email;
-          const prev = map.get(String(k));
-          map.set(String(k), prev ? mergeKeyedObjectItems(prev, item) : item);
-        });
+        if (isChronologicalChatOrDm) {
+          // Mensagens de chat e DM mantêm ordem cronológica (existentes primeiro, novas ao final)
+          existingArr.forEach((item: any) => {
+            const k = item.id || item.email;
+            map.set(String(k), item);
+          });
+          incomingArr.forEach((item: any) => {
+            const k = item.id || item.email;
+            const prev = map.get(String(k));
+            map.set(String(k), prev ? mergeKeyedObjectItems(prev, item) : item);
+          });
+        } else {
+          // Filas administrativas (auditoria/notificações) mantêm itens novos na frente
+          incomingArr.forEach((item: any) => {
+            const k = item.id || item.email;
+            map.set(String(k), item);
+          });
+          existingArr.forEach((item: any) => {
+            const k = item.id || item.email;
+            const incomingItem = map.get(String(k));
+            map.set(
+              String(k),
+              incomingItem ? mergeKeyedObjectItems(item, incomingItem) : item
+            );
+          });
+        }
         return JSON.stringify(Array.from(map.values()));
       }
     } catch {
@@ -483,7 +511,8 @@ function certamSyncPlugin(): Plugin {
                 const nextVal = mergeSyncValues(
                   db.entries[k],
                   sanitizedIncoming,
-                  shouldForceKey
+                  shouldForceKey,
+                  k
                 );
                 if (db.entries[k] !== nextVal || !db.versions[k] || shouldForceKey) {
                   db.entries[k] = nextVal;

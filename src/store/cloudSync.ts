@@ -1,4 +1,4 @@
-const SYNC_INTERVAL_MS = 15000;
+const SYNC_INTERVAL_MS = 3500;
 let initialized = false;
 let activePullPromise: Promise<boolean> | null = null;
 let localApiAvailable: boolean | null = null;
@@ -6,6 +6,15 @@ let localApiAvailable: boolean | null = null;
 const memoryStore = new Map<string, string>();
 const lastLocalWriteAt = new Map<string, number>();
 const knownServerVersions = new Map<string, number>();
+
+let realtimeBroadcastChannel: BroadcastChannel | null = null;
+if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+  try {
+    realtimeBroadcastChannel = new BroadcastChannel('certam_realtime_sync_v1');
+  } catch {
+    realtimeBroadcastChannel = null;
+  }
+}
 
 // Telemetria de economia de limites gratuitos (Supabase Egress & Vercel)
 const syncTelemetry = {
@@ -198,6 +207,8 @@ const PRIORITY_PREFIXES = [
   'certam_contact_',
   'certam_notifications_',
   'certam_faq_',
+  'certam_chat_',
+  'certam_dm_',
   'certam_error_logs_',
   SUPABASE_CONFIG_KEY,
 ];
@@ -209,6 +220,8 @@ const APPEND_QUEUE_PREFIXES = [
   'certam_vinculacoes_',
   'certam_contact_',
   'certam_notifications_',
+  'certam_chat_',
+  'certam_dm_',
   'certam_error_logs_',
 ];
 
@@ -398,14 +411,23 @@ function isResolvedModerationStatus(status: unknown): boolean {
 }
 
 function mergeKeyedObjectItems(existingItem: any, incomingItem: any): any {
-  const existingTs = Number(existingItem?.updated_at_ms || 0);
-  const incomingTs = Number(incomingItem?.updated_at_ms || 0);
+  const existingTs = Number(existingItem?.updated_at_ms || existingItem?.updated_at || 0);
+  const incomingTs = Number(incomingItem?.updated_at_ms || incomingItem?.updated_at || 0);
   const base = existingTs > incomingTs ? incomingItem : existingItem;
   const newer = existingTs > incomingTs ? existingItem : incomingItem;
   const merged = { ...base, ...newer };
 
-  if (existingTs > 0 || incomingTs > 0) {
-    merged.updated_at_ms = Math.max(existingTs, incomingTs);
+  if (existingItem?.updated_at_ms || incomingItem?.updated_at_ms) {
+    merged.updated_at_ms = Math.max(
+      Number(existingItem?.updated_at_ms || 0),
+      Number(incomingItem?.updated_at_ms || 0)
+    );
+  }
+  if (existingItem?.updated_at || incomingItem?.updated_at) {
+    merged.updated_at = Math.max(
+      Number(existingItem?.updated_at || 0),
+      Number(incomingItem?.updated_at || 0)
+    );
   }
 
   if (
@@ -1146,6 +1168,12 @@ function dispatchUpdateEvents(changedKeys: string[]): void {
   if (changedKeys.some((k) => k.startsWith('certam_faq_'))) {
     window.dispatchEvent(new CustomEvent('certam_faqs_updated'));
   }
+  if (changedKeys.some((k) => k.startsWith('certam_chat_'))) {
+    window.dispatchEvent(new CustomEvent('certam_chat_updated', { detail: { changedKeys } }));
+  }
+  if (changedKeys.some((k) => k.startsWith('certam_dm_'))) {
+    window.dispatchEvent(new CustomEvent('certam_dm_updated', { detail: { changedKeys } }));
+  }
   if (changedKeys.some((k) => k.startsWith('certam_error_logs_'))) {
     window.dispatchEvent(new CustomEvent('certam_error_logs_updated'));
   }
@@ -1423,7 +1451,8 @@ async function executePullFromServer(): Promise<boolean> {
         }
       }
 
-      if (recentlyWrittenLocally && isNonEmptySerialized(localVal)) {
+      const isRealtimeChatOrDm = k.startsWith('certam_chat_') || k.startsWith('certam_dm_');
+      if (recentlyWrittenLocally && isNonEmptySerialized(localVal) && !isRealtimeChatOrDm) {
         if (localVal !== serverVal) {
           toPushBack[k] = localVal;
         }
@@ -1636,6 +1665,18 @@ export const cloudSync = {
     memoryStore.set(canonicalKey, strValue);
     lastLocalWriteAt.set(canonicalKey, Date.now());
     safeLocalStorageSet(canonicalKey, strValue);
+    if (realtimeBroadcastChannel) {
+      try {
+        realtimeBroadcastChannel.postMessage({
+          type: 'kv_update',
+          key: canonicalKey,
+          value: strValue,
+          ts: Date.now(),
+        });
+      } catch {
+        // ignore
+      }
+    }
     void this.pushKey(canonicalKey, strValue, forceReplace);
   },
 
@@ -2220,6 +2261,34 @@ export const cloudSync = {
         this.pushAllLocal();
       });
       void this.triggerKeepAlivePing();
+    });
+
+    // Escuta em tempo real entre abas do mesmo navegador via BroadcastChannel e evento nativo 'storage'
+    if (realtimeBroadcastChannel) {
+      realtimeBroadcastChannel.onmessage = (event) => {
+        const data = event?.data;
+        if (data && data.type === 'kv_update' && typeof data.key === 'string' && typeof data.value === 'string') {
+          const k = LEGACY_KEY_MIGRATIONS[data.key] || data.key;
+          if (memoryStore.get(k) !== data.value) {
+            memoryStore.set(k, data.value);
+            safeLocalStorageSet(k, data.value);
+            dispatchUpdateEvents([k]);
+          }
+        }
+      };
+    }
+
+    window.addEventListener('storage', (event: StorageEvent) => {
+      if (!event.key || !event.key.startsWith('certam_')) return;
+      const k = LEGACY_KEY_MIGRATIONS[event.key] || event.key;
+      if (event.newValue === null) {
+        memoryStore.delete(k);
+        dispatchUpdateEvents([k]);
+      } else if (memoryStore.get(k) !== event.newValue) {
+        const sanitized = sanitizeSyncValue(k, event.newValue) || event.newValue;
+        memoryStore.set(k, sanitized);
+        dispatchUpdateEvents([k]);
+      }
     });
 
     // Polling adaptativo por visibilidade: só consulta em segundo plano quando a aba está visível
