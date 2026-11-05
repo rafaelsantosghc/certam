@@ -1009,9 +1009,9 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
         </div>
 
         {/* BARRA DE FILTROS */}
-        <div className="bg-white rounded-xl p-4 sm:p-5 border border-slate-200/80 card-shadow space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            <div className="relative lg:col-span-1">
+        <div className="bg-white rounded-2xl p-4 sm:p-6 border border-slate-200/80 card-shadow space-y-4">
+          <div className="flex flex-col lg:flex-row gap-3">
+            <div className="relative flex-1">
               <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
                 <Search className="w-4 h-4" />
               </span>
@@ -1020,7 +1020,7 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
                 value={filtroTexto}
                 onChange={(e) => setFiltroTexto(e.target.value)}
                 placeholder="Pesquisar por órgão, concurso ou cargo..."
-                className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-medium focus:outline-hidden focus:ring-2 focus:ring-[#2DD4AA]"
+                className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-medium focus:outline-hidden focus:ring-2 focus:ring-[#2DD4AA]"
               />
             </div>
 
@@ -1028,72 +1028,72 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
             <select
               value={filtroRegiao}
               onChange={(e) => setFiltroRegiao(e.target.value)}
-              className="px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:bg-white focus:outline-hidden"
+              className="px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold focus:bg-white focus:outline-hidden min-w-[200px]"
             >
               <option value="todas">Todas as Regiões</option>
               <option value="Sul">Região Sul (RS, SC, PR)</option>
               <option value="Sudeste">Região Sudeste</option>
               <option value="Nacional">Nacional / Federal</option>
             </select>
+          </div>
 
-            {/* Filtros por Status */}
-            <div className="flex items-center flex-wrap gap-1 p-1 bg-slate-100 rounded-xl border border-slate-200/60 lg:col-span-1">
-              <button
-                type="button"
-                onClick={() => setFiltroStatus('todos')}
-                className={`px-3 py-1.5 rounded-lg text-xs transition-all cursor-pointer ${
-                  filtroStatus === 'todos'
-                    ? 'bg-white text-slate-900 font-bold shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900 font-medium'
-                }`}
-              >
-                Todos
-              </button>
-              <button
-                type="button"
-                onClick={() => setFiltroStatus('em_andamento')}
-                className={`px-3 py-1.5 rounded-lg text-xs transition-all cursor-pointer ${
-                  filtroStatus === 'em_andamento'
-                    ? 'bg-white text-slate-900 font-bold shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900 font-medium'
-                }`}
-              >
-                Em Andamento
-              </button>
-              <button
-                type="button"
-                onClick={() => setFiltroStatus('homologados')}
-                className={`px-3 py-1.5 rounded-lg text-xs transition-all cursor-pointer ${
-                  filtroStatus === 'homologados'
-                    ? 'bg-white text-slate-900 font-bold shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900 font-medium'
-                }`}
-              >
-                Homologados
-              </button>
-              <button
-                type="button"
-                onClick={() => setFiltroStatus('previstos')}
-                className={`px-3 py-1.5 rounded-lg text-xs transition-all cursor-pointer ${
-                  filtroStatus === 'previstos'
-                    ? 'bg-white text-slate-900 font-bold shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900 font-medium'
-                }`}
-              >
-                Previstos para Abrir
-              </button>
-              <button
-                type="button"
-                onClick={() => setFiltroStatus('encerrados')}
-                className={`px-3 py-1.5 rounded-lg text-xs transition-all cursor-pointer ${
-                  filtroStatus === 'encerrados'
-                    ? 'bg-white text-slate-900 font-bold shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900 font-medium'
-                }`}
-              >
-                Encerrados
-              </button>
-            </div>
+          {/* Filtros por Status */}
+          <div className="flex items-center flex-wrap gap-1.5 p-1.5 bg-slate-100 rounded-xl border border-slate-200/60">
+            <button
+              type="button"
+              onClick={() => setFiltroStatus('todos')}
+              className={`px-3.5 py-2 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+                filtroStatus === 'todos'
+                  ? 'bg-white text-slate-900 font-bold shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Todos
+            </button>
+            <button
+              type="button"
+              onClick={() => setFiltroStatus('em_andamento')}
+              className={`px-3.5 py-2 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+                filtroStatus === 'em_andamento'
+                  ? 'bg-white text-slate-900 font-bold shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Em Andamento
+            </button>
+            <button
+              type="button"
+              onClick={() => setFiltroStatus('homologados')}
+              className={`px-3.5 py-2 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+                filtroStatus === 'homologados'
+                  ? 'bg-white text-slate-900 font-bold shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Homologados
+            </button>
+            <button
+              type="button"
+              onClick={() => setFiltroStatus('previstos')}
+              className={`px-3.5 py-2 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+                filtroStatus === 'previstos'
+                  ? 'bg-white text-slate-900 font-bold shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Previstos para Abrir
+            </button>
+            <button
+              type="button"
+              onClick={() => setFiltroStatus('encerrados')}
+              className={`px-3.5 py-2 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+                filtroStatus === 'encerrados'
+                  ? 'bg-white text-slate-900 font-bold shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Encerrados
+            </button>
           </div>
 
           <div className="flex items-center justify-between text-xs text-slate-500 pt-1 border-t border-slate-100">
