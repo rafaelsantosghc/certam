@@ -127,7 +127,7 @@ export const ModalDetalhesCandidatoAdmin: React.FC<ModalDetalhesCandidatoAdminPr
 
   return (
     <div className="fixed inset-0 z-[160] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in-50">
-      <div className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[90vh]">
+      <div className="bg-white w-full max-w-sm sm:max-w-md md:max-w-lg lg:max-w-3xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[90vh]">
         {/* Header Superior */}
         <div className="p-4 sm:p-5 bg-[#07192B] text-white flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -236,8 +236,8 @@ export const ModalDetalhesCandidatoAdmin: React.FC<ModalDetalhesCandidatoAdminPr
                   <span className="text-2xs font-bold uppercase tracking-wider text-slate-400 block">
                     CPF (Chave Única do Candidato)
                   </span>
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-slate-900 font-mono text-sm">{cpfFormatado}</span>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-bold text-slate-900 font-mono text-sm break-all">{cpfFormatado}</span>
                     {usuario.cpf_verificado && (
                       <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold text-[10px]">
                         Verificado
@@ -250,21 +250,21 @@ export const ModalDetalhesCandidatoAdmin: React.FC<ModalDetalhesCandidatoAdminPr
                   <span className="text-2xs font-bold uppercase tracking-wider text-slate-400 block">
                     E-mail de Login Oficial
                   </span>
-                  <span className="font-mono text-slate-800">{usuario.email || '—'}</span>
+                  <span className="font-mono text-slate-800 break-all">{usuario.email || '—'}</span>
                 </div>
 
                 <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
                   <span className="text-2xs font-bold uppercase tracking-wider text-slate-400 block">
                     E-mail Alternativo de Contato
                   </span>
-                  <span className="font-mono text-slate-800">{usuario.email_contato || usuario.email || '—'}</span>
+                  <span className="font-mono text-slate-800 break-all">{usuario.email_contato || usuario.email || '—'}</span>
                 </div>
 
                 <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
                   <span className="text-2xs font-bold uppercase tracking-wider text-slate-400 block">
                     Telefone / WhatsApp
                   </span>
-                  <span className="font-mono text-slate-800">
+                  <span className="font-mono text-slate-800 break-all">
                     {usuario.telefone || usuario.whatsapp || 'Não informado'}
                   </span>
                 </div>
