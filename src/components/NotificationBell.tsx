@@ -3,6 +3,10 @@ import { useAuth } from '../store/authContext';
 import { useNotifications } from '../store/notificationContext';
 import { NotificacaoItem } from '../types';
 import {
+  obterMetadadosVisuaisNotificacao,
+  executarRedirecionamentoNotificacao,
+} from '../utils/notificationUtils';
+import {
   Bell,
   CheckCheck,
   Clock,
@@ -12,6 +16,9 @@ import {
   AlertTriangle,
   UserCheck,
   FileText,
+  ShieldCheck,
+  Calendar,
+  MessageSquare,
 } from 'lucide-react';
 
 interface NotificationBellProps {
@@ -19,9 +26,13 @@ interface NotificationBellProps {
   concursoAtualId?: string;
 }
 
-export const NotificationBell: React.FC<NotificationBellProps> = ({ onNavigate, concursoAtualId }) => {
+export const NotificationBell: React.FC<NotificationBellProps> = ({
+  onNavigate,
+  concursoAtualId,
+}) => {
   const { usuario } = useAuth();
-  const { notificacoesVisiveis, naoLidasCount, marcarComoLida, marcarTodasComoLidas } = useNotifications();
+  const { notificacoesVisiveis, naoLidasCount, marcarComoLida, marcarTodasComoLidas } =
+    useNotifications();
   const [aberto, setAberto] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -45,24 +56,22 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ onNavigate, 
   const handleItemClick = (n: NotificacaoItem) => {
     marcarComoLida(n.id);
     setAberto(false);
-
-    if (n.tipo === 'aprovacao_perfil' || n.tipo === 'indeferimento_perfil') {
-      window.dispatchEvent(new CustomEvent('certam_abrir_perfil_candidato'));
-      return;
-    }
-
-    if (n.link_destino && onNavigate) {
-      if (n.link_destino.includes('concurso')) {
-        const url = new URL(n.link_destino, 'http://localhost');
-        const id = url.searchParams.get('id') || 'tjrs_2025';
-        const tab = url.searchParams.get('tab') || 'dashboard';
-        onNavigate('concurso', { concursoId: id, tab });
-      }
-    }
+    executarRedirecionamentoNotificacao(n, onNavigate, concursoAtualId);
   };
 
-  const renderBadge = (tipo: NotificacaoItem['tipo']) => {
-    switch (tipo) {
+  const renderBadge = (item: NotificacaoItem) => {
+    const meta = obterMetadadosVisuaisNotificacao(item);
+
+    if (meta.categoria === 'admin_verificacao') {
+      return (
+        <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 border border-amber-300">
+          <ShieldCheck className="w-3 h-3 text-amber-700" />
+          <span>{meta.badgeLabel}</span>
+        </span>
+      );
+    }
+
+    switch (item.tipo) {
       case 'aprovacao_perfil':
         return (
           <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 border border-emerald-200">
@@ -79,8 +88,8 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ onNavigate, 
         );
       case 'validacao_aprovada':
         return (
-          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-teal-100 text-teal-800 border border-teal-200">
-            <UserCheck className="w-3 h-3 text-teal-600" />
+          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 border border-emerald-200">
+            <UserCheck className="w-3 h-3 text-emerald-600" />
             <span>Homologado</span>
           </span>
         );
@@ -91,6 +100,13 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ onNavigate, 
             <span>Recusado</span>
           </span>
         );
+      case 'resposta_contato':
+        return (
+          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-teal-100 text-teal-800 border border-teal-200">
+            <MessageSquare className="w-3 h-3 text-teal-600" />
+            <span>Respondido</span>
+          </span>
+        );
       case 'convocacao':
         return (
           <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-cyan-100 text-cyan-800 border border-cyan-200">
@@ -98,8 +114,26 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ onNavigate, 
             <span>Convocação</span>
           </span>
         );
+      case 'cronograma':
+        return (
+          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-teal-100 text-teal-800 border border-teal-200">
+            <Calendar className="w-3 h-3 text-teal-600" />
+            <span>Cronograma</span>
+          </span>
+        );
+      case 'documento':
+        return (
+          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-teal-100 text-teal-800 border border-teal-200">
+            <FileText className="w-3 h-3 text-teal-600" />
+            <span>Documento</span>
+          </span>
+        );
       default:
-        return null;
+        return (
+          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200">
+            <span>{meta.badgeLabel}</span>
+          </span>
+        );
     }
   };
 
@@ -124,7 +158,9 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ onNavigate, 
           {/* Top Bar */}
           <div className="p-3.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span className="font-serif font-bold text-sm text-[#07192B]">Notificações do Portal</span>
+              <span className="font-serif font-bold text-sm text-[#07192B]">
+                Notificações do Portal
+              </span>
               {naoLidasCount > 0 && (
                 <span className="text-[11px] font-mono text-teal-700 font-semibold bg-teal-50 px-2 py-0.5 rounded-md border border-teal-200">
                   {naoLidasCount} nova{naoLidasCount > 1 ? 's' : ''}
@@ -152,6 +188,7 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ onNavigate, 
             ) : (
               notificacoesVisiveis.map((item) => {
                 const isLida = readIds.includes(item.id);
+                const meta = obterMetadadosVisuaisNotificacao(item);
                 return (
                   <div
                     key={item.id}
@@ -168,7 +205,7 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ onNavigate, 
                         <h4 className="text-xs font-bold text-slate-800 leading-snug">
                           {item.titulo}
                         </h4>
-                        {renderBadge(item.tipo)}
+                        {renderBadge(item)}
                       </div>
                       <span className="text-[10px] text-slate-400 font-mono shrink-0 flex items-center gap-1">
                         <Clock className="w-2.5 h-2.5" />
@@ -190,19 +227,18 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ onNavigate, 
                       </div>
                     )}
 
-                    {item.tipo === 'indeferimento_perfil' && (
-                      <div className="mt-2 pl-3.5 flex items-center gap-1 text-[11px] font-semibold text-rose-700 hover:text-rose-900">
-                        <span>Revisar dados no perfil</span>
-                        <ExternalLink className="w-3 h-3" />
-                      </div>
-                    )}
-
-                    {item.link_destino && item.tipo !== 'indeferimento_perfil' && (
-                      <div className="mt-2 pl-3.5 flex items-center gap-1 text-[11px] font-semibold text-teal-700 hover:text-teal-900">
-                        <span>Acessar detalhes</span>
-                        <ExternalLink className="w-3 h-3" />
-                      </div>
-                    )}
+                    <div
+                      className={`mt-2 pl-3.5 flex items-center gap-1 text-[11px] font-semibold ${
+                        meta.categoria === 'indeferimento'
+                          ? 'text-rose-700 hover:text-rose-900'
+                          : meta.categoria === 'admin_verificacao'
+                          ? 'text-amber-800 hover:text-amber-950'
+                          : 'text-teal-700 hover:text-teal-900'
+                      }`}
+                    >
+                      <span>{meta.acaoLabel}</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </div>
                   </div>
                 );
               })

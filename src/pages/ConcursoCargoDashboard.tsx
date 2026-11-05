@@ -186,6 +186,17 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
     }
   }, [initialTab]);
 
+  useEffect(() => {
+    const handleMudarAba = (e: any) => {
+      const detail = e?.detail;
+      if (detail?.tab) {
+        setAbaAtiva(detail.tab);
+      }
+    };
+    window.addEventListener('certam_mudar_aba_concurso', handleMudarAba);
+    return () => window.removeEventListener('certam_mudar_aba_concurso', handleMudarAba);
+  }, []);
+
   // Candidatos deste cargo
   const [candidatos, setCandidatos] = useState<Candidato[]>(() =>
     lotesStore.getCandidatos(concurso.id, cargo.id)

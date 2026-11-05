@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../store/authContext';
 import { auditStore } from '../store/auditStore';
+import { notificationStore } from '../store/notificationStore';
 import { sanitizeInput } from '../utils/security';
 import { X, Send, CheckCircle2, AlertCircle, ShieldCheck } from 'lucide-react';
 
@@ -57,18 +58,36 @@ export const SolicitarVinculacaoModal: React.FC<SolicitarVinculacaoModalProps> =
       return;
     }
 
+    const nomeLimpo = sanitizeInput(nome, 100);
+    const cpfLimpo = sanitizeInput(cpf, 20);
+    const posNum = parseInt(posicao, 10) || 1;
+
     auditStore.solicitarVinculacao({
       usuario_email: usuario?.email || 'candidato@certam.com.br',
-      usuario_nome: sanitizeInput(nome, 100),
-      cpf: sanitizeInput(cpf, 20),
+      usuario_nome: nomeLimpo,
+      cpf: cpfLimpo,
       concurso_id: concursoId,
       concurso_nome: concursoNome,
       cargo_id: cargoId,
       cargo_nome: cargoNome,
-      posicao_declarada: parseInt(posicao, 10) || 1,
+      posicao_declarada: posNum,
       cota_declarada: cotaDeclarada,
       nota_declarada: nota ? parseFloat(nota.replace(',', '.')) : undefined,
       comprovante_info: sanitizeInput(comprovanteInfo, 500),
+    });
+
+    notificationStore.criarNotificacao({
+      destinatario_papel: 'admin',
+      destinatario_email: 'rafasms0@hotmail.com',
+      destinatario_nome: 'Administrador CERTAM',
+      aba_admin_destino: 'validacoes',
+      concurso_id: concursoId,
+      cargo_id: cargoId,
+      titulo: 'Nova Solicitação de Vinculação de Aprovado',
+      mensagem: `O candidato "${nomeLimpo}" (CPF: ${cpfLimpo}) informou aprovação em ${posNum}º lugar (${cotaDeclarada}) no cargo ${cargoNome} (${concursoNome}).`,
+      tipo: 'solicitacao_auditoria_admin',
+      link_destino: '/?admin=1&tab=validacoes',
+      urgente: false,
     });
 
     setSucesso(true);

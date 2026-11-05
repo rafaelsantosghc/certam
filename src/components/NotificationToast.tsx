@@ -2,6 +2,10 @@ import React from 'react';
 import { createPortal } from 'react-dom';
 import { useNotifications } from '../store/notificationContext';
 import {
+  obterMetadadosVisuaisNotificacao,
+  executarRedirecionamentoNotificacao,
+} from '../utils/notificationUtils';
+import {
   Bell,
   CheckCircle2,
   XCircle,
@@ -9,67 +13,98 @@ import {
   X,
   ExternalLink,
   Clock,
+  ShieldCheck,
+  Calendar,
+  MessageSquare,
 } from 'lucide-react';
 
 interface NotificationToastProps {
   onNavigate?: (view: string, params?: any) => void;
+  concursoAtualId?: string;
 }
 
-export const NotificationToast: React.FC<NotificationToastProps> = ({ onNavigate }) => {
+export const NotificationToast: React.FC<NotificationToastProps> = ({
+  onNavigate,
+  concursoAtualId,
+}) => {
   const { toastAtivo, fecharToast, marcarComoLida } = useNotifications();
 
   if (!toastAtivo || typeof document === 'undefined') {
     return null;
   }
 
-  const isSuccess =
-    toastAtivo.tipo === 'aprovacao_perfil' || toastAtivo.tipo === 'validacao_aprovada';
-  const isAlert =
-    toastAtivo.tipo === 'indeferimento_perfil' ||
-    toastAtivo.tipo === 'validacao_indeferida' ||
-    toastAtivo.urgente;
+  const meta = obterMetadadosVisuaisNotificacao(toastAtivo);
 
-  const style = isSuccess
-    ? {
-        wrapper: 'bg-emerald-50/98 border-emerald-400 text-emerald-950 ring-4 ring-emerald-500/15',
-        iconBg: 'bg-emerald-100 text-emerald-700 border-emerald-300',
-        badge: 'bg-emerald-200/80 text-emerald-900 border-emerald-300',
-        progressBar: 'bg-emerald-500',
-        tag: 'text-emerald-800',
-      }
-    : isAlert
-    ? {
-        wrapper: 'bg-rose-50/98 border-rose-400 text-rose-950 ring-4 ring-rose-500/15',
-        iconBg: 'bg-rose-100 text-rose-700 border-rose-300',
-        badge: 'bg-rose-200/80 text-rose-900 border-rose-300',
-        progressBar: 'bg-rose-500',
-        tag: 'text-rose-800',
-      }
-    : {
-        wrapper: 'bg-white/98 border-teal-400 text-slate-900 ring-4 ring-teal-500/15',
-        iconBg: 'bg-teal-50 text-teal-700 border-teal-200',
-        badge: 'bg-teal-100 text-teal-800 border-teal-200',
-        progressBar: 'bg-teal-500',
-        tag: 'text-teal-800',
-      };
+  const styleByTheme = {
+    emerald: {
+      wrapper: 'bg-emerald-50/98 border-emerald-400 text-emerald-950 ring-4 ring-emerald-500/15',
+      iconBg: 'bg-emerald-100 text-emerald-700 border-emerald-300',
+      badge: 'bg-emerald-200/80 text-emerald-900 border-emerald-300',
+      progressBar: 'bg-emerald-500',
+      tag: 'text-emerald-800',
+      link: 'text-emerald-900 hover:text-emerald-950',
+    },
+    rose: {
+      wrapper: 'bg-rose-50/98 border-rose-400 text-rose-950 ring-4 ring-rose-500/15',
+      iconBg: 'bg-rose-100 text-rose-700 border-rose-300',
+      badge: 'bg-rose-200/80 text-rose-900 border-rose-300',
+      progressBar: 'bg-rose-500',
+      tag: 'text-rose-800',
+      link: 'text-rose-900 hover:text-rose-950',
+    },
+    amber: {
+      wrapper: 'bg-amber-50/98 border-amber-400 text-amber-950 ring-4 ring-amber-500/15',
+      iconBg: 'bg-amber-100 text-amber-800 border-amber-300',
+      badge: 'bg-amber-200/80 text-amber-950 border-amber-400',
+      progressBar: 'bg-amber-500',
+      tag: 'text-amber-900',
+      link: 'text-amber-900 hover:text-amber-950',
+    },
+    cyan: {
+      wrapper: 'bg-white/98 border-cyan-400 text-slate-900 ring-4 ring-cyan-500/15',
+      iconBg: 'bg-cyan-50 text-cyan-700 border-cyan-200',
+      badge: 'bg-cyan-100 text-cyan-900 border-cyan-300',
+      progressBar: 'bg-cyan-500',
+      tag: 'text-cyan-800',
+      link: 'text-teal-800 hover:text-teal-950',
+    },
+    teal: {
+      wrapper: 'bg-white/98 border-teal-400 text-slate-900 ring-4 ring-teal-500/15',
+      iconBg: 'bg-teal-50 text-teal-700 border-teal-200',
+      badge: 'bg-teal-100 text-teal-800 border-teal-200',
+      progressBar: 'bg-teal-500',
+      tag: 'text-teal-800',
+      link: 'text-teal-800 hover:text-teal-950',
+    },
+  };
+
+  const style = styleByTheme[meta.temaCor];
+
+  const renderIcon = () => {
+    switch (meta.categoria) {
+      case 'deferimento':
+        return <CheckCircle2 className="w-5 h-5 text-emerald-600 animate-in zoom-in-50 duration-200" />;
+      case 'indeferimento':
+        return <XCircle className="w-5 h-5 text-rose-600 animate-in zoom-in-50 duration-200" />;
+      case 'admin_verificacao':
+        return <ShieldCheck className="w-5 h-5 text-amber-700 animate-in zoom-in-50 duration-200" />;
+      case 'convocacao':
+      case 'documento':
+        return <FileText className="w-5 h-5 text-cyan-600" />;
+      case 'cronograma':
+        return <Calendar className="w-5 h-5 text-teal-600" />;
+      case 'resposta_contato':
+        return <MessageSquare className="w-5 h-5 text-teal-600" />;
+      default:
+        return <Bell className="w-5 h-5 text-teal-600" />;
+    }
+  };
 
   const handleToastClick = () => {
-    marcarComoLida(toastAtivo.id);
+    const item = toastAtivo;
+    marcarComoLida(item.id);
     fecharToast();
-
-    if (toastAtivo.tipo === 'aprovacao_perfil' || toastAtivo.tipo === 'indeferimento_perfil') {
-      window.dispatchEvent(new CustomEvent('certam_abrir_perfil_candidato'));
-      return;
-    }
-
-    if (toastAtivo.link_destino && onNavigate) {
-      if (toastAtivo.link_destino.includes('concurso')) {
-        const url = new URL(toastAtivo.link_destino, 'http://localhost');
-        const id = url.searchParams.get('id') || 'tjrs_2025';
-        const tab = url.searchParams.get('tab') || 'dashboard';
-        onNavigate('concurso', { concursoId: id, tab });
-      }
-    }
+    executarRedirecionamentoNotificacao(item, onNavigate, concursoAtualId);
   };
 
   return createPortal(
@@ -82,36 +117,18 @@ export const NotificationToast: React.FC<NotificationToastProps> = ({ onNavigate
         <div
           className={`w-10 h-10 rounded-xl border flex items-center justify-center shrink-0 shadow-xs ${style.iconBg}`}
         >
-          {isSuccess ? (
-            <CheckCircle2 className="w-5 h-5 text-emerald-600 animate-in zoom-in-50 duration-200" />
-          ) : isAlert ? (
-            <XCircle className="w-5 h-5 text-rose-600 animate-in zoom-in-50 duration-200" />
-          ) : toastAtivo.tipo === 'convocacao' ? (
-            <FileText className="w-5 h-5 text-cyan-600" />
-          ) : (
-            <Bell className="w-5 h-5 text-teal-600" />
-          )}
+          {renderIcon()}
         </div>
 
         <div className="flex-1 min-w-0 pr-6">
           <div className="flex items-center gap-2 flex-wrap mb-1">
             <span className={`text-[10px] font-bold uppercase tracking-wider ${style.tag}`}>
-              {isSuccess
-                ? 'Deferimento Oficial'
-                : isAlert
-                ? 'Indeferimento / Aviso'
-                : 'Nova Notificação'}
+              {meta.headerTag}
             </span>
             <span
               className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md border font-mono ${style.badge}`}
             >
-              {isSuccess
-                ? 'Deferido'
-                : isAlert
-                ? 'Indeferido'
-                : toastAtivo.tipo === 'convocacao'
-                ? 'Convocação'
-                : 'Novo'}
+              {meta.badgeLabel}
             </span>
             <span className="text-[10px] text-slate-400 font-mono ml-auto flex items-center gap-1">
               <Clock className="w-2.5 h-2.5" />
@@ -133,8 +150,8 @@ export const NotificationToast: React.FC<NotificationToastProps> = ({ onNavigate
             </div>
           )}
 
-          <div className="mt-2.5 flex items-center gap-1.5 text-2xs font-semibold text-teal-800">
-            <span>Clique para abrir detalhes na central</span>
+          <div className={`mt-2.5 flex items-center gap-1.5 text-2xs font-semibold ${style.link}`}>
+            <span>{meta.acaoLabel}</span>
             <ExternalLink className="w-3 h-3" />
           </div>
         </div>

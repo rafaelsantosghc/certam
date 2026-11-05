@@ -3,6 +3,7 @@ import { useAuth } from '../store/authContext';
 import { certamStore } from '../store/certamStore';
 import { contactStore, MOTIVOS_LABELS } from '../store/contactStore';
 import { auditStore } from '../store/auditStore';
+import { notificationStore } from '../store/notificationStore';
 import { MotivoContato, Concurso } from '../types';
 import { sanitizeInput } from '../utils/security';
 import { X, Send, CheckCircle2, MessageSquare, AlertCircle, Building, Check, Sparkles, Link2 } from 'lucide-react';
@@ -175,6 +176,20 @@ export const ContatoAdminModal: React.FC<ContatoAdminModalProps> = ({
         comprovante_info: `Classificação informada: ${classificacao}. ${mensagem.trim()}`,
       });
     }
+
+    notificationStore.criarNotificacao({
+      destinatario_papel: 'admin',
+      destinatario_email: 'rafasms0@hotmail.com',
+      destinatario_nome: 'Administrador CERTAM',
+      aba_admin_destino: isFormularioAprovacao ? 'validacoes' : 'contatos',
+      titulo: isFormularioAprovacao
+        ? 'Nova Solicitação de Vinculação / Certame'
+        : 'Nova Mensagem para a Administração',
+      mensagem: `${nomeAutor} (${emailAutor}) enviou: "${MOTIVOS_LABELS[motivo] || 'Solicitação'}". Clique para verificar no Painel Admin.`,
+      tipo: 'solicitacao_auditoria_admin',
+      link_destino: isFormularioAprovacao ? '/?admin=1&tab=validacoes' : '/?admin=1&tab=contatos',
+      urgente: false,
+    });
 
     setSucesso(true);
     setTimeout(() => {

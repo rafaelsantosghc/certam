@@ -1,8 +1,8 @@
-import React, { createContext, useContext, useState, useEffect, useRef, useMemo } from 'react';
-import { NotificacaoItem, Usuario } from '../types';
+import React, { createContext, useContext, useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { NotificacaoItem } from '../types';
 import { notificationStore } from './notificationStore';
 import { useAuth } from './authContext';
-import { isDebugMode, isAiStudioPreview } from '../utils/environment';
+import { podeExibirNotificacaoParaUsuario } from '../utils/notificationUtils';
 
 interface NotificationContextType {
   notificacoes: NotificacaoItem[];
@@ -37,41 +37,15 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const toastTimerRef = useRef<any>(null);
   const lastProcessedIdRef = useRef<string | null>(null);
 
-  // Filtra notificações de acordo com o papel do usuário e modo de depuração
-  const filtrarVisiveis = (list: NotificacaoItem[]): NotificacaoItem[] => {
-    const isDebug = isDebugMode();
+  // Filtra notificações rigorosamente de acordo com o destinatário e o papel do usuário (Admin vs Candidato vs Geral)
+  const filtrarVisiveis = useCallback(
+    (list: NotificacaoItem[]): NotificacaoItem[] => {
+      return list.filter((n) => podeExibirNotificacaoParaUsuario(n, usuario, isAdmin));
+    },
+    [usuario, isAdmin]
+  );
 
-    return list.filter((n) => {
-      // No modo de depuração / preview, o admin ou tester pode ver os toasts de teste
-      if (isDebug) {
-        return true;
-      }
-
-      // Em produção: o administrador não recebe alertas direcionados exclusivamente a candidatos
-      if (
-        isAdmin &&
-        (n.tipo === 'aprovacao_perfil' ||
-          n.tipo === 'indeferimento_perfil' ||
-          n.tipo === 'validacao_aprovada' ||
-          n.tipo === 'validacao_indeferida')
-      ) {
-        return false;
-      }
-
-      if (n.destinatario_email) {
-        if (!usuario) {
-          return false;
-        }
-        const emailUser = usuario.email?.toLowerCase().trim();
-        const emailDest = n.destinatario_email.toLowerCase().trim();
-        return emailUser === emailDest;
-      }
-
-      return true; // Mensagens gerais do portal
-    });
-  };
-
-  const exibirToast = (item: NotificacaoItem) => {
+  const exibirToast = useCallback((item: NotificacaoItem) => {
     if (!item) return;
 
     if (toastTimerRef.current) {
@@ -90,14 +64,25 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     toastTimerRef.current = setTimeout(() => {
       setToastAtivo(null);
     }, 5000);
-  };
+  }, []);
 
-  const fecharToast = () => {
+  const fecharToast = useCallback(() => {
     if (toastTimerRef.current) {
       clearTimeout(toastTimerRef.current);
     }
     setToastAtivo(null);
-  };
+  }, []);
+
+  // Se o usuário trocar de perfil/sessão e o toast ativo não pertencer a ele, fecha imediatamente
+  useEffect(() => {
+    if (
+      toastAtivo &&
+      !String(toastAtivo.id ?? '').startsWith('notif-teste-') &&
+      !podeExibirNotificacaoParaUsuario(toastAtivo, usuario, isAdmin)
+    ) {
+      fecharToast();
+    }
+  }, [usuario, isAdmin, toastAtivo, fecharToast]);
 
   // Escuta os eventos no ciclo de vida de AppContent e captura o estado mais recente
   useEffect(() => {
@@ -107,14 +92,16 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
       const readIds = usuario?.read_notification_ids || [];
 
-      // Se recebemos um item específico via evento
+      // Se recebemos um item específico via evento, exibe APENAS se o usuário atual for o destinatário válido
       if (novaNotifDireta) {
-        lastProcessedIdRef.current = novaNotifDireta.id;
-        exibirToast(novaNotifDireta);
+        if (podeExibirNotificacaoParaUsuario(novaNotifDireta, usuario, isAdmin)) {
+          lastProcessedIdRef.current = novaNotifDireta.id;
+          exibirToast(novaNotifDireta);
+        }
         return;
       }
 
-      // Caso contrário, avalia a mais recente da lista
+      // Caso contrário, avalia a mais recente da lista visível para este usuário
       const visiveis = filtrarVisiveis(listaMaisRecente);
       if (visiveis.length > 0) {
         const top = visiveis[0];
@@ -134,7 +121,8 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
     // Handler do evento 'certam_notifications_updated'
     const handleNotificationsUpdated = (e: any) => {
-      const items = e?.detail && Array.isArray(e.detail) ? e.detail : notificationStore.getNotificacoes();
+      const items =
+        e?.detail && Array.isArray(e.detail) ? e.detail : notificationStore.getNotificacoes();
       setNotificacoes(items);
 
       const visiveis = filtrarVisiveis(items);
@@ -147,8 +135,8 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
           typeof sessionStorage !== 'undefined' &&
           sessionStorage.getItem(`certam_toast_shown_${top.id}`) === 'true';
 
-        // Dispara o Toast se a notificação for nova ou não lida
-        if (isNaoLida && (!jaExibida || lastProcessedIdRef.current !== top.id)) {
+        // Dispara o Toast se a notificação for nova, não lida e visível para este usuário
+        if (isNaoLida && !jaExibida && lastProcessedIdRef.current !== top.id) {
           lastProcessedIdRef.current = top.id;
           exibirToast(top);
         }
@@ -184,11 +172,11 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       window.removeEventListener('certam_test_notification', handleTestNotification);
       window.removeEventListener('storage', handleNotificationsUpdated);
     };
-  }, [usuario, isAdmin]);
+  }, [usuario, isAdmin, filtrarVisiveis, exibirToast]);
 
   const notificacoesVisiveis = useMemo(() => {
     return filtrarVisiveis(notificacoes);
-  }, [notificacoes, usuario, isAdmin]);
+  }, [notificacoes, filtrarVisiveis]);
 
   const readIds = usuario?.read_notification_ids || [];
   const naoLidasCount = useMemo(() => {
@@ -210,7 +198,9 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
   const dispararNotificacao = (notif: Omit<NotificacaoItem, 'id' | 'data_hora'>): NotificacaoItem => {
     const nova = notificationStore.enviarNotificacao(notif);
-    exibirToast(nova);
+    if (podeExibirNotificacaoParaUsuario(nova, usuario, isAdmin)) {
+      exibirToast(nova);
+    }
     return nova;
   };
 

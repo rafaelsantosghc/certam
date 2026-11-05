@@ -64,6 +64,11 @@ import { MASTER_CADASTRO_GERAL, normalizarTexto, limparCpf } from '../data/defau
 import { ModalEditarConcurso } from '../components/ModalEditarConcurso';
 import { ModalEditarCargo } from '../components/ModalEditarCargo';
 import { ModalEditarLote } from '../components/ModalEditarLote';
+import {
+  obterMetadadosVisuaisNotificacao,
+  isNotificacaoParaAdmin,
+  isNotificacaoExclusivaCandidato,
+} from '../utils/notificationUtils';
 
 interface AdminPanelProps {
   initialTab?: string;
@@ -79,6 +84,24 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const { usuario, isAdmin, loginGoogle, atualizarDadosUsuario } = useAuth();
   const [senhaAdmin, setSenhaAdmin] = useState('');
   const [erroSenha, setErroSenha] = useState(false);
+
+  const abasAdminValidas = new Set([
+    'concursos',
+    'lotes',
+    'cadastros',
+    'auditoria',
+    'validacoes',
+    'contatos',
+    'notificacoes',
+    'candidatos',
+    'importar',
+    'faq',
+    'supabase',
+    'logs_erros',
+    'documentos_admin',
+    'classificacao_admin',
+    'vagas_admin',
+  ]);
 
   const [abaAdmin, setAbaAdmin] = useState<
     | 'concursos'
@@ -96,7 +119,24 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     | 'documentos_admin'
     | 'classificacao_admin'
     | 'vagas_admin'
-  >((initialTab as any) || 'concursos');
+  >(() => (initialTab && abasAdminValidas.has(initialTab) ? (initialTab as any) : 'concursos'));
+
+  useEffect(() => {
+    if (initialTab && abasAdminValidas.has(initialTab)) {
+      setAbaAdmin(initialTab as any);
+    }
+  }, [initialTab]);
+
+  useEffect(() => {
+    const handleAbrirAba = (e: any) => {
+      const target = e?.detail;
+      if (target && abasAdminValidas.has(target)) {
+        setAbaAdmin(target);
+      }
+    };
+    window.addEventListener('certam_abrir_aba_admin', handleAbrirAba);
+    return () => window.removeEventListener('certam_abrir_aba_admin', handleAbrirAba);
+  }, []);
 
   const [diagReport, setDiagReport] = useState<FullSyncDiagnosticsReport | null>(null);
   const [diagLoading, setDiagLoading] = useState(false);
@@ -1067,9 +1107,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     // 8. Disparar eventos globais para sincronização de abas e telas abertas
     window.dispatchEvent(new CustomEvent('certam_audit_approved', { detail: { req, mudancas } }));
 
-    // 9. Notificar o candidato sobre o deferimento das alterações
+    // 9. Notificar APENAS o candidato titular sobre o deferimento das alterações
     const camposAlteradosStr = (req.alteracoes || []).map((a) => a.campo_label).join(', ');
     notificationStore.criarNotificacao({
+      destinatario_papel: 'candidato',
+      destinatario_usuario_id: req.usuario_id,
+      destinatario_cpf: mudancas.cpf || req.cpf,
       destinatario_email: mudancas.email || req.usuario_email,
       destinatario_nome: mudancas.nome || req.usuario_nome,
       titulo: 'Alteração Cadastral Deferida',
@@ -1100,6 +1143,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
     const camposAlteradosStr = auditAlvoParaIndeferir.alteracoes.map((a) => a.campo_label).join(', ');
     notificationStore.criarNotificacao({
+      destinatario_papel: 'candidato',
+      destinatario_usuario_id: auditAlvoParaIndeferir.usuario_id,
+      destinatario_cpf: auditAlvoParaIndeferir.cpf,
       destinatario_email: auditAlvoParaIndeferir.usuario_email,
       destinatario_nome: auditAlvoParaIndeferir.usuario_nome,
       titulo: 'Alteração Cadastral Indeferida',
@@ -1138,21 +1184,27 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   ) => {
     auditStore.aprovarVinculacao(v.id);
 
+    const concAlvoId = sug.concurso_id || v.concurso_id;
+    const cargoAlvoId = sug.cargo_id || v.cargo_id;
+
     userRegistryStore.vincularUsuarioACadastroExistente({
       usuarioEmail: v.usuario_email,
       usuarioCpf: v.cpf,
       usuarioId: v.usuario_id,
       alvoCandidatoId: sug.candidato_id,
-      concursoId: sug.concurso_id || v.concurso_id,
-      cargoId: sug.cargo_id || v.cargo_id,
+      concursoId: concAlvoId,
+      cargoId: cargoAlvoId,
     });
 
     setUsuariosGerais(userRegistryStore.getAllUsers());
     setVinculacoes(auditStore.getVinculacoes());
 
     notificationStore.criarNotificacao({
-      concurso_id: sug.concurso_id || v.concurso_id,
-      cargo_id: sug.cargo_id || v.cargo_id,
+      destinatario_papel: 'candidato',
+      destinatario_usuario_id: v.usuario_id || sug.candidato_id,
+      destinatario_cpf: v.cpf,
+      concurso_id: concAlvoId,
+      cargo_id: cargoAlvoId,
       destinatario_email: v.usuario_email,
       destinatario_nome: sug.nome || v.usuario_nome,
       titulo: 'Cadastro Vinculado pelo Administrador',
@@ -1160,6 +1212,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         sug.concurso_nome ? ` no concurso ${sug.concurso_nome}` : ''
       }.`,
       tipo: 'validacao_aprovada',
+      link_destino:
+        concAlvoId && concAlvoId !== 'geral' && concAlvoId !== 'outro'
+          ? `/?id=${concAlvoId}${cargoAlvoId && cargoAlvoId !== 'geral' ? `&cargo=${cargoAlvoId}` : ''}&tab=classificacao`
+          : undefined,
       urgente: false,
     });
 
@@ -1191,8 +1247,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setModalEditarUsuarioAberto(false);
     setUsuarioEditando(null);
 
-    if (u.email) {
+    if (u.email || u.cpf) {
       notificationStore.criarNotificacao({
+        destinatario_papel: 'candidato',
+        destinatario_usuario_id: u.id || sug.candidato_id,
+        destinatario_cpf: u.cpf,
         concurso_id: sug.concurso_id,
         cargo_id: sug.cargo_id,
         destinatario_email: u.email,
@@ -1202,6 +1261,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           sug.concurso_nome ? ` (${sug.concurso_nome})` : ''
         }.`,
         tipo: 'validacao_aprovada',
+        link_destino:
+          sug.concurso_id && sug.concurso_id !== 'geral'
+            ? `/?id=${sug.concurso_id}${sug.cargo_id ? `&cargo=${sug.cargo_id}` : ''}&tab=classificacao`
+            : undefined,
         urgente: false,
       });
     }
@@ -1222,6 +1285,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       setUsuariosGerais(userRegistryStore.getAllUsers());
       setVinculacoes(auditStore.getVinculacoes());
       notificationStore.criarNotificacao({
+        destinatario_papel: 'candidato',
+        destinatario_usuario_id: v.usuario_id,
+        destinatario_cpf: v.cpf,
         destinatario_email: v.usuario_email,
         destinatario_nome: v.usuario_nome,
         titulo: 'Novo Cadastro Homologado',
@@ -1282,6 +1348,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setVinculacoes(auditStore.getVinculacoes());
 
     notificationStore.criarNotificacao({
+      destinatario_papel: 'candidato',
+      destinatario_usuario_id: v.usuario_id || idCandFinal,
+      destinatario_cpf: v.cpf,
       concurso_id: v.concurso_id,
       cargo_id: v.cargo_id,
       destinatario_email: v.usuario_email,
@@ -1289,7 +1358,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       titulo: 'Validação de Aprovado Deferida',
       mensagem: `Sua vinculação ao certame ${v.concurso_nome || v.concurso_id} no cargo ${v.cargo_nome || v.cargo_id} (${candExistente?.posicao || v.posicao_declarada}º lugar) foi DEFERIDA e homologada no sistema.`,
       tipo: 'validacao_aprovada',
-      link_destino: `/concurso?id=${v.concurso_id}&tab=dashboard`,
+      link_destino:
+        v.concurso_id && v.concurso_id !== 'geral' && v.concurso_id !== 'outro'
+          ? `/?id=${v.concurso_id}${v.cargo_id && v.cargo_id !== 'geral' ? `&cargo=${v.cargo_id}` : ''}&tab=classificacao`
+          : undefined,
       urgente: false,
     });
 
@@ -1314,6 +1386,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     auditStore.rejeitarVinculacao(vincAlvoParaIndeferir.id, motivoLimpo);
 
     notificationStore.criarNotificacao({
+      destinatario_papel: 'candidato',
+      destinatario_usuario_id: vincAlvoParaIndeferir.usuario_id,
+      destinatario_cpf: vincAlvoParaIndeferir.cpf,
       destinatario_email: vincAlvoParaIndeferir.usuario_email,
       destinatario_nome: vincAlvoParaIndeferir.usuario_nome,
       concurso_id: vincAlvoParaIndeferir.concurso_id,
@@ -1341,11 +1416,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
     if (msg) {
       notificationStore.criarNotificacao({
+        destinatario_papel: 'candidato',
         destinatario_email: msg.usuario_email,
         destinatario_nome: msg.usuario_nome,
         titulo: 'Resposta ao Contato / Solicitação',
         mensagem: `Sua mensagem sobre "${msg.motivo_label}" foi respondida pela administração: "${respostaTexto.trim()}"`,
-        tipo: 'comunicado',
+        tipo: 'resposta_contato',
         urgente: false,
       });
     }
@@ -1359,13 +1435,25 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     e.preventDefault();
     if (!notifTitulo.trim() || !notifMensagem.trim()) return;
 
+    const tabPorTipo: Record<string, string> = {
+      convocacao: 'lotes',
+      cronograma: 'cronograma',
+      documento: 'documentos',
+      comunicado: 'comunicados',
+      chat: 'forum',
+      geral: 'dashboard',
+    };
+    const abaDestino = tabPorTipo[notifTipo] || 'dashboard';
+    const concDestino = notifConcursoId === 'todos' ? concursos[0]?.id || 'tjrs_2025' : notifConcursoId;
+
     notificationStore.criarNotificacao({
+      destinatario_papel: 'todos',
       concurso_id: notifConcursoId === 'todos' ? undefined : notifConcursoId,
       titulo: notifTitulo,
       mensagem: notifMensagem,
       tipo: notifTipo,
-      link_destino: `/concurso?id=${notifConcursoId}&tab=cronograma`,
-      urgente: true,
+      link_destino: `/?id=${concDestino}&tab=${abaDestino}`,
+      urgente: false,
     });
 
     setNotifTitulo('');
@@ -3163,22 +3251,75 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
             {/* Histórico de Notificações Publicadas */}
             <div className="lg:col-span-7 bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 card-shadow space-y-3">
-              <h3 className="font-bold text-sm text-slate-900 font-serif">
-                Avisos Ativos no Sino ({notificacoes.length})
-              </h3>
+              <div className="flex items-center justify-between">
+                <h3 className="font-bold text-sm text-slate-900 font-serif">
+                  Avisos Ativos no Sino ({notificacoes.length})
+                </h3>
+                {notificacoes.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      notificationStore.salvarNotificacoes([], true);
+                      setNotificacoes([]);
+                      showToast('Histórico de notificações limpo!');
+                    }}
+                    className="text-2xs font-bold text-rose-600 hover:text-rose-800 px-2.5 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 border border-rose-200 cursor-pointer"
+                  >
+                    Limpar Todas
+                  </button>
+                )}
+              </div>
               <div className="max-h-[460px] overflow-y-auto space-y-2.5 divide-y divide-slate-100">
-                {notificacoes.map((item) => (
-                  <div key={item.id} className="pt-2.5 first:pt-0">
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-xs text-slate-800">{item.titulo}</span>
-                      <span className="text-2xs font-mono text-slate-400">{item.data_hora}</span>
+                {notificacoes.map((item) => {
+                  const meta = obterMetadadosVisuaisNotificacao(item);
+                  const paraAdmin = isNotificacaoParaAdmin(item);
+                  const paraCandidato = isNotificacaoExclusivaCandidato(item);
+                  return (
+                    <div key={item.id} className="pt-2.5 first:pt-0 flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-bold text-xs text-slate-800">{item.titulo}</span>
+                          <span
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${
+                              meta.temaCor === 'amber'
+                                ? 'bg-amber-100 text-amber-900 border-amber-300'
+                                : meta.temaCor === 'emerald'
+                                ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                                : meta.temaCor === 'rose'
+                                ? 'bg-rose-100 text-rose-800 border-rose-200'
+                                : 'bg-teal-50 text-teal-800 border-teal-200'
+                            }`}
+                          >
+                            {meta.badgeLabel}
+                          </span>
+                          <span className="text-2xs font-mono text-slate-400 ml-auto">{item.data_hora}</span>
+                        </div>
+                        <p className="text-xs text-slate-600 mt-1 leading-relaxed">{item.mensagem}</p>
+                        <div className="flex items-center gap-3 flex-wrap mt-1">
+                          <span className="text-[10px] font-mono text-teal-700 font-semibold">
+                            Público-Alvo:{' '}
+                            {paraAdmin
+                              ? 'Exclusivo Admin'
+                              : paraCandidato
+                              ? `Candidato: ${item.destinatario_nome || ''} (${item.destinatario_email || item.destinatario_cpf || 'individual'})`
+                              : `Broadcast (${item.concurso_id || 'Todos os Concursos'})`}
+                          </span>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          notificationStore.removerNotificacao(item.id);
+                          setNotificacoes(notificationStore.getNotificacoes());
+                        }}
+                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer shrink-0"
+                        title="Remover esta notificação"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     </div>
-                    <p className="text-xs text-slate-600 mt-1 leading-relaxed">{item.mensagem}</p>
-                    <span className="text-[10px] font-mono text-teal-700 font-semibold block mt-1">
-                      Destino: {item.concurso_id || 'Global'}
-                    </span>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           </div>

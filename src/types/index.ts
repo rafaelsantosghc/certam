@@ -448,23 +448,32 @@ export interface BloqueioUsuario {
 // NOTIFICAÇÕES INTERNAS OTIMIZADAS NO PORTAL
 // -------------------------------------------------------------
 export type TipoNotificacao =
-  | 'convocacao'
-  | 'cronograma'
-  | 'documento'
-  | 'chat'
+  | 'novo_cadastro_admin'
+  | 'solicitacao_auditoria_admin'
   | 'aprovacao_perfil'
   | 'indeferimento_perfil'
   | 'validacao_aprovada'
   | 'validacao_indeferida'
+  | 'resposta_contato'
+  | 'convocacao'
+  | 'cronograma'
+  | 'documento'
   | 'comunicado'
+  | 'chat'
   | 'geral';
+
+export type DestinatarioPapelNotificacao = 'admin' | 'candidato' | 'todos';
 
 export interface NotificacaoItem {
   id: string;
   concurso_id?: string;
   cargo_id?: string;
+  destinatario_papel?: DestinatarioPapelNotificacao;
+  destinatario_usuario_id?: string;
+  destinatario_cpf?: string;
   destinatario_email?: string;
   destinatario_nome?: string;
+  aba_admin_destino?: 'validacoes' | 'auditoria' | 'contatos' | 'cadastros' | 'logs_erros';
   titulo: string;
   mensagem: string;
   tipo: TipoNotificacao;
@@ -473,3 +482,4 @@ export interface NotificacaoItem {
   urgente?: boolean;
   motivo_justificativa?: string;
 }
+

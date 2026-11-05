@@ -163,6 +163,7 @@ export const AppContent: React.FC = () => {
       const urlLote = params.get('lote');
 
       if (urlAdmin === '1' || pathname.includes('admin')) {
+        if (urlTab) setInitialTab(urlTab);
         setCurrentView('admin');
       } else if (urlTab === 'lote' || pathname.includes('lote')) {
         if (urlId) setConcursoId(urlId);
@@ -172,9 +173,12 @@ export const AppContent: React.FC = () => {
       } else if (urlTab === 'politica' || pathname.includes('politica')) {
         setCurrentView('politica');
       } else if (urlId || pathname.includes('concurso')) {
+        const concRef = (urlId ? certamStore.getConcurso(urlId) : undefined) || certamStore.getConcursos()[0];
         if (urlId) setConcursoId(urlId);
-        if (urlCargo) {
-          setCargoId(urlCargo);
+        if (urlCargo || urlTab) {
+          const resolvedCargo =
+            urlCargo || concRef?.cargos?.[0]?.id || cargoId;
+          if (resolvedCargo) setCargoId(resolvedCargo);
           if (urlTab) setInitialTab(urlTab);
           setCurrentView('concurso');
         } else {
@@ -200,12 +204,24 @@ export const AppContent: React.FC = () => {
     ]);
 
     const cId = params?.concursoId || concursoId;
-    const cgId = params?.cargoId || cargoId;
+    const concAlvo = certamStore.getConcurso(cId) || certamStore.getConcursos()[0];
+    let cgId = params?.cargoId || cargoId;
+    if (concAlvo && (!cgId || !concAlvo.cargos?.some((c) => c.id === cgId))) {
+      cgId = concAlvo.cargos?.[0]?.id || cgId;
+    }
+
     const lId = params?.loteId !== undefined ? params.loteId : loteId;
-    const t = params?.tab !== undefined ? params.tab : (view === 'concurso' ? 'dashboard' : initialTab);
+    const t =
+      params?.tab !== undefined
+        ? params.tab
+        : view === 'concurso'
+        ? 'dashboard'
+        : view === 'admin'
+        ? 'concursos'
+        : initialTab;
 
     if (params?.concursoId) setConcursoId(params.concursoId);
-    if (params?.cargoId) setCargoId(params.cargoId);
+    if (cgId) setCargoId(cgId);
     if (params?.loteId !== undefined) setLoteId(params.loteId);
     setInitialTab(t);
 
@@ -233,6 +249,7 @@ export const AppContent: React.FC = () => {
         if (lId) url.searchParams.set('lote', lId);
       } else if (view === 'admin') {
         url.searchParams.set('admin', '1');
+        if (t && t !== 'dashboard') url.searchParams.set('tab', t);
       } else if (view === 'politica') {
         url.searchParams.set('tab', 'politica');
       }
@@ -360,6 +377,7 @@ export const AppContent: React.FC = () => {
 
           {currentView === 'admin' && (
             <AdminPanel
+              initialTab={initialTab}
               onNavigate={handleNavigate}
               onVoltar={handleVoltar}
             />
@@ -420,7 +438,7 @@ export const AppContent: React.FC = () => {
         </footer>
 
         {/* Resumo Flutuante de Novas Notificações (Toast 5s no Topo da Tela) */}
-        <NotificationToast onNavigate={handleNavigate} />
+        <NotificationToast onNavigate={handleNavigate} concursoAtualId={concursoId} />
 
         {/* Overlay Flutuante do Administrador Exclusivo do Ambiente de Preview do AI Studio */}
         <AdminOverlay

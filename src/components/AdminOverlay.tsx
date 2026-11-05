@@ -107,23 +107,32 @@ export const AdminOverlay: React.FC<AdminOverlayProps> = ({
   }
 
   const handleDispararNotificacaoTeste = (tipo: 'info' | 'sucesso' | 'alerta') => {
-    let item: any;
+    const dataHoraAtual =
+      new Date().toLocaleDateString('pt-BR') +
+      ' ' +
+      new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
     if (tipo === 'sucesso') {
-      item = dispararNotificacao({
+      exibirToast({
+        id: `notif-teste-sucesso-${Date.now()}`,
+        data_hora: dataHoraAtual,
+        destinatario_papel: 'candidato',
         destinatario_email: usuario?.email || 'cand.aprovado@exemplo.com',
         destinatario_nome: usuario?.nome || 'Candidato Teste',
-        titulo: 'Alteração Cadastral Deferida',
+        titulo: 'Alteração Cadastral Deferida (Teste)',
         mensagem:
           'Sua solicitação de atualização cadastral (Nome e CPF) foi deferida pela moderação e consolidada no portal.',
         tipo: 'aprovacao_perfil',
         urgente: false,
       });
     } else if (tipo === 'alerta') {
-      item = dispararNotificacao({
+      exibirToast({
+        id: `notif-teste-alerta-${Date.now()}`,
+        data_hora: dataHoraAtual,
+        destinatario_papel: 'candidato',
         destinatario_email: usuario?.email || 'cand.aprovado@exemplo.com',
         destinatario_nome: usuario?.nome || 'Candidato Teste',
-        titulo: 'Alteração Cadastral Indeferida',
+        titulo: 'Alteração Cadastral Indeferida (Teste)',
         mensagem:
           'Sua solicitação de alteração cadastral foi indeferida pela moderação. Acesse seu perfil para revisar.',
         tipo: 'indeferimento_perfil',
@@ -131,18 +140,17 @@ export const AdminOverlay: React.FC<AdminOverlayProps> = ({
         motivo_justificativa: 'Documento comprobatório ilegível ou divergência de dígitos no CPF informado.',
       });
     } else {
-      item = dispararNotificacao({
-        titulo: 'Novo Comunicado da Banca Examinadora',
+      exibirToast({
+        id: `notif-teste-info-${Date.now()}`,
+        data_hora: dataHoraAtual,
+        destinatario_papel: 'todos',
+        titulo: 'Novo Comunicado da Banca Examinadora (Teste)',
         mensagem:
           'Publicada a retificação do cronograma de heteroidentificação e perícia médica para o próximo lote de convocação.',
         tipo: 'convocacao',
         urgente: false,
         link_destino: `/?id=${concursoAtualId}&cargo=${cargoAtualId}&tab=documentos`,
       });
-    }
-
-    if (item) {
-      exibirToast(item);
     }
   };
 

@@ -321,6 +321,18 @@ export const PerfilCandidatoModal: React.FC<PerfilCandidatoModalProps> = ({
               },
             ],
           });
+
+          notificationStore.criarNotificacao({
+            destinatario_papel: 'admin',
+            destinatario_email: 'rafasms0@hotmail.com',
+            destinatario_nome: 'Administrador CERTAM',
+            aba_admin_destino: 'auditoria',
+            titulo: 'Nova Solicitação de Alteração Cadastral',
+            mensagem: `O candidato "${existingByCpf.nome}" (${emailLogin}) solicitou atualizar o Nome Completo para "${nomeLimpo}" durante a vinculação por CPF (${cpfFormatado}).`,
+            tipo: 'solicitacao_auditoria_admin',
+            link_destino: '/?admin=1&tab=auditoria',
+            urgente: false,
+          });
         }
 
         setMensagemSucessoTitulo('CPF Localizado! Cadastro Vinculado Automaticamente!');
@@ -393,19 +405,21 @@ export const PerfilCandidatoModal: React.FC<PerfilCandidatoModalProps> = ({
           comprovante_info: `Novo cadastro realizado no 1º acesso com CPF inédito (${cpfFormatado}). ${resumoSugestoes}`,
         });
 
-        // Dispara notificação para o Administrador
+        // Dispara notificação administrativa (categoria própria de conferência, nunca como indeferimento)
         notificationStore.criarNotificacao({
+          destinatario_papel: 'admin',
           destinatario_email: 'rafasms0@hotmail.com',
           destinatario_nome: 'Administrador CERTAM',
+          aba_admin_destino: 'validacoes',
           titulo: 'Novo Cadastro Realizado no 1º Acesso',
           mensagem: `O usuário "${nomeLimpo}" (${emailLogin}) cadastrou um novo CPF (${cpfFormatado}) não existente no Cadastro Geral. ${
             sugestoesNomes.length > 0
               ? `Foram encontradas ${sugestoesNomes.length} sugestão(ões) de nomes parecidos (ex: ${sugestoesNomes[0].nome} - ${sugestoesNomes[0].similaridade}%) para vinculação.`
               : 'Acesse o Painel Admin para conferir o novo cadastro.'
           }`,
-          tipo: 'comunicado',
-          link_destino: '/?admin=1',
-          urgente: true,
+          tipo: 'novo_cadastro_admin',
+          link_destino: '/?admin=1&tab=validacoes',
+          urgente: false,
         });
 
         setMensagemSucessoTitulo('Novo Cadastro Criado com Sucesso!');
@@ -437,12 +451,29 @@ export const PerfilCandidatoModal: React.FC<PerfilCandidatoModalProps> = ({
             },
           ];
 
+    const nomeSolicitante = sanitizeInput(usuario.nome || nomeLimpo || 'Candidato', 100);
+    const emailSolicitante = usuario.email || emailContato.trim() || 'candidato@certam';
+    const cpfSolicitante = sanitizeInput(usuario.cpf || cpfFormatado || '', 20);
+    const camposLabelStr = finalDiffs.map((d) => d.campo_label).join(', ');
+
     auditStore.submeterSolicitacaoAlteracao({
       usuario_id: usuario.id || usuario.candidato_id,
-      usuario_email: usuario.email || emailContato.trim() || 'candidato@certam',
-      usuario_nome: sanitizeInput(usuario.nome || nomeLimpo || 'Candidato', 100),
-      cpf: sanitizeInput(usuario.cpf || cpfFormatado || '', 20),
+      usuario_email: emailSolicitante,
+      usuario_nome: nomeSolicitante,
+      cpf: cpfSolicitante,
       alteracoes: finalDiffs,
+    });
+
+    notificationStore.criarNotificacao({
+      destinatario_papel: 'admin',
+      destinatario_email: 'rafasms0@hotmail.com',
+      destinatario_nome: 'Administrador CERTAM',
+      aba_admin_destino: 'auditoria',
+      titulo: 'Nova Solicitação de Alteração Cadastral',
+      mensagem: `O usuário "${nomeSolicitante}" (${emailSolicitante}) solicitou alteração em: ${camposLabelStr}. Clique para revisar na Auditoria de Perfis.`,
+      tipo: 'solicitacao_auditoria_admin',
+      link_destino: '/?admin=1&tab=auditoria',
+      urgente: false,
     });
 
     setMensagemSucessoTitulo('Alterações Submetidas ao Administrador!');
@@ -462,13 +493,28 @@ export const PerfilCandidatoModal: React.FC<PerfilCandidatoModalProps> = ({
   const handleConfirmarSubmissaoAdmin = () => {
     const diffs = diffAlteracoes.length > 0 ? diffAlteracoes : calcularDiffs();
     if (diffs.length > 0) {
+      const nomeSolicitante = usuario.nome || nome.trim();
+      const camposLabelStr = diffs.map((d) => d.campo_label).join(', ');
       auditStore.submeterSolicitacaoAlteracao({
         usuario_id: usuario.id || usuario.candidato_id,
         usuario_email: usuario.email,
-        usuario_nome: usuario.nome || nome.trim(),
+        usuario_nome: nomeSolicitante,
         cpf: usuario.cpf || cpf.trim() || '',
         alteracoes: diffs,
       });
+
+      notificationStore.criarNotificacao({
+        destinatario_papel: 'admin',
+        destinatario_email: 'rafasms0@hotmail.com',
+        destinatario_nome: 'Administrador CERTAM',
+        aba_admin_destino: 'auditoria',
+        titulo: 'Nova Solicitação de Alteração Cadastral',
+        mensagem: `O usuário "${nomeSolicitante}" (${usuario.email}) solicitou alteração em: ${camposLabelStr}. Clique para revisar na Auditoria de Perfis.`,
+        tipo: 'solicitacao_auditoria_admin',
+        link_destino: '/?admin=1&tab=auditoria',
+        urgente: false,
+      });
+
       setTodasSolicitacoes(auditStore.getAuditRequests());
     }
 
