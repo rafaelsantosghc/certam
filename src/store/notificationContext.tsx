@@ -68,10 +68,19 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const toastTimerRef = useRef<any>(null);
   const lastProcessedIdRef = useRef<string | null>(null);
 
-  // Filtra notificações rigorosamente de acordo com o destinatário e o papel do usuário (Admin vs Candidato vs Geral)
+  // Filtra notificações rigorosamente de acordo com o destinatário, o papel do usuário e exclui o próprio sender_id
   const filtrarVisiveis = useCallback(
     (list: NotificacaoItem[]): NotificacaoItem[] => {
-      return list.filter((n) => podeExibirNotificacaoParaUsuario(n, usuario, isAdmin));
+      const meusSenderIds = chatStore.obterConjuntoSenderIdsUsuarioAtual(usuario);
+      return list.filter((n) => {
+        const notifSenderId = String(n.sender_id || n.remetente_id || '')
+          .trim()
+          .toLowerCase();
+        if (notifSenderId && meusSenderIds.has(notifSenderId)) {
+          return false;
+        }
+        return podeExibirNotificacaoParaUsuario(n, usuario, isAdmin);
+      });
     },
     [usuario, isAdmin]
   );
@@ -79,6 +88,15 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const exibirToast = useCallback(
     (item: NotificacaoItem) => {
       if (!item) return;
+
+      // Filtra explicitamente o sender_id do próprio usuário para que nunca receba toast de suas próprias mensagens/ações
+      const meusSenderIds = chatStore.obterConjuntoSenderIdsUsuarioAtual(usuario);
+      const itemSenderId = String(item.sender_id || item.remetente_id || '')
+        .trim()
+        .toLowerCase();
+      if (itemSenderId && meusSenderIds.has(itemSenderId)) {
+        return;
+      }
 
       // Notificações de chat utilizam o balão compacto flutuante no canto inferior direito (PersistentChatWidget), não o toast grande superior
       const isChatNotif =

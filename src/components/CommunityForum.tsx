@@ -154,7 +154,10 @@ export const CommunityForum: React.FC<CommunityForumProps> = ({
         usuario.nome.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) % cores.length
       ];
 
+    const currentSenderId = chatStore.obterIdentificadorUsuario(usuario);
+
     chatStore.enviarMensagem(concursoId, cargoId, canalAtivo, {
+      sender_id: currentSenderId,
       autor: usuario.nome,
       email: usuario.email,
       avatar_cor: corHash,

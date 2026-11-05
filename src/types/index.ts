@@ -282,6 +282,7 @@ export type CanalChatId = 'geral' | 'lotacao' | 'posse' | 'recursos';
 
 export interface ChatMensagem {
   id: string;
+  sender_id?: string;
   concurso_id: string;
   cargo_id: string;
   canal_id?: CanalChatId;
@@ -496,6 +497,8 @@ export type DestinatarioPapelNotificacao = 'admin' | 'candidato' | 'todos';
 
 export interface NotificacaoItem {
   id: string;
+  sender_id?: string;
+  remetente_id?: string;
   concurso_id?: string;
   cargo_id?: string;
   canal_id?: string;

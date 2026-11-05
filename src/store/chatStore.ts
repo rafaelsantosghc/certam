@@ -156,8 +156,13 @@ function normalizarMensagem(msg: ChatMensagem): ChatMensagem {
     }
   }
 
+  const senderIdNormalizado = normalizarIdListaUsuario(
+    msg.sender_id || msg.email || ''
+  );
+
   return {
     ...msg,
+    sender_id: senderIdNormalizado || undefined,
     curtido_por: curtidoPorUnico,
     curtidas: curtidoPorUnico.length,
     reacoes: reacoesNormalizadas,
@@ -201,31 +206,24 @@ export const chatStore = {
     return obterIdentificadorUsuarioChat(usuarioOuEmail);
   },
 
-  isMensagemDoProprioUsuario(
-    msg: ChatMensagem,
-    usuarioOuEmail?: string | Usuario | null
-  ): boolean {
-    if (!msg) return false;
-    if (selfSentMessageIds.has(msg.id)) return true;
+  obterConjuntoSenderIdsUsuarioAtual(usuarioOuEmail?: string | Usuario | null): Set<string> {
+    const ids = new Set<string>();
+    const primaryId = normalizarIdListaUsuario(obterIdentificadorUsuarioChat(usuarioOuEmail));
+    if (primaryId) ids.add(primaryId);
 
-    const meuId = obterIdentificadorUsuarioChat(usuarioOuEmail);
-    const msgEmailNorm = String(msg.email || '').trim().toLowerCase();
-    if (msgEmailNorm && msgEmailNorm === meuId) return true;
+    const anonId = normalizarIdListaUsuario(getOrCreateAnonId());
+    if (anonId) ids.add(anonId);
 
     if (usuarioOuEmail && typeof usuarioOuEmail === 'object') {
-      const userEmailNorm = String(usuarioOuEmail.email || '').trim().toLowerCase();
-      if (userEmailNorm && msgEmailNorm === userEmailNorm) return true;
-
-      const userNomeNorm = String(usuarioOuEmail.nome || '').trim().toLowerCase();
-      const msgAutorNorm = String(msg.autor || '').trim().toLowerCase();
-      if (
-        userNomeNorm &&
-        userNomeNorm !== 'candidato' &&
-        msgAutorNorm === userNomeNorm &&
-        (!msgEmailNorm || !userEmailNorm || msgEmailNorm === userEmailNorm)
-      ) {
-        return true;
+      if (usuarioOuEmail.id) ids.add(normalizarIdListaUsuario(String(usuarioOuEmail.id)));
+      if (usuarioOuEmail.email) ids.add(normalizarIdListaUsuario(usuarioOuEmail.email));
+      const cpfLimpo = String(usuarioOuEmail.cpf || '').replace(/\D/g, '');
+      if (cpfLimpo.length >= 9) {
+        ids.add(`cpf:${cpfLimpo}`);
+        ids.add(cpfLimpo);
       }
+    } else if (typeof usuarioOuEmail === 'string' && usuarioOuEmail.trim()) {
+      ids.add(normalizarIdListaUsuario(usuarioOuEmail));
     }
 
     if (typeof window !== 'undefined') {
@@ -234,12 +232,54 @@ export const chatStore = {
         if (rawAuth) {
           const parsed = JSON.parse(rawAuth);
           if (parsed && typeof parsed === 'object') {
-            const storedEmail = String(parsed.email || '').trim().toLowerCase();
-            if (storedEmail && msgEmailNorm === storedEmail) return true;
+            if (parsed.id) ids.add(normalizarIdListaUsuario(String(parsed.id)));
+            if (parsed.email) ids.add(normalizarIdListaUsuario(String(parsed.email)));
+            const cpfLimpo = String(parsed.cpf || '').replace(/\D/g, '');
+            if (cpfLimpo.length >= 9) {
+              ids.add(`cpf:${cpfLimpo}`);
+              ids.add(cpfLimpo);
+            }
           }
         }
       } catch {
         // ignore
+      }
+    }
+
+    ids.delete('');
+    ids.delete('candidato@certam.com.br');
+    return ids;
+  },
+
+  isMensagemDoProprioUsuario(
+    msg: ChatMensagem,
+    usuarioOuEmail?: string | Usuario | null
+  ): boolean {
+    if (!msg) return false;
+    if (selfSentMessageIds.has(msg.id)) return true;
+
+    const meusSenderIds = this.obterConjuntoSenderIdsUsuarioAtual(usuarioOuEmail);
+    const msgSenderIdNorm = normalizarIdListaUsuario(msg.sender_id || '');
+    if (msgSenderIdNorm && meusSenderIds.has(msgSenderIdNorm)) {
+      return true;
+    }
+
+    const msgEmailNorm = normalizarIdListaUsuario(msg.email || '');
+    if (msgEmailNorm && meusSenderIds.has(msgEmailNorm)) {
+      return true;
+    }
+
+    if (usuarioOuEmail && typeof usuarioOuEmail === 'object') {
+      const userNomeNorm = String(usuarioOuEmail.nome || '').trim().toLowerCase();
+      const msgAutorNorm = String(msg.autor || '').trim().toLowerCase();
+      const userEmailNorm = normalizarIdListaUsuario(usuarioOuEmail.email || '');
+      if (
+        userNomeNorm &&
+        userNomeNorm !== 'candidato' &&
+        msgAutorNorm === userNomeNorm &&
+        (!msgEmailNorm || !userEmailNorm || msgEmailNorm === userEmailNorm)
+      ) {
+        return true;
       }
     }
 
@@ -539,9 +579,11 @@ export const chatStore = {
       const cores = ['#0D5C75', '#0F766E', '#1D4ED8', '#6366F1', '#475569'];
       const avatarCor = cores[Math.floor(Math.random() * cores.length)];
       const resolvedEmail = email || obterIdentificadorUsuarioChat();
+      const resolvedSenderId = obterIdentificadorUsuarioChat(resolvedEmail);
 
       nova = {
         id: `msg-${nowMs.toString(36)}-${Math.random().toString(36).substring(2, 6)}`,
+        sender_id: resolvedSenderId,
         concurso_id: concursoId,
         cargo_id: cargoId || 'geral',
         canal_id: canalId,
@@ -562,9 +604,14 @@ export const chatStore = {
         status_envio: 'enviando',
       };
     } else {
+      const resolvedSenderId =
+        autorOrDados.sender_id ||
+        obterIdentificadorUsuarioChat(autorOrDados.email);
+
       nova = {
         ...autorOrDados,
         id: `msg-${nowMs.toString(36)}-${Math.random().toString(36).substring(2, 6)}`,
+        sender_id: resolvedSenderId,
         concurso_id: concursoId,
         cargo_id: cargoId || 'geral',
         canal_id: canalId,

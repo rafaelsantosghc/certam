@@ -281,11 +281,41 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
     );
   }, [concursoAtivoId, canalAtivo, isOpen, usuario]);
 
+  const playIncomingChatSound = () => {
+    if (typeof window === 'undefined') return;
+    try {
+      const AudioCtx =
+        window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
+      osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.09); // A5
+      gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.045, ctx.currentTime + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.18);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.19);
+      setTimeout(() => {
+        void ctx.close().catch(() => {});
+      }, 250);
+    } catch {
+      // Ignora caso o navegador bloqueie autoplay de áudio sem interação prévia
+    }
+  };
+
   // Monitoramento em tempo real de todas as conversas de todos os concursos
   useEffect(() => {
     const verificarNovasMensagensGlobal = () => {
       const listaConcursos = certamStore.getConcursos();
       setConcursos(listaConcursos);
+
+      const currentSenderId = chatStore.obterIdentificadorUsuario(usuario).trim().toLowerCase();
+      const currentSenderIds = chatStore.obterConjuntoSenderIdsUsuarioAtual(usuario);
 
       let ultimaNovaParaNotificar: {
         msg: ChatMensagem;
@@ -296,19 +326,28 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
       listaConcursos.forEach((conc) => {
         CANAIS_RAPIDOS.forEach((cn) => {
           const msgs = chatStore.getMensagens(conc.id, 'geral', cn.id);
-          msgs.forEach((m) => {
+          // Filtra explicitamente mensagens cujo sender_id pertence ao próprio usuário atual
+          const incomingFromOtherParticipants = msgs.filter((m) => {
+            const msgSenderId = String(m.sender_id || m.email || '').trim().toLowerCase();
+            const isOwnSenderId =
+              Boolean(msgSenderId) &&
+              (msgSenderId === currentSenderId || currentSenderIds.has(msgSenderId));
+            const isSelfMessage =
+              isOwnSenderId ||
+              selfSentMsgIdsRef.current.has(m.id) ||
+              chatStore.isMensagemDoProprioUsuario(m, usuario);
+
+            if (isSelfMessage) {
+              knownMsgIdsRef.current.add(m.id);
+              selfSentMsgIdsRef.current.add(m.id);
+              return false;
+            }
+            return true;
+          });
+
+          incomingFromOtherParticipants.forEach((m) => {
             if (!knownMsgIdsRef.current.has(m.id)) {
               knownMsgIdsRef.current.add(m.id);
-
-              // Garante que usuários que enviam mensagens NUNCA recebam notificações de suas próprias mensagens
-              const enviadaPeloProprioUsuario =
-                selfSentMsgIdsRef.current.has(m.id) ||
-                chatStore.isMensagemDoProprioUsuario(m, usuario);
-
-              if (enviadaPeloProprioUsuario) {
-                selfSentMsgIdsRef.current.add(m.id);
-                return;
-              }
 
               const estaVisualizandoEstaSalaAberta =
                 isOpen &&
@@ -320,7 +359,7 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
                 chatStore.isSalaSilenciada(conc.id, cn.id) ||
                 chatStore.isConcursoSilenciado(conc.id);
 
-              // Exibe o balãozinho flutuante no canto inferior direito apenas para mensagens de OUTROS usuários e se não estiver silenciada
+              // Toasts/balões e notificações sonoras são acionados APENAS para mensagens recebidas de outros participantes
               if (!conversaSilenciada && !estaVisualizandoEstaSalaAberta) {
                 ultimaNovaParaNotificar = { msg: m, conc, canal: cn.id };
               }
@@ -340,6 +379,8 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
         const sigla = conc.orgao || conc.nome;
         const resumoCurto =
           msg.texto.length > 68 ? `${msg.texto.substring(0, 68)}...` : msg.texto;
+
+        playIncomingChatSound();
 
         setResumoBanner({
           id: msg.id,
@@ -417,8 +458,10 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
       cores[
         usuario.nome.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) % cores.length
       ];
+    const currentSenderId = chatStore.obterIdentificadorUsuario(usuario);
 
     const nova = chatStore.enviarMensagem(concursoAtivoId, 'geral', canalAtivo, {
+      sender_id: currentSenderId,
       autor: usuario.nome,
       email: usuario.email,
       avatar_cor: corHash,
@@ -479,7 +522,7 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
       {/* Balãozinho flutuante compacto no canto inferior direito seguindo o padrão visual do botão de abrir conversas */}
       {resumoBanner && (
         <div
-          className="mb-2.5 flex items-center gap-2.5 bg-gradient-to-r from-[#07192B] via-[#0B2D48] to-[#0F766E] text-white px-3.5 py-2.5 rounded-2xl shadow-2xl border border-teal-400/40 ring-4 ring-teal-500/15 w-[280px] sm:w-[320px] max-w-[calc(100vw-1.5rem)] animate-in slide-in-from-bottom-3 duration-200"
+          className="floating-bubble animate-floating-bubble mb-2.5 flex items-center gap-2.5 bg-gradient-to-r from-[#07192B] via-[#0B2D48] to-[#0F766E] text-white px-3.5 py-2.5 rounded-2xl shadow-2xl border border-teal-400/40 ring-4 ring-teal-500/15 w-[280px] sm:w-[320px] max-w-[calc(100vw-1.5rem)] animate-in slide-in-from-bottom-3 duration-200"
           role="status"
           aria-live="polite"
         >
@@ -550,7 +593,7 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
             setIsOpen(true);
             setResumoBanner(null);
           }}
-          className="group flex items-center gap-3 bg-gradient-to-r from-[#07192B] via-[#0B2D48] to-[#0F766E] hover:from-[#0A2540] hover:to-[#0D9488] text-white px-4 py-3 rounded-2xl shadow-2xl border border-teal-400/40 transition-all hover:scale-[1.02] cursor-pointer ring-4 ring-teal-500/15"
+          className="floating-bubble animate-floating-bubble group flex items-center gap-3 bg-gradient-to-r from-[#07192B] via-[#0B2D48] to-[#0F766E] hover:from-[#0A2540] hover:to-[#0D9488] text-white px-4 py-3 rounded-2xl shadow-2xl border border-teal-400/40 transition-all hover:scale-[1.02] cursor-pointer ring-4 ring-teal-500/15"
         >
           <div className="relative flex items-center justify-center w-9 h-9 rounded-xl bg-teal-500/20 border border-teal-300/30">
             <MessageSquare className="w-5 h-5 text-teal-300" />
