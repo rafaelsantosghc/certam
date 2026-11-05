@@ -17,6 +17,7 @@ import { NotificationProvider } from './store/notificationContext';
 import { OfflineIndicator } from './components/PWAInstallButton';
 import { ThemeProvider } from './store/themeContext';
 import { errorLogStore } from './store/errorLogStore';
+import { userRegistryStore } from './store/userRegistryStore';
 
 interface ErrorBoundaryState {
   hasError: boolean;
@@ -132,6 +133,7 @@ export const AppContent: React.FC = () => {
     } catch {
       // ignore
     }
+    userRegistryStore.limparChavesOrfasEObsoletas();
     errorLogStore.initGlobalListeners();
     const handleAbrirObrigatorio = () => {
       setModalPerfilObrigatorioAberto(true);

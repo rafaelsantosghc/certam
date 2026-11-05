@@ -1275,6 +1275,57 @@ export const userRegistryStore = {
   },
 
   /**
+   * Remove chaves órfãs, dados obsoletos de candidatos excluídos do localStorage e do cloudSync
+   */
+  limparChavesOrfasEObsoletas(): number {
+    let removidas = 0;
+    try {
+      const reg = this.getRegistry();
+      const regAtualizado: Record<string, Usuario> = {};
+      let alterado = false;
+
+      for (const [k, u] of Object.entries(reg)) {
+        if (!u || typeof u !== 'object') {
+          alterado = true;
+          removidas++;
+          continue;
+        }
+        const status = String(u.status_cadastro || '').toLowerCase();
+        if (status === 'bloqueado' && !u.cpf) {
+          alterado = true;
+          removidas++;
+          continue;
+        }
+        regAtualizado[k] = u;
+      }
+
+      if (alterado) {
+        this.salvarRegistry(regAtualizado);
+      }
+
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const key = localStorage.key(i);
+        if (!key) continue;
+        if (
+          key.includes('tjrs_2024') ||
+          key.includes('mprs_2024') ||
+          key.includes('certam_candidatos_data_v1') ||
+          key.includes('certam_candidatos_data_v2') ||
+          key.includes('certam_candidatos_data_v3') ||
+          key.includes('certam_candidatos_data_v4') ||
+          key.includes('certam_candidatos_data_v5')
+        ) {
+          localStorage.removeItem(key);
+          removidas++;
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return removidas;
+  },
+
+  /**
    * Permite ao Admin vincular manualmente um usuário recém-cadastrado (por e-mail/CPF)
    * a um candidato já existente na lista de classificação ou no Cadastro Geral.
    */
