@@ -1043,6 +1043,9 @@ export const userRegistryStore = {
       const todos = this.getAllUsers();
       for (const u of todos) {
         if (!u.nome) continue;
+        const status = String(u.status_cadastro || 'ativo').toLowerCase().trim();
+        if (status === 'bloqueado' || status === 'inativo') continue;
+
         const uId = (u.id || '').toLowerCase().trim();
         const uCandId = (u.candidato_id || '').toLowerCase().trim();
         if (idIgnorarNorm && (uId === idIgnorarNorm || uCandId === idIgnorarNorm || idIgnorarNorm.includes(uId) || uId.includes(idIgnorarNorm))) continue;

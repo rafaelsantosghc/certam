@@ -374,9 +374,13 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    {usuario.email_contato || usuario.email} · WhatsApp: {usuario.whatsapp || 'Não informado'} · CPF: {usuario.cpf || 'Pendente'}
-                  </p>
+                  <div className="text-xs text-slate-500 mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                    <span className="truncate">{usuario.email_contato || usuario.email}</span>
+                    <span>·</span>
+                    <span className="whitespace-nowrap">WhatsApp: {usuario.whatsapp || 'Não informado'}</span>
+                    <span>·</span>
+                    <span className="whitespace-nowrap">CPF: {usuario.cpf || 'Pendente'}</span>
+                  </div>
                 </div>
               </div>
 
@@ -1006,8 +1010,8 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
 
         {/* BARRA DE FILTROS */}
         <div className="bg-white rounded-xl p-4 sm:p-5 border border-slate-200/80 card-shadow space-y-4">
-          <div className="flex flex-col md:flex-row gap-3">
-            <div className="relative flex-1">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            <div className="relative lg:col-span-1">
               <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
                 <Search className="w-4 h-4" />
               </span>
@@ -1015,7 +1019,7 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
                 type="text"
                 value={filtroTexto}
                 onChange={(e) => setFiltroTexto(e.target.value)}
-                placeholder="Pesquisar por órgão, concurso ou cargo (ex: TJRS, MPRS, Analista, Técnico)..."
+                placeholder="Pesquisar por órgão, concurso ou cargo..."
                 className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-medium focus:outline-hidden focus:ring-2 focus:ring-[#2DD4AA]"
               />
             </div>
@@ -1024,7 +1028,7 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
             <select
               value={filtroRegiao}
               onChange={(e) => setFiltroRegiao(e.target.value)}
-              className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:bg-white focus:outline-hidden"
+              className="px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:bg-white focus:outline-hidden"
             >
               <option value="todas">Todas as Regiões</option>
               <option value="Sul">Região Sul (RS, SC, PR)</option>
@@ -1033,7 +1037,7 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
             </select>
 
             {/* Filtros por Status */}
-            <div className="flex items-center flex-wrap gap-1 p-1 bg-slate-100 rounded-xl border border-slate-200/60">
+            <div className="flex items-center flex-wrap gap-1 p-1 bg-slate-100 rounded-xl border border-slate-200/60 lg:col-span-1">
               <button
                 type="button"
                 onClick={() => setFiltroStatus('todos')}

@@ -212,7 +212,7 @@ export const Header: React.FC<HeaderProps> = ({
           <button
             type="button"
             onClick={() => handleAbrirContato('duvida')}
-            className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
+            className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
             title="Fale com a coordenação do portal"
           >
             <HelpCircle className="w-3.5 h-3.5 text-teal-600" />
@@ -223,7 +223,7 @@ export const Header: React.FC<HeaderProps> = ({
           <button
             type="button"
             onClick={handleCopiarLink}
-            className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
+            className="hidden xl:flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
             title="Copiar link"
           >
             {copiado ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Share2 className="w-3.5 h-3.5" />}
