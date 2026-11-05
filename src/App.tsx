@@ -18,6 +18,7 @@ import { OfflineIndicator } from './components/PWAInstallButton';
 import { ThemeProvider } from './store/themeContext';
 import { errorLogStore } from './store/errorLogStore';
 import { userRegistryStore } from './store/userRegistryStore';
+import { PersistentChatWidget } from './components/PersistentChatWidget';
 
 interface ErrorBoundaryState {
   hasError: boolean;
@@ -473,6 +474,9 @@ export const AppContent: React.FC = () => {
           concursoAtualId={concursoId}
           cargoAtualId={cargoId}
         />
+
+        {/* Widget de Chat Persistente Flutuante com Abas por Concurso, Mute e Emojis */}
+        <PersistentChatWidget />
       </div>
     </div>
   );

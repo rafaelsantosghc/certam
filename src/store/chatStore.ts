@@ -93,12 +93,92 @@ export const chatStore = {
     return nova;
   },
 
-  curtirMensagem(concursoId: string, cargoId: string, canalId: CanalChatId, msgId: string) {
+  curtirMensagem(concursoId: string, cargoId: string, canalId: CanalChatId, msgId: string, userEmail = 'candidato@certam.com.br') {
     const msgs = this.getMensagens(concursoId, cargoId, canalId);
     const m = msgs.find((msg) => msg.id === msgId);
     if (m) {
-      m.curtidas = (m.curtidas || 0) + 1;
+      m.curtido_por = m.curtido_por || [];
+      const idx = m.curtido_por.indexOf(userEmail);
+      if (idx >= 0) {
+        // Já curtiu -> retira a curtida
+        m.curtido_por.splice(idx, 1);
+        m.curtidas = Math.max(0, (m.curtidas || 1) - 1);
+      } else {
+        // Não curtiu -> adiciona curtida
+        m.curtido_por.push(userEmail);
+        m.curtidas = (m.curtidas || 0) + 1;
+      }
       this.salvarMensagens(concursoId, cargoId, canalId, msgs);
+    }
+  },
+
+  reagirEmoji(concursoId: string, cargoId: string, canalId: CanalChatId, msgId: string, emoji: string, userEmail = 'candidato@certam.com.br') {
+    const msgs = this.getMensagens(concursoId, cargoId, canalId);
+    const m = msgs.find((msg) => msg.id === msgId);
+    if (m) {
+      m.reacoes = m.reacoes || {};
+      m.reacoes[emoji] = m.reacoes[emoji] || [];
+      const idx = m.reacoes[emoji].indexOf(userEmail);
+      if (idx >= 0) {
+        m.reacoes[emoji].splice(idx, 1);
+        if (m.reacoes[emoji].length === 0) {
+          delete m.reacoes[emoji];
+        }
+      } else {
+        m.reacoes[emoji].push(userEmail);
+        this.registrarUsoEmoji(emoji);
+      }
+      this.salvarMensagens(concursoId, cargoId, canalId, msgs);
+    }
+  },
+
+  registrarUsoEmoji(emoji: string) {
+    try {
+      const key = 'certam_frequent_emojis_v1';
+      const raw = localStorage.getItem(key);
+      const counts: Record<string, number> = raw ? JSON.parse(raw) : {};
+      counts[emoji] = (counts[emoji] || 0) + 1;
+      localStorage.setItem(key, JSON.stringify(counts));
+    } catch {
+      // ignore
+    }
+  },
+
+  getEmojisFrequentes(): string[] {
+    try {
+      const key = 'certam_frequent_emojis_v1';
+      const raw = localStorage.getItem(key);
+      if (!raw) return ['👍', '❤️', '🔥', '🎉', '🚀', '👏', '💡', '✨'];
+      const counts: Record<string, number> = JSON.parse(raw);
+      return Object.entries(counts)
+        .sort((a, b) => b[1] - a[1])
+        .map(([e]) => e)
+        .slice(0, 8);
+    } catch {
+      return ['👍', '❤️', '🔥', '🎉', '🚀', '👏', '💡', '✨'];
+    }
+  },
+
+  isSalaSilenciada(roomKey: string): boolean {
+    try {
+      const raw = localStorage.getItem('certam_chat_muted_rooms_v1');
+      const muted: Record<string, boolean> = raw ? JSON.parse(raw) : {};
+      return Boolean(muted[roomKey]);
+    } catch {
+      return false;
+    }
+  },
+
+  alternarSilenciarSala(roomKey: string): boolean {
+    try {
+      const raw = localStorage.getItem('certam_chat_muted_rooms_v1');
+      const muted: Record<string, boolean> = raw ? JSON.parse(raw) : {};
+      const next = !muted[roomKey];
+      muted[roomKey] = next;
+      localStorage.setItem('certam_chat_muted_rooms_v1', JSON.stringify(muted));
+      return next;
+    } catch {
+      return false;
     }
   },
 

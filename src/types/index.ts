@@ -295,6 +295,8 @@ export interface ChatMensagem {
   posicao_candidato?: number;
   comarca_preferida?: string;
   curtidas?: number;
+  curtido_por?: string[];
+  reacoes?: Record<string, string[]>;
 }
 
 export interface OutroConcursoAprovado {
