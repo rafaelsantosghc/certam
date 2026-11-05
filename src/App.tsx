@@ -35,6 +35,26 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, Error
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    const msg = String(error?.message || '');
+    const isStaleViteChunkError =
+      msg.includes("reading 'use") ||
+      msg.includes('Invalid hook call') ||
+      msg.includes('Failed to fetch dynamically imported module') ||
+      msg.includes('Importing a module script failed');
+
+    if (isStaleViteChunkError) {
+      try {
+        const lastReload = Number(sessionStorage.getItem('certam_chunk_reload') || '0');
+        if (Date.now() - lastReload > 10000) {
+          sessionStorage.setItem('certam_chunk_reload', String(Date.now()));
+          window.location.reload();
+          return;
+        }
+      } catch {
+        // ignore
+      }
+    }
+
     console.error('CERTAM ErrorBoundary:', error, errorInfo);
     void errorLogStore
       .logError({
@@ -73,7 +93,7 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, Error
               type="button"
               onClick={() => {
                 try {
-                  localStorage.clear();
+                  sessionStorage.removeItem('certam_chunk_reload');
                 } catch {
                   // ignore
                 }
@@ -107,6 +127,11 @@ export const AppContent: React.FC = () => {
   const [modalPerfilObrigatorioAberto, setModalPerfilObrigatorioAberto] = useState(false);
 
   useEffect(() => {
+    try {
+      sessionStorage.removeItem('certam_chunk_reload');
+    } catch {
+      // ignore
+    }
     errorLogStore.initGlobalListeners();
     const handleAbrirObrigatorio = () => {
       setModalPerfilObrigatorioAberto(true);

@@ -515,9 +515,57 @@ function certamSyncPlugin(): Plugin {
     });
   };
 
+  const SERVER_BOOT_ID = `cb${Date.now().toString(36)}`;
+
   return {
     name: 'certam-sync-api',
+    transformIndexHtml(html) {
+      return html.replace(
+        /src=["']\/src\/main\.tsx(?:\?[^"']*)?["']/,
+        `src="/src/main.tsx?v=${SERVER_BOOT_ID}"`
+      );
+    },
     configureServer(server) {
+      server.middlewares.use((req: any, res: any, next: any) => {
+        const url = String(req.url || '');
+        if (url && !url.startsWith('/api/')) {
+          delete req.headers['if-none-match'];
+          delete req.headers['if-modified-since'];
+
+          const origSetHeader = res.setHeader.bind(res);
+          res.setHeader = (name: string, value: any) => {
+            const lower = String(name).toLowerCase();
+            if (lower === 'etag') {
+              return res;
+            }
+            if (lower === 'cache-control') {
+              return origSetHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+            }
+            return origSetHeader(name, value);
+          };
+
+          origSetHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+          origSetHeader('Pragma', 'no-cache');
+          origSetHeader('Expires', '0');
+
+          if (url.startsWith('/src/') && /\.tsx?(?:\?|$)/.test(url)) {
+            const origEnd = res.end.bind(res);
+            res.end = (chunk?: any, encoding?: any, cb?: any) => {
+              if (typeof chunk === 'string' || Buffer.isBuffer(chunk)) {
+                const str = typeof chunk === 'string' ? chunk : chunk.toString('utf-8');
+                const rewritten = str.replace(
+                  /((?:from|import)\s*["']\/src\/[^"'?]+\.tsx?)(["'])/g,
+                  `$1?v=${SERVER_BOOT_ID}$2`
+                );
+                origSetHeader('Content-Length', Buffer.byteLength(rewritten, 'utf-8'));
+                return origEnd(rewritten, encoding, cb);
+              }
+              return origEnd(chunk, encoding, cb);
+            };
+          }
+        }
+        next();
+      });
       attachMiddleware(server.middlewares);
     },
     configurePreviewServer(server) {
@@ -575,11 +623,31 @@ export default defineConfig(({ mode }) => ({
     }),
   ],
   envPrefix: ['VITE_', 'NEXT_PUBLIC_', 'SUPABASE_', 'PUBLIC_'],
+  resolve: {
+    dedupe: ['react', 'react-dom'],
+  },
+  optimizeDeps: {
+    include: [
+      'react',
+      'react-dom',
+      'react-dom/client',
+      'react/jsx-runtime',
+      'react/jsx-dev-runtime',
+      'lucide-react',
+      'xlsx',
+    ],
+    holdUntilCrawlEnd: true,
+  },
   server: {
     host: '0.0.0.0',
     port: 3000,
     strictPort: true,
     hmr: false,
+    headers: {
+      'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+      Pragma: 'no-cache',
+      Expires: '0',
+    },
     watch: {
       ignored: ['**/.certam_sync_db.json', '**/certam_sync_db.json'],
     },
