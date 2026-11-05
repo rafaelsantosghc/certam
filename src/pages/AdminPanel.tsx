@@ -4532,7 +4532,7 @@ NOTIFY pgrst, 'reload schema';`;
                 <span>Monitoramento de Erros e Exceções em Tempo Real</span>
               </h2>
               <p className="text-xs text-slate-500 mt-0.5">
-                Todas as falhas capturadas pelo <code className="font-mono text-slate-700">ErrorBoundary</code> e exceções globais de execução são enviadas automaticamente para a tabela <code className="font-mono text-slate-700">public.error_logs</code> no Supabase e sincronizadas em tempo real.
+                Todas as falhas capturadas pelo <code className="font-mono text-slate-700">ErrorBoundary</code> e exceções globais de execução são enviadas automaticamente para a tabela <code className="font-mono text-slate-700">public.system_logs</code> no Supabase e sincronizadas em tempo real.
               </p>
             </div>
 
@@ -4550,7 +4550,7 @@ NOTIFY pgrst, 'reload schema';`;
                   setErrorLogs(res.logs);
                   setErrorTableStatus({ tableExists: res.tableExists, error: res.error });
                   setLoadingErrorLogs(false);
-                  showToast('Log de teste disparado e sincronizado com o Supabase!');
+                  showToast('Log de teste disparado e sincronizado com o Supabase (public.system_logs)!');
                 }}
                 className="px-3.5 py-2 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-xl text-xs transition-all cursor-pointer flex items-center gap-1.5 shadow-sm"
               >
@@ -4572,7 +4572,7 @@ NOTIFY pgrst, 'reload schema';`;
                 className="px-3.5 py-2 bg-[#0C2640] hover:bg-[#13385C] text-[#2DD4AA] font-bold rounded-xl text-xs transition-all cursor-pointer flex items-center gap-1.5"
               >
                 <Sparkles className="w-3.5 h-3.5" />
-                <span>{loadingErrorLogs ? 'Consultando Supabase...' : 'Atualizar de public.error_logs'}</span>
+                <span>{loadingErrorLogs ? 'Consultando Supabase...' : 'Atualizar de public.system_logs'}</span>
               </button>
 
               {errorLogs.length > 0 && (
@@ -4757,7 +4757,7 @@ NOTIFY pgrst, 'reload schema';`;
                       <span className="text-[11px] font-mono text-slate-400">ID: {log.id}</span>
                       {log.enviado_supabase_tabela && (
                         <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-semibold bg-teal-50 text-teal-700 border border-teal-200">
-                          Gravado em public.error_logs
+                          Gravado em public.{log.tabela_supabase || 'system_logs'}
                         </span>
                       )}
                     </div>
@@ -4801,12 +4801,21 @@ NOTIFY pgrst, 'reload schema';`;
 
                   <div className="mt-2.5 space-y-2">
                     <div className="text-xs sm:text-sm font-bold text-slate-900 font-mono break-words">
-                      {log.mensagem}
+                      {log.error_message || log.mensagem}
                     </div>
 
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-slate-600">
                       <span>
-                        <strong>Usuário:</strong> {log.usuario_nome || 'Visitante'} ({log.usuario_email || 'Anônimo'})
+                        <strong>Usuário / CPF:</strong>{' '}
+                        <code className="font-mono text-slate-800 bg-slate-100 px-1 py-0.5 rounded">
+                          {log.user_id || log.usuario_cpf || log.usuario_id || 'Anônimo'}
+                        </code>
+                        {log.usuario_nome && ` • ${log.usuario_nome}`}
+                        {log.usuario_email && ` (${log.usuario_email})`}
+                      </span>
+                      <span>
+                        <strong>Carimbo de Tempo:</strong>{' '}
+                        <code className="font-mono">{log.carimbo_tempo || log.timestamp || log.created_at}</code>
                       </span>
                       <span>
                         <strong>URL:</strong> <code className="font-mono">{log.url}</code>

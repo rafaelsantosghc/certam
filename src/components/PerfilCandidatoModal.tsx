@@ -279,8 +279,8 @@ export const PerfilCandidatoModal: React.FC<PerfilCandidatoModalProps> = ({
           existingByCpf?.candidato_id || existingByCpf?.id || usuario.id || `user-${Date.now().toString(36)}`;
 
         const dadosVinculados = {
-          id: existingByCpf?.id || candIdVinculado,
-          candidato_id: candIdVinculado,
+          id: cpfFormatado,
+          candidato_id: existingByCpf?.candidato_id || candIdVinculado,
           nome: nomeConsolidado,
           cpf: cpfFormatado,
           cpf_verificado: true,
@@ -350,7 +350,7 @@ export const PerfilCandidatoModal: React.FC<PerfilCandidatoModalProps> = ({
         );
 
         const dadosNovoUsuario = {
-          id: novoId,
+          id: cpfFormatado,
           candidato_id: novoId,
           nome: nomeLimpo,
           cpf: cpfFormatado,

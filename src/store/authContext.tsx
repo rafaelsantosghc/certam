@@ -78,8 +78,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               return {
                 ...parsed,
                 ...fromRegistry,
-                nome: fromRegistry.nome || parsed.nome,
+                id: fromRegistry.id || parsed.id,
                 cpf: fromRegistry.cpf || parsed.cpf,
+                nome: fromRegistry.nome || parsed.nome,
                 data_nascimento: fromRegistry.data_nascimento || parsed.data_nascimento,
                 whatsapp: fromRegistry.whatsapp || parsed.whatsapp,
                 telefone: fromRegistry.telefone || parsed.telefone,
@@ -510,7 +511,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return atualizado;
     });
     if (paraSalvar) {
-      userRegistryStore.salvarUsuario(paraSalvar);
+      const salvo = userRegistryStore.salvarUsuario(paraSalvar);
+      if (salvo) {
+        setUsuario(salvo);
+      }
     }
   };
 

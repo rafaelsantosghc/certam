@@ -1772,11 +1772,11 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
                       }}
                       className="overflow-x-auto"
                     >
-                      <div className="grid grid-cols-[fit-content(70px)_minmax(200px,1fr)_fit-content(90px)_fit-content(90px)_fit-content(90px)_fit-content(110px)_minmax(140px,1fr)_minmax(160px,1fr)_fit-content(130px)_fit-content(80px)] min-w-[1100px] text-xs divide-y divide-slate-100">
+                      <div className="grid grid-cols-[65px_minmax(190px,1.2fr)_80px_80px_95px_110px_minmax(130px,1fr)_minmax(150px,1fr)_120px_80px] min-w-[1050px] text-xs divide-y divide-slate-100">
                         {/* Header da Grid */}
                         <div className="bg-[#07192B] text-white font-serif text-[11px] uppercase tracking-wider py-2.5 px-3 col-span-10 grid grid-cols-subgrid items-center">
-                          <div className="text-center font-semibold sticky left-0 z-20 bg-[#07192B]">Pos.</div>
-                          <div className="font-semibold sticky left-[65px] sm:left-[75px] z-20 bg-[#07192B] shadow-[2px_0_5px_rgba(0,0,0,0.08)]">Candidato</div>
+                          <div className="text-center font-semibold">Pos.</div>
+                          <div className="font-semibold">Candidato</div>
                           <div className="text-center font-semibold">Cota</div>
                           <div className="text-right font-semibold">Nota Final</div>
                           <div className="text-center font-semibold">Lote Convocado</div>
@@ -1797,7 +1797,7 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
                               key={cand.id}
                               className="col-span-10 grid grid-cols-subgrid items-center hover:bg-slate-50 transition-colors py-2.5 px-3 group"
                             >
-                              <div className="text-center font-mono font-bold text-slate-900 sticky left-0 z-10 bg-white group-hover:bg-slate-50 transition-colors">
+                              <div className="text-center font-mono font-bold text-slate-900">
                                 <div>{cand.posicao}º</div>
                                 {(() => {
                                   const simInfo = simulacaoFilaEfetiva.posEfetivaPorCandidatoId.get(cand.id);
@@ -1816,7 +1816,7 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
                                   );
                                 })()}
                               </div>
-                              <div className="font-bold text-slate-900 pr-2 sticky left-[65px] sm:left-[75px] z-10 bg-white group-hover:bg-slate-50 transition-colors shadow-[2px_0_5px_rgba(0,0,0,0.06)]">
+                              <div className="font-bold text-slate-900 pr-2">
                                 <div className="flex items-center gap-1.5 flex-wrap">
                                   <span>{cand.nome}</span>
                                   {(() => {
@@ -2037,16 +2037,16 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
                       ref={bottomScrollRef2}
                       onScroll={() => {
                         if (topScrollRef2.current && bottomScrollRef2.current) {
-                          topScrollRef2.current.scrollLeft = topScrollRef2.current.scrollLeft;
+                          topScrollRef2.current.scrollLeft = bottomScrollRef2.current.scrollLeft;
                         }
                       }}
                       className="overflow-x-auto"
                     >
-                      <div className="grid grid-cols-[fit-content(80px)_minmax(200px,1fr)_minmax(160px,1fr)_fit-content(110px)_fit-content(110px)_fit-content(90px)_fit-content(110px)_minmax(140px,1fr)_fit-content(130px)] min-w-[1100px] text-xs divide-y divide-slate-100">
+                      <div className="grid grid-cols-[70px_minmax(190px,1.2fr)_minmax(160px,1fr)_110px_110px_90px_110px_minmax(140px,1fr)_120px] min-w-[1050px] text-xs divide-y divide-slate-100">
                         {/* Header da Grid */}
                         <div className="bg-[#07192B] text-white font-serif text-[11px] uppercase tracking-wider py-2.5 px-3 col-span-9 grid grid-cols-subgrid items-center">
-                          <div className="text-center font-semibold sticky left-0 z-20 bg-[#07192B]">Ordem</div>
-                          <div className="font-semibold sticky left-[65px] sm:left-[75px] z-20 bg-[#07192B] shadow-[2px_0_5px_rgba(0,0,0,0.08)]">Candidato</div>
+                          <div className="text-center font-semibold">Ordem</div>
+                          <div className="font-semibold">Candidato</div>
                           <div className="font-semibold">Garantia / Tipo</div>
                           <div className="text-center font-semibold">Cota do Candidato</div>
                           <div className="text-center font-semibold">Vaga Atribuída</div>
@@ -2070,11 +2070,11 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
                                   : 'hover:bg-slate-50'
                               }`}
                             >
-                              <div className="text-center font-mono font-bold text-slate-900 sticky left-0 z-10 bg-white group-hover:bg-slate-50 transition-colors">
+                              <div className="text-center font-mono font-bold text-slate-900">
                                 {item.ordem}º
                               </div>
 
-                              <div className="font-bold text-slate-900 pr-2 sticky left-[65px] sm:left-[75px] z-10 bg-white group-hover:bg-slate-50 transition-colors shadow-[2px_0_5px_rgba(0,0,0,0.06)]">
+                              <div className="font-bold text-slate-900 pr-2">
                                 <div>{item.nome}</div>
                                 <span className="text-[10px] font-mono text-slate-400 font-normal">
                                   {item.posicaoOriginal}º lugar original

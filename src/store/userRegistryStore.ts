@@ -3,6 +3,7 @@ import { cloudSync } from './cloudSync';
 import { certamStore } from './certamStore';
 import { lotesStore } from './lotesStore';
 import { calcularSimilaridadeNome } from '../utils/phoneticSearch';
+import { validarCpf, formatarCpf, limparCpf, validarEFormatarCpf } from '../utils/cpfValidator';
 
 const REGISTRY_STORAGE_KEY = 'certam_users_registry_v2';
 
@@ -12,10 +13,6 @@ const normalizarTexto = (str: unknown = ''): string => {
     .replace(/[\u0300-\u036f]/g, '')
     .trim()
     .toLowerCase();
-};
-
-const limparCpf = (cpfStr: unknown = ''): string => {
-  return String(cpfStr ?? '').replace(/\D/g, '');
 };
 
 const isFakeEmail = (email?: unknown): boolean => {
@@ -247,7 +244,27 @@ export const userRegistryStore = {
               needsMigration = true;
             }
 
-            const dictKey = (userCopy.id || userCopy.email || k).toLowerCase().trim();
+            // Chave primária canônica: CPF validado e formatado (000.000.000-00)
+            let dictKey = (userCopy.id || userCopy.email || k).toLowerCase().trim();
+            if (userCopy.cpf) {
+              const cpfRes = validarEFormatarCpf(userCopy.cpf);
+              if (cpfRes.digitos.length >= 9) {
+                const cpfFormatado = cpfRes.formatado;
+                if (!userCopy.candidato_id && userCopy.id && userCopy.id !== cpfFormatado) {
+                  userCopy.candidato_id = userCopy.id;
+                }
+                userCopy.id = cpfFormatado;
+                userCopy.cpf = cpfFormatado;
+                if (cpfRes.valido) {
+                  userCopy.cpf_verificado = true;
+                }
+                dictKey = cpfFormatado;
+                if (k !== cpfFormatado) {
+                  needsMigration = true;
+                }
+              }
+            }
+
             userCopy.id = userCopy.id || dictKey;
             sanitized[dictKey] = userCopy;
           }
@@ -329,13 +346,18 @@ export const userRegistryStore = {
             const realEmail =
               cand.email && !isFakeEmail(cand.email) ? cand.email.toLowerCase().trim() : '';
 
+            const cpfRes = cand.cpf ? validarEFormatarCpf(cand.cpf) : null;
+            const hasCpf = Boolean(cpfRes && cpfRes.digitos.length >= 9);
+            const cpfFmt = hasCpf ? cpfRes!.formatado : (cand.cpf || '');
+            const finalVirtualId = hasCpf ? cpfFmt : (cand.id || dedupKey);
+
             virtualByKey.set(dedupKey, {
-              id: cand.id || dedupKey,
+              id: finalVirtualId,
               nome: cand.nome || 'Candidato Importado',
               email: realEmail,
               email_contato: realEmail,
-              cpf: cand.cpf || '',
-              cpf_verificado: Boolean(cand.cpf),
+              cpf: cpfFmt,
+              cpf_verificado: Boolean(hasCpf && cpfRes!.valido),
               whatsapp: cand.whatsapp || '',
               telefone: cand.whatsapp || '',
               is_admin: false,
@@ -405,41 +427,59 @@ export const userRegistryStore = {
   getUserById(id: string): Usuario | null {
     if (!id) return null;
     const reg = this.getRegistry();
-    if (reg[id.toLowerCase().trim()]) return reg[id.toLowerCase().trim()];
+    const idTrim = id.trim();
+    if (reg[idTrim]) return reg[idTrim];
+    if (reg[idTrim.toLowerCase()]) return reg[idTrim.toLowerCase()];
+
+    // Se id for um CPF (formatado ou apenas dígitos), busca diretamente pela chave canônica formatada
+    const cpfRes = validarEFormatarCpf(id);
+    if (cpfRes.digitos.length >= 9) {
+      if (reg[cpfRes.formatado]) return reg[cpfRes.formatado];
+    }
+
     const all = Object.values(reg);
     return (
       all.find(
         (u) =>
-          u.id === id ||
-          u.candidato_id === id ||
-          (u.email && u.email.toLowerCase().trim() === id.toLowerCase().trim())
+          u.id === idTrim ||
+          u.candidato_id === idTrim ||
+          (cpfRes.digitos.length >= 9 && u.cpf && limparCpf(u.cpf) === cpfRes.digitos) ||
+          (u.email && u.email.toLowerCase().trim() === idTrim.toLowerCase())
       ) || null
     );
   },
 
   getUserByCpf(cpf: string): Usuario | null {
     if (!cpf) return null;
-    const cpfLimpo = limparCpf(cpf);
-    if (cpfLimpo.length < 7) return null;
+    const cpfRes = validarEFormatarCpf(cpf);
+    if (cpfRes.digitos.length < 7) return null;
     const reg = this.getRegistry();
-    return Object.values(reg).find((u) => u.cpf && limparCpf(u.cpf) === cpfLimpo) || null;
+    if (reg[cpfRes.formatado]) return reg[cpfRes.formatado];
+
+    return Object.values(reg).find((u) => u.cpf && limparCpf(u.cpf) === cpfRes.digitos) || null;
   },
 
   findRegistryKey(chave: string): string | null {
     if (!chave) return null;
     const reg = this.getRegistry();
-    const chaveNorm = chave.toLowerCase().trim();
+    const chaveTrim = chave.trim();
+    if (reg[chaveTrim]) return chaveTrim;
+    const chaveNorm = chaveTrim.toLowerCase();
     if (reg[chaveNorm]) return chaveNorm;
 
-    const chaveCpfLimpo = limparCpf(chave);
+    const cpfRes = validarEFormatarCpf(chave);
+    if (cpfRes.digitos.length >= 9 && reg[cpfRes.formatado]) {
+      return cpfRes.formatado;
+    }
 
     for (const [k, u] of Object.entries(reg)) {
       if (
+        (cpfRes.digitos.length >= 9 && u.cpf && limparCpf(u.cpf) === cpfRes.digitos) ||
+        u.id?.trim() === chaveTrim ||
         u.id?.toLowerCase().trim() === chaveNorm ||
         u.candidato_id?.toLowerCase().trim() === chaveNorm ||
         (u.email && u.email.toLowerCase().trim() === chaveNorm) ||
-        (u.email_contato && u.email_contato.toLowerCase().trim() === chaveNorm) ||
-        (chaveCpfLimpo.length >= 7 && u.cpf && limparCpf(u.cpf) === chaveCpfLimpo)
+        (u.email_contato && u.email_contato.toLowerCase().trim() === chaveNorm)
       ) {
         return k;
       }
@@ -451,19 +491,24 @@ export const userRegistryStore = {
     if (!usuario) throw new Error('Usuário inválido');
     const reg = { ...this.getRegistry() };
 
-    const existingKey =
-      (usuario.id && this.findRegistryKey(usuario.id)) ||
-      (usuario.email && !isFakeEmail(usuario.email) && this.findRegistryKey(usuario.email)) ||
-      (usuario.cpf && this.findRegistryKey(usuario.cpf)) ||
-      null;
-
     const cleanEmail =
       usuario.email && !isFakeEmail(usuario.email) ? usuario.email.toLowerCase().trim() : '';
 
-    const cpfLimpo = usuario.cpf ? limparCpf(usuario.cpf) : '';
-    // Quando o usuário possuir CPF com 9+ dígitos, o ID canônico oficial passa a ser exatamente o CPF limpo (chave única)
-    const finalId = (cpfLimpo.length >= 9 ? cpfLimpo : usuario.id || existingKey || `user-${Date.now().toString(36)}`);
-    const dictKey = (cpfLimpo.length >= 9 ? cpfLimpo : existingKey || finalId).toLowerCase().trim();
+    const cpfRes = usuario.cpf ? validarEFormatarCpf(usuario.cpf) : null;
+    const temCpfValido = Boolean(cpfRes && cpfRes.digitos.length >= 9);
+    const cpfFormatado = temCpfValido ? cpfRes!.formatado : '';
+
+    const existingKey =
+      (temCpfValido && this.findRegistryKey(cpfFormatado)) ||
+      (usuario.id && this.findRegistryKey(usuario.id)) ||
+      (cleanEmail && this.findRegistryKey(cleanEmail)) ||
+      null;
+
+    // Quando o usuário possuir CPF, a chave primária única canônica e imutável é o CPF formatado e validado
+    const finalId = temCpfValido
+      ? cpfFormatado
+      : (usuario.id && !usuario.id.startsWith('cand-pre-') ? usuario.id : existingKey || `user-${Date.now().toString(36)}`);
+    const dictKey = finalId;
 
     const defaultStatus = cleanEmail ? 'ativo' : 'primeiro_acesso';
 
@@ -471,6 +516,12 @@ export const userRegistryStore = {
       ...(existingKey ? reg[existingKey] : {}),
       ...usuario,
       id: finalId,
+      candidato_id:
+        usuario.candidato_id ||
+        (existingKey && reg[existingKey]?.candidato_id) ||
+        (usuario.id !== finalId ? usuario.id : undefined),
+      cpf: temCpfValido ? cpfFormatado : usuario.cpf,
+      cpf_verificado: temCpfValido && cpfRes!.valido ? true : usuario.cpf_verificado,
       email: cleanEmail,
       tipo_usuario: usuario.is_admin ? 'admin' : usuario.tipo_usuario || 'candidato',
       status_cadastro: usuario.bloqueado
@@ -698,20 +749,29 @@ export const userRegistryStore = {
         }
       });
 
+      const cpfBruto = usuario.cpf || existingUser.cpf || matchFromLotes?.cand.cpf || '';
+      const cpfRes = cpfBruto ? validarEFormatarCpf(cpfBruto) : null;
+      const temCpf = Boolean(cpfRes && cpfRes.digitos.length >= 9);
+      const cpfFormatado = temCpf ? cpfRes!.formatado : '';
+      const finalTargetId = temCpf ? cpfFormatado : (existingUser.id || usuario.id || targetKey);
+
       const atualizado: Usuario = {
         ...existingUser,
         ...usuario,
-        id: existingUser.id || usuario.id || targetKey,
+        id: finalTargetId,
         candidato_id:
-          matchFromLotes?.cand.id || existingUser.candidato_id || usuario.candidato_id,
+          matchFromLotes?.cand.id ||
+          existingUser.candidato_id ||
+          usuario.candidato_id ||
+          (existingUser.id !== finalTargetId ? existingUser.id : undefined),
         email: emailReal || existingUser.email || '',
         nome: usuario.nome || existingUser.nome,
-        cpf: usuario.cpf || existingUser.cpf || matchFromLotes?.cand.cpf || '',
+        cpf: temCpf ? cpfFormatado : cpfBruto,
         data_nascimento: usuario.data_nascimento || existingUser.data_nascimento || '',
         whatsapp: usuario.whatsapp || existingUser.whatsapp || '',
         telefone: usuario.telefone || usuario.whatsapp || existingUser.telefone || existingUser.whatsapp || '',
         cpf_verificado: Boolean(
-          existingUser.cpf || usuario.cpf || matchFromLotes?.cand.cpf || existingUser.cpf_verificado
+          (temCpf && cpfRes!.valido) || existingUser.cpf_verificado
         ),
         status_cadastro: existingUser.bloqueado ? 'bloqueado' : 'ativo',
         concursos_inscritos: inscricoesUnificadas,
@@ -719,15 +779,24 @@ export const userRegistryStore = {
           usuario.concursos_acompanhados || existingUser.concursos_acompanhados || [],
       };
 
-      reg[targetKey] = atualizado;
+      if (targetKey !== finalTargetId) {
+        delete reg[targetKey];
+      }
+
+      reg[finalTargetId] = atualizado;
       this.salvarRegistry(reg);
       return atualizado;
     }
 
     // Novo usuário que acabou de logar: se cruzar com aprovado na lista de classificação, vincula automaticamente!
-    const cpfFinalLimpo = usuario.cpf ? limparCpf(usuario.cpf) : (matchFromLotes?.cand.cpf ? limparCpf(matchFromLotes.cand.cpf) : '');
-    const newId =
-      (cpfFinalLimpo.length >= 9 ? cpfFinalLimpo : matchFromLotes?.cand.id || usuario.id || `user-${Date.now().toString(36)}`);
+    const cpfBrutoNovo = usuario.cpf || matchFromLotes?.cand.cpf || '';
+    const cpfResNovo = cpfBrutoNovo ? validarEFormatarCpf(cpfBrutoNovo) : null;
+    const temCpfNovo = Boolean(cpfResNovo && cpfResNovo.digitos.length >= 9);
+    const cpfFormatadoNovo = temCpfNovo ? cpfResNovo!.formatado : '';
+    const newId = temCpfNovo
+      ? cpfFormatadoNovo
+      : (matchFromLotes?.cand.id || usuario.id || `user-${Date.now().toString(36)}`);
+
     const inscricoesIniciais = [...(usuario.concursos_inscritos || [])];
     (matchFromLotes?.inscricoes || []).forEach((ins) => {
       if (
@@ -743,13 +812,16 @@ export const userRegistryStore = {
       ...usuario,
       id: newId,
       nome: usuario.nome || matchFromLotes?.cand.nome || 'Candidato',
-      cpf: usuario.cpf || matchFromLotes?.cand.cpf || '',
-      cpf_verificado: Boolean(usuario.cpf || matchFromLotes),
+      cpf: temCpfNovo ? cpfFormatadoNovo : cpfBrutoNovo,
+      cpf_verificado: Boolean(temCpfNovo && cpfResNovo!.valido),
       email: emailReal,
       email_contato: usuario.email_contato || emailReal,
       tipo_usuario: usuario.is_admin ? 'admin' : 'candidato',
       status_cadastro: 'ativo',
-      candidato_id: matchFromLotes?.cand.id || usuario.candidato_id || newId,
+      candidato_id:
+        matchFromLotes?.cand.id ||
+        usuario.candidato_id ||
+        (usuario.id !== newId ? usuario.id : undefined),
       concurso_id: matchFromLotes?.concursoId || usuario.concurso_id,
       cargo_id: matchFromLotes?.cargoId || usuario.cargo_id,
       orgao: matchFromLotes?.orgaoNome || usuario.orgao,
@@ -757,7 +829,7 @@ export const userRegistryStore = {
       concursos_inscritos: inscricoesIniciais,
     };
 
-    reg[newId.toLowerCase()] = novoRegistro;
+    reg[newId] = novoRegistro;
     this.salvarRegistry(reg);
     return novoRegistro;
   },

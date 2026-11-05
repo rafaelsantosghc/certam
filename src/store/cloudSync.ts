@@ -1899,10 +1899,10 @@ export const cloudSync = {
       });
     }
 
-    // 2.1.b Verificar a tabela dedicada de logs centralizados de erros: public.error_logs
+    // 2.1.b Verificar a tabela dedicada de logs centralizados de erros: public.system_logs
     const stErr = performance.now();
     try {
-      const errRes = await fetch(`${cfg.url}/rest/v1/error_logs?select=id&limit=100`, {
+      const errRes = await fetch(`${cfg.url}/rest/v1/system_logs?select=id&limit=100`, {
         method: 'GET',
         headers: getSupabaseHeaders(cfg.anonKey),
         cache: 'no-store',
@@ -1911,20 +1911,37 @@ export const cloudSync = {
       if (errRes.ok) {
         const errRows = await errRes.json().catch(() => []);
         report.supabase.tables.push({
-          table: 'error_logs (Logs de Falhas ErrorBoundary)',
+          table: 'system_logs (Logs de Falhas ErrorBoundary)',
           ok: true,
           rowCount: Array.isArray(errRows) ? errRows.length : 0,
           latencyMs: errLat,
           conflictKeys: [],
         });
       } else if (errRes.status === 404) {
-        report.supabase.tables.push({
-          table: 'error_logs (Logs de Falhas ErrorBoundary)',
-          ok: false,
-          rowCount: 0,
-          latencyMs: errLat,
-          error: 'Tabela opcional (use o SQL abaixo para criar public.error_logs)',
+        // Fallback para verificar se existe a tabela legada error_logs
+        const fallbackRes = await fetch(`${cfg.url}/rest/v1/error_logs?select=id&limit=100`, {
+          method: 'GET',
+          headers: getSupabaseHeaders(cfg.anonKey),
+          cache: 'no-store',
         });
+        if (fallbackRes.ok) {
+          const fallbackRows = await fallbackRes.json().catch(() => []);
+          report.supabase.tables.push({
+            table: 'error_logs (Legado • Use system_logs)',
+            ok: true,
+            rowCount: Array.isArray(fallbackRows) ? fallbackRows.length : 0,
+            latencyMs: errLat,
+            conflictKeys: [],
+          });
+        } else {
+          report.supabase.tables.push({
+            table: 'system_logs (Logs de Falhas ErrorBoundary)',
+            ok: false,
+            rowCount: 0,
+            latencyMs: errLat,
+            error: 'Tabela opcional (use o SQL abaixo para criar public.system_logs)',
+          });
+        }
       }
     } catch {
       // ignore
