@@ -903,12 +903,14 @@ export const userRegistryStore = {
   /**
    * Busca registros de candidatos no Cadastro Geral e nas listas de classificação
    * com nomes parecidos ao nome informado pelo usuário (para sugerir vinculação ao admin).
+   * Desduplica rigorosamente candidatos por CPF, ID ou Nome+Cargo para garantir que ninguém apareça duplicado.
    */
   buscarSugestoesNomesParecidos(
     nomeAlvo: string,
     cpfIgnorar?: string,
     emailIgnorar?: string,
-    limite = 6
+    limite = 6,
+    idIgnorar?: string
   ): {
     id: string;
     candidato_id: string;
@@ -929,6 +931,8 @@ export const userRegistryStore = {
 
     const cpfIgnorarLimpo = cpfIgnorar ? limparCpf(cpfIgnorar) : '';
     const emailIgnorarLimpo = emailIgnorar ? emailIgnorar.toLowerCase().trim() : '';
+    const idIgnorarNorm = idIgnorar ? idIgnorar.toLowerCase().trim() : '';
+    const nomeAlvoNorm = normalizarTexto(nomeAlvo);
 
     const sugestoesMap = new Map<
       string,
@@ -950,6 +954,23 @@ export const userRegistryStore = {
       }
     >();
 
+    // Chave única canônica por pessoa para impedir que a mesma pessoa apareça 2 vezes
+    const getChaveUnicaPessoa = (item: {
+      cpf?: string;
+      id?: string;
+      candidato_id?: string;
+      nome: string;
+      concurso_id?: string;
+      cargo_id?: string;
+    }): string => {
+      const cLimpo = item.cpf ? limparCpf(item.cpf) : '';
+      if (cLimpo.length >= 7) return `cpf:${cLimpo}`;
+      const cId = (item.candidato_id || item.id || '').toLowerCase().trim();
+      if (cId && (cId.startsWith('cand-') || cId.length > 8)) return `cand:${cId}`;
+      const nomeN = normalizarTexto(item.nome);
+      return `nome:${nomeN}`;
+    };
+
     // 1. Vasculhar todas as listas de classificação (lotesStore)
     try {
       const concursos = certamStore.getConcursos();
@@ -958,28 +979,57 @@ export const userRegistryStore = {
           const cands = lotesStore.getCandidatos(conc.id, cg.id);
           for (const c of cands) {
             if (!c.nome) continue;
+            const cId = (c.id || '').toLowerCase().trim();
+            if (idIgnorarNorm && (cId === idIgnorarNorm || idIgnorarNorm.includes(cId) || cId.includes(idIgnorarNorm))) continue;
+
+            const cCpfLimpo = c.cpf ? limparCpf(c.cpf) : '';
+            if (cpfIgnorarLimpo.length >= 7 && cCpfLimpo === cpfIgnorarLimpo) continue;
+
             const cEmail = c.email ? c.email.toLowerCase().trim() : '';
             if (emailIgnorarLimpo && cEmail === emailIgnorarLimpo) continue;
 
+            const cNomeNorm = normalizarTexto(c.nome);
+            if (idIgnorarNorm && cNomeNorm === nomeAlvoNorm) {
+              continue;
+            }
+
             const sim = calcularSimilaridadeNome(nomeAlvo, c.nome);
             if (sim >= 45) {
-              const key = `${conc.id}_${cg.id}_${c.id || c.posicao}`;
-              sugestoesMap.set(key, {
+              const chaveUnica = getChaveUnicaPessoa({
+                cpf: c.cpf,
                 id: c.id,
                 candidato_id: c.id,
                 nome: c.nome,
-                cpf: c.cpf,
-                email: c.email,
                 concurso_id: conc.id,
-                concurso_nome: conc.nome,
                 cargo_id: cg.id,
-                cargo_nome: cg.nome,
-                posicao: c.posicao,
-                cota: c.cota,
-                nota_final: c.nota_final,
-                similaridade: sim,
-                origem: 'classificacao',
               });
+
+              const nomeConcursoExibicao = conc.nome || conc.orgao || 'Concurso';
+
+              if (!sugestoesMap.has(chaveUnica)) {
+                sugestoesMap.set(chaveUnica, {
+                  id: c.id,
+                  candidato_id: c.id,
+                  nome: c.nome,
+                  cpf: c.cpf,
+                  email: c.email,
+                  concurso_id: conc.id,
+                  concurso_nome: nomeConcursoExibicao,
+                  cargo_id: cg.id,
+                  cargo_nome: cg.nome,
+                  posicao: c.posicao,
+                  cota: c.cota,
+                  nota_final: c.nota_final,
+                  similaridade: sim,
+                  origem: 'classificacao',
+                });
+              } else {
+                const existente = sugestoesMap.get(chaveUnica)!;
+                if (!existente.posicao && c.posicao) existente.posicao = c.posicao;
+                if (!existente.nota_final && c.nota_final) existente.nota_final = c.nota_final;
+                if (!existente.cota && c.cota) existente.cota = c.cota;
+                if (sim > existente.similaridade) existente.similaridade = sim;
+              }
             }
           }
         }
@@ -988,34 +1038,59 @@ export const userRegistryStore = {
       // ignore
     }
 
-    // 2. Vasculhar também o Cadastro Geral de Usuários (especialmente aguardando 1º acesso)
+    // 2. Vasculhar também o Cadastro Geral de Usuários (sem duplicar os já adicionados)
     try {
       const todos = this.getAllUsers();
       for (const u of todos) {
         if (!u.nome) continue;
+        const uId = (u.id || '').toLowerCase().trim();
+        const uCandId = (u.candidato_id || '').toLowerCase().trim();
+        if (idIgnorarNorm && (uId === idIgnorarNorm || uCandId === idIgnorarNorm || idIgnorarNorm.includes(uId) || uId.includes(idIgnorarNorm))) continue;
+
         const uEmail = u.email ? u.email.toLowerCase().trim() : '';
-        const uCpf = u.cpf ? limparCpf(u.cpf) : '';
         if (emailIgnorarLimpo && uEmail === emailIgnorarLimpo) continue;
-        if (cpfIgnorarLimpo.length >= 9 && uCpf === cpfIgnorarLimpo && uEmail) continue;
+
+        const uCpfLimpo = u.cpf ? limparCpf(u.cpf) : '';
+        if (cpfIgnorarLimpo.length >= 7 && uCpfLimpo === cpfIgnorarLimpo) continue;
+
+        const uNomeNorm = normalizarTexto(u.nome);
+        if (idIgnorarNorm && uNomeNorm === nomeAlvoNorm) {
+          continue;
+        }
 
         const sim = calcularSimilaridadeNome(nomeAlvo, u.nome);
         if (sim >= 45) {
-          const key = `reg_${u.id || u.candidato_id || normalizarTexto(u.nome)}`;
-          if (!sugestoesMap.has(key)) {
-            const cid = u.candidato_id || u.id || key;
-            sugestoesMap.set(key, {
+          const chaveUnica = getChaveUnicaPessoa({
+            cpf: u.cpf,
+            id: u.id,
+            candidato_id: u.candidato_id,
+            nome: u.nome,
+            concurso_id: u.concurso_id,
+            cargo_id: u.cargo_id,
+          });
+
+          // Se essa pessoa JÁ foi encontrada e catalogada pelo Step 1 (classificação), NUNCA duplica!
+          if (!sugestoesMap.has(chaveUnica)) {
+            const cid = u.candidato_id || u.id || `user-${Date.now().toString(36)}`;
+            sugestoesMap.set(chaveUnica, {
               id: cid,
               candidato_id: cid,
               nome: u.nome,
               cpf: u.cpf,
               email: u.email,
               concurso_id: u.concurso_id,
-              concurso_nome: u.orgao,
+              concurso_nome: u.cargo_nome ? (u.orgao || 'Cadastro Geral') : 'Cadastro Geral',
               cargo_id: u.cargo_id,
               cargo_nome: u.cargo_nome,
               similaridade: sim,
               origem: 'cadastro_geral',
             });
+          } else {
+            const existente = sugestoesMap.get(chaveUnica)!;
+            if (!existente.cpf && u.cpf) existente.cpf = u.cpf;
+            if (!existente.email && u.email) existente.email = u.email;
+            if (!existente.cargo_nome && u.cargo_nome) existente.cargo_nome = u.cargo_nome;
+            if (sim > existente.similaridade) existente.similaridade = sim;
           }
         }
       }
@@ -1026,6 +1101,174 @@ export const userRegistryStore = {
     return Array.from(sugestoesMap.values())
       .sort((a, b) => b.similaridade - a.similaridade)
       .slice(0, limite);
+  },
+
+  /**
+   * Realiza uma varredura completa nas tabelas locais e sincronizadas do banco de dados (Supabase/localStorage)
+   * para localizar e unificar usuários duplicados, cadastros antigos órfãos e dados inconsistentes.
+   */
+  varrerELimparDuplicidadesBancoEStorage(): {
+    registrosAnalisados: number;
+    duplicidadesRemovidas: number;
+    candidatosVerificados: number;
+    tabelasSincronizadas: number;
+    detalhes: string[];
+  } {
+    const detalhes: string[] = [];
+    let duplicidadesRemovidas = 0;
+    let registrosAnalisados = 0;
+    let candidatosVerificados = 0;
+    let tabelasSincronizadas = 0;
+
+    // 1. Varredura e unificação no Cadastro Geral de Usuários (certam_users_registry_v2)
+    try {
+      const regAtual = { ...this.getRegistry() };
+      const usuarios = Object.entries(regAtual);
+      registrosAnalisados += usuarios.length;
+
+      const mapaPorCpf = new Map<string, string>();
+      const mapaPorEmail = new Map<string, string>();
+      const mapaPorNomeCargo = new Map<string, string>();
+      const chavesParaRemover = new Set<string>();
+
+      for (const [key, user] of usuarios) {
+        if (!user || typeof user !== 'object') {
+          chavesParaRemover.add(key);
+          continue;
+        }
+
+        const cpfRes = user.cpf ? validarEFormatarCpf(user.cpf) : null;
+        const temCpf = Boolean(cpfRes && cpfRes.digitos.length >= 9);
+        const cpfLimpo = temCpf ? cpfRes!.digitos : '';
+        const email = user.email && !isFakeEmail(user.email) ? user.email.toLowerCase().trim() : '';
+        const nomeNorm = normalizarTexto(user.nome);
+        const concCargoKey = `${nomeNorm}_${user.concurso_id || ''}_${user.cargo_id || ''}`;
+
+        let chaveMestre: string | undefined;
+        if (cpfLimpo && mapaPorCpf.has(cpfLimpo)) {
+          chaveMestre = mapaPorCpf.get(cpfLimpo);
+        } else if (email && mapaPorEmail.has(email)) {
+          chaveMestre = mapaPorEmail.get(email);
+        } else if (nomeNorm.length >= 5 && mapaPorNomeCargo.has(concCargoKey) && !isFakeEmail(user.email)) {
+          chaveMestre = mapaPorNomeCargo.get(concCargoKey);
+        }
+
+        if (chaveMestre && chaveMestre !== key) {
+          const userMestre = regAtual[chaveMestre];
+          if (userMestre) {
+            const inscricoesUnificadas = [...(userMestre.concursos_inscritos || [])];
+            (user.concursos_inscritos || []).forEach((ins) => {
+              if (!inscricoesUnificadas.some((i) => i.concurso_id === ins.concurso_id && i.cargo_id === ins.cargo_id)) {
+                inscricoesUnificadas.push(ins);
+              }
+            });
+
+            regAtual[chaveMestre] = {
+              ...user,
+              ...userMestre,
+              candidato_id: userMestre.candidato_id || user.candidato_id || user.id,
+              cpf: userMestre.cpf || (temCpf ? cpfRes!.formatado : user.cpf),
+              cpf_verificado: Boolean(userMestre.cpf_verificado || user.cpf_verificado || (temCpf && cpfRes!.valido)),
+              concursos_inscritos: inscricoesUnificadas,
+            };
+
+            chavesParaRemover.add(key);
+            duplicidadesRemovidas++;
+            detalhes.push(`Unificado usuário duplicado "${user.nome}" (chave antiga "${key}" mesclada na chave principal "${chaveMestre}")`);
+          }
+        } else {
+          const chaveCanonica = temCpf ? cpfRes!.formatado : key;
+          if (key !== chaveCanonica) {
+            regAtual[chaveCanonica] = {
+              ...user,
+              id: chaveCanonica,
+              candidato_id: user.candidato_id || user.id,
+              cpf: cpfRes!.formatado,
+              cpf_verificado: cpfRes!.valido || user.cpf_verificado,
+            };
+            chavesParaRemover.add(key);
+            detalhes.push(`Chave do usuário "${user.nome}" convertida para o CPF canônico "${chaveCanonica}"`);
+          }
+
+          if (cpfLimpo) mapaPorCpf.set(cpfLimpo, chaveCanonica);
+          if (email) mapaPorEmail.set(email, chaveCanonica);
+          if (nomeNorm.length >= 5) mapaPorNomeCargo.set(concCargoKey, chaveCanonica);
+        }
+      }
+
+      chavesParaRemover.forEach((k) => delete regAtual[k]);
+
+      if (chavesParaRemover.size > 0 || duplicidadesRemovidas > 0) {
+        this.salvarRegistry(regAtual);
+        tabelasSincronizadas++;
+      }
+    } catch (e: any) {
+      detalhes.push(`Aviso na varredura do registry: ${e?.message || e}`);
+    }
+
+    // 2. Varredura nas listas de classificação (lotesStore)
+    try {
+      const concursos = certamStore.getConcursos();
+      for (const conc of concursos) {
+        for (const cg of conc.cargos || []) {
+          const cands = lotesStore.getCandidatos(conc.id, cg.id);
+          candidatosVerificados += cands.length;
+
+          const seenCandIds = new Set<string>();
+          const seenCandCpfs = new Set<string>();
+          const seenPositions = new Set<number>();
+          let alterou = false;
+
+          const desduplicados: Candidato[] = [];
+
+          for (const c of cands) {
+            const cid = (c.id || '').trim();
+            const cCpf = c.cpf ? limparCpf(c.cpf) : '';
+            const pos = c.posicao;
+
+            const isDuplicate =
+              (cid && seenCandIds.has(cid)) ||
+              (cCpf.length >= 9 && seenCandCpfs.has(cCpf)) ||
+              (pos && seenPositions.has(pos) && cands.filter((x) => x.posicao === pos).length > 1);
+
+            if (isDuplicate) {
+              duplicidadesRemovidas++;
+              alterou = true;
+              detalhes.push(`Removido candidato duplicado na lista oficial: "${c.nome}" (${pos}º lugar)`);
+              continue;
+            }
+
+            if (cid) seenCandIds.add(cid);
+            if (cCpf.length >= 9) seenCandCpfs.add(cCpf);
+            if (pos) seenPositions.add(pos);
+            desduplicados.push(c);
+          }
+
+          if (alterou) {
+            lotesStore.salvarCandidatos(conc.id, cg.id, desduplicados);
+            tabelasSincronizadas++;
+          }
+        }
+      }
+    } catch (e: any) {
+      detalhes.push(`Aviso na varredura das listas: ${e?.message || e}`);
+    }
+
+    // 3. Sincronização forçada com o Supabase
+    try {
+      void cloudSync.pushKey('certam_users_registry_v2', this.getRegistry(), true);
+      tabelasSincronizadas++;
+    } catch {
+      // ignore
+    }
+
+    return {
+      registrosAnalisados,
+      duplicidadesRemovidas,
+      candidatosVerificados,
+      tabelasSincronizadas,
+      detalhes,
+    };
   },
 
   /**

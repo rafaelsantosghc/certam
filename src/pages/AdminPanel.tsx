@@ -2308,6 +2308,22 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
               <button
                 type="button"
+                onClick={() => {
+                  const res = userRegistryStore.varrerELimparDuplicidadesBancoEStorage();
+                  setUsuariosGerais(userRegistryStore.getAllUsers());
+                  showToast(
+                    `Varredura concluída! ${res.registrosAnalisados} cadastros e ${res.candidatosVerificados} candidatos analisados. ${res.duplicidadesRemovidas} duplicidade(s) corrigida(s).`
+                  );
+                }}
+                className="px-4 py-2.5 bg-teal-50 hover:bg-teal-100 text-teal-900 border border-teal-300 font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
+                title="Efetua varredura profunda no banco e storage para eliminar duplicidades e unificar cadastros"
+              >
+                <Sparkles className="w-4 h-4 text-teal-600" />
+                <span>Varredura & Deduplicação</span>
+              </button>
+
+              <button
+                type="button"
                 onClick={handleAbrirNovoUsuario}
                 className="px-4 py-2.5 bg-[#07192B] hover:bg-[#0C2640] text-[#2DD4AA] font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
               >
@@ -2420,7 +2436,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                                   u.nome,
                                   u.cpf,
                                   u.email,
-                                  2
+                                  2,
+                                  u.id || u.candidato_id
                                 );
                                 if (sugs.length === 0) return null;
                                 const top = sugs[0];
@@ -2574,7 +2591,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         userFormNome,
                         userFormCpf,
                         userFormEmail,
-                        4
+                        4,
+                        usuarioEditando?.id || usuarioEditando?.candidato_id
                       );
                       if (sugs.length === 0) return null;
                       return (
@@ -2860,7 +2878,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   v.usuario_nome,
                   v.cpf,
                   v.usuario_email,
-                  5
+                  5,
+                  v.usuario_id
                 );
 
                 return (
