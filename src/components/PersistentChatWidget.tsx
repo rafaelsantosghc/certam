@@ -77,6 +77,10 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
     chatStore.getEmojisFrequentes(8)
   );
   const [unreadByConcurso, setUnreadByConcurso] = useState<Record<string, number>>({});
+  const [unreadByCanal, setUnreadByCanal] = useState<Record<string, number>>({});
+  const [ultimaMsgPorConcurso, setUltimaMsgPorConcurso] = useState<
+    Record<string, { autor: string; texto: string; canalId: CanalChatId; dataHora: string } | null>
+  >({});
   const [resumoBanner, setResumoBanner] = useState<ResumoNovaMensagemChat | null>(null);
   const [, setMuteVersion] = useState(0);
 
@@ -85,6 +89,148 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
   const selfSentMsgIdsRef = useRef<Set<string>>(new Set());
   const bannerTimeoutRef = useRef<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const READ_MSG_STORAGE_KEY = 'certam_chat_read_msg_ids_v1';
+
+  const getReadIdsMap = (): Record<string, string[]> => {
+    if (typeof window === 'undefined') return {};
+    try {
+      const raw = localStorage.getItem(READ_MSG_STORAGE_KEY);
+      if (!raw) return {};
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch {
+      return {};
+    }
+  };
+
+  const salvarReadIdsMap = (map: Record<string, string[]>) => {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.setItem(READ_MSG_STORAGE_KEY, JSON.stringify(map));
+    } catch {
+      // ignore
+    }
+  };
+
+  const marcarSalaComoLida = (concId: string, cnId: CanalChatId) => {
+    if (!concId) return;
+    const roomKey = `${concId}_${cnId}`;
+    const msgs = chatStore.getMensagens(concId, 'geral', cnId);
+    const map = getReadIdsMap();
+    const set = new Set<string>(map[roomKey] || []);
+    let changed = false;
+    msgs.forEach((m) => {
+      if (!set.has(m.id)) {
+        set.add(m.id);
+        changed = true;
+      }
+    });
+    if (changed || !map[roomKey]) {
+      map[roomKey] = Array.from(set);
+      salvarReadIdsMap(map);
+    }
+  };
+
+  const sincronizarResumosEContadores = (
+    listaConcursos: Concurso[],
+    abertoAtual: boolean,
+    concAtivo: string,
+    cnAtivo: CanalChatId
+  ) => {
+    const readMap = getReadIdsMap();
+    const isFirstInit = Object.keys(readMap).length === 0;
+    let readMapModified = false;
+
+    if (abertoAtual && concAtivo) {
+      const activeKey = `${concAtivo}_${cnAtivo}`;
+      const activeMsgs = chatStore.getMensagens(concAtivo, 'geral', cnAtivo);
+      const set = new Set<string>(readMap[activeKey] || []);
+      activeMsgs.forEach((m) => {
+        if (!set.has(m.id)) {
+          set.add(m.id);
+          readMapModified = true;
+        }
+      });
+      readMap[activeKey] = Array.from(set);
+    }
+
+    const nextUnreadConcurso: Record<string, number> = {};
+    const nextUnreadCanal: Record<string, number> = {};
+    const nextUltimaMsg: Record<
+      string,
+      { autor: string; texto: string; canalId: CanalChatId; dataHora: string } | null
+    > = {};
+
+    listaConcursos.forEach((c) => {
+      let totalNaoLidasConcurso = 0;
+      let msgMaisRecente: {
+        msg: ChatMensagem;
+        canalId: CanalChatId;
+        ordem: number;
+      } | null = null;
+
+      CANAIS_RAPIDOS.forEach((cn, cnIdx) => {
+        const roomKey = `${c.id}_${cn.id}`;
+        const msgs = chatStore.getMensagens(c.id, 'geral', cn.id);
+
+        if (isFirstInit) {
+          // Na primeira carga do navegador, marca mensagens antigas já existentes como lidas
+          readMap[roomKey] = msgs.map((m) => m.id);
+          readMapModified = true;
+        }
+
+        const readSet = new Set<string>(readMap[roomKey] || []);
+        const isCurrentOpenRoom = abertoAtual && concAtivo === c.id && cnAtivo === cn.id;
+
+        let naoLidasCanal = 0;
+        msgs.forEach((m, idx) => {
+          if (isCurrentOpenRoom || selfSentMsgIdsRef.current.has(m.id)) {
+            if (!readSet.has(m.id)) {
+              readSet.add(m.id);
+              readMap[roomKey] = Array.from(readSet);
+              readMapModified = true;
+            }
+          } else if (!readSet.has(m.id)) {
+            naoLidasCanal++;
+          }
+
+          const ts = Number(m.created_at || m.updated_at || 0) || (idx + 1) * 10 + cnIdx;
+          if (!msgMaisRecente || ts >= msgMaisRecente.ordem) {
+            msgMaisRecente = { msg: m, canalId: cn.id, ordem: ts };
+          }
+        });
+
+        nextUnreadCanal[roomKey] = naoLidasCanal;
+        totalNaoLidasConcurso += naoLidasCanal;
+      });
+
+      nextUnreadConcurso[c.id] = totalNaoLidasConcurso;
+      if (msgMaisRecente) {
+        const { msg, canalId } = msgMaisRecente as {
+          msg: ChatMensagem;
+          canalId: CanalChatId;
+          ordem: number;
+        };
+        nextUltimaMsg[c.id] = {
+          autor: msg.autor,
+          texto: msg.texto,
+          canalId,
+          dataHora: msg.data_hora,
+        };
+      } else {
+        nextUltimaMsg[c.id] = null;
+      }
+    });
+
+    if (readMapModified) {
+      salvarReadIdsMap(readMap);
+    }
+
+    setUnreadByConcurso(nextUnreadConcurso);
+    setUnreadByCanal(nextUnreadCanal);
+    setUltimaMsgPorConcurso(nextUltimaMsg);
+  };
 
   useEffect(() => {
     if (concursoInicialId && concursos.some((c) => c.id === concursoInicialId)) {
@@ -111,12 +257,21 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
         msgs.forEach((m) => knownMsgIdsRef.current.add(m.id));
       });
     });
+    sincronizarResumosEContadores(allConcursos, isOpen, concursoAtivoId, canalAtivo);
     initializedKnownIdsRef.current = true;
   }, []);
 
   useEffect(() => {
+    if (isOpen) {
+      marcarSalaComoLida(concursoAtivoId, canalAtivo);
+    }
     carregarMensagensAtivas();
-    setUnreadByConcurso((prev) => ({ ...prev, [concursoAtivoId]: 0 }));
+    sincronizarResumosEContadores(
+      certamStore.getConcursos(),
+      isOpen,
+      concursoAtivoId,
+      canalAtivo
+    );
   }, [concursoAtivoId, canalAtivo, isOpen]);
 
   // Monitoramento em tempo real de todas as conversas de todos os concursos
@@ -142,18 +297,12 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
               const estaVisualizandoEstaSalaAberta =
                 isOpen && concursoAtivoId === conc.id && canalAtivo === cn.id;
 
-              if (!estaVisualizandoEstaSalaAberta && !enviadaNesteWidget) {
-                setUnreadByConcurso((prev) => ({
-                  ...prev,
-                  [conc.id]: (prev[conc.id] || 0) + 1,
-                }));
-              }
-
               // Verifica no localStorage se a conversa/canal ou o concurso está silenciado
               const conversaSilenciada =
                 chatStore.isSalaSilenciada(conc.id, cn.id) ||
                 chatStore.isConcursoSilenciado(conc.id);
 
+              // Somente suprime o Toast/Banner se estiver silenciada; o contador de não lidas na aba é atualizado sempre!
               if (!conversaSilenciada && (!enviadaNesteWidget || !estaVisualizandoEstaSalaAberta)) {
                 ultimaNovaParaNotificar = { msg: m, conc, canal: cn.id };
               }
@@ -161,6 +310,8 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
           });
         });
       });
+
+      sincronizarResumosEContadores(listaConcursos, isOpen, concursoAtivoId, canalAtivo);
 
       if (ultimaNovaParaNotificar) {
         const { msg, conc, canal } = ultimaNovaParaNotificar as {
@@ -516,35 +667,74 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
             </div>
           </div>
 
-          {/* Abas de Conversas para Cada Concurso */}
-          <div className="bg-slate-900 px-2 py-1.5 flex items-center gap-1.5 overflow-x-auto border-b border-slate-800 shrink-0">
+          {/* Abas de Conversas para Cada Concurso (com Badge de Não Lidas e Fragmento da Última Mensagem) */}
+          <div className="bg-slate-900 px-2 py-2 flex items-stretch gap-1.5 overflow-x-auto border-b border-slate-800 shrink-0">
             {concursos.map((c) => {
               const ativo = c.id === concursoAtivoId;
               const unread = unreadByConcurso[c.id] || 0;
               const concSilenciado = chatStore.isConcursoSilenciado(c.id);
+              const ultimaMsg = ultimaMsgPorConcurso[c.id];
+              const fragmentoTexto = ultimaMsg
+                ? `${ultimaMsg.autor.split(' ')[0]}: ${
+                    ultimaMsg.texto.length > 26
+                      ? `${ultimaMsg.texto.substring(0, 26)}...`
+                      : ultimaMsg.texto
+                  }`
+                : 'Sem mensagens recentes';
+
               return (
                 <button
                   key={c.id}
                   type="button"
                   onClick={() => {
                     setConcursoAtivoId(c.id);
-                    setUnreadByConcurso((prev) => ({ ...prev, [c.id]: 0 }));
                   }}
-                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap flex items-center gap-1.5 transition-all cursor-pointer shrink-0 ${
+                  className={`px-2.5 py-1.5 rounded-xl text-left flex flex-col justify-between min-w-[140px] max-w-[175px] transition-all cursor-pointer shrink-0 border ${
                     ativo
-                      ? 'bg-teal-600 text-white shadow-xs'
-                      : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white'
+                      ? 'bg-teal-600 text-white border-teal-400/50 shadow-sm'
+                      : unread > 0
+                      ? 'bg-slate-800/95 text-white border-teal-500/50 hover:bg-slate-700'
+                      : 'bg-slate-800/80 text-slate-300 border-slate-700/70 hover:bg-slate-700 hover:text-white'
                   }`}
                 >
-                  <span>{c.orgao || c.nome.substring(0, 14)}</span>
-                  {concSilenciado && (
-                    <BellOff className="w-2.5 h-2.5 text-amber-300 shrink-0" />
-                  )}
-                  {unread > 0 && (
-                    <span className="bg-rose-500 text-white text-[9px] font-extrabold px-1.5 py-0.2 rounded-full">
-                      {unread}
+                  <div className="flex items-center justify-between gap-1.5 w-full">
+                    <span className="text-[11px] font-extrabold truncate">
+                      {c.orgao || c.nome.substring(0, 14)}
                     </span>
-                  )}
+                    <div className="flex items-center gap-1 shrink-0">
+                      {concSilenciado && (
+                        <span title="Notificações silenciadas para este concurso">
+                          <BellOff className="w-2.5 h-2.5 text-amber-300 shrink-0" />
+                        </span>
+                      )}
+                      {unread > 0 && (
+                        <span
+                          className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded-full min-w-[18px] text-center leading-none shadow-xs ${
+                            concSilenciado
+                              ? 'bg-amber-400 text-slate-950 ring-1 ring-amber-200'
+                              : 'bg-rose-500 text-white ring-1 ring-rose-300'
+                          }`}
+                          title={`${unread} nova(s) mensagem(ns) não lida(s)${
+                            concSilenciado ? ' (conversa silenciada)' : ''
+                          }`}
+                        >
+                          {unread}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <span
+                    className={`text-[10px] truncate w-full mt-0.5 leading-tight ${
+                      ativo
+                        ? 'text-teal-100'
+                        : unread > 0
+                        ? 'text-teal-300 font-semibold'
+                        : 'text-slate-400'
+                    }`}
+                    title={ultimaMsg ? `${ultimaMsg.autor}: ${ultimaMsg.texto}` : 'Sem mensagens'}
+                  >
+                    {fragmentoTexto}
+                  </span>
                 </button>
               );
             })}
@@ -556,6 +746,7 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
               {CANAIS_RAPIDOS.map((cn) => {
                 const ativo = canalAtivo === cn.id;
                 const silenciado = chatStore.isSalaSilenciada(concursoAtivoId, cn.id);
+                const unreadCn = unreadByCanal[`${concursoAtivoId}_${cn.id}`] || 0;
                 return (
                   <button
                     key={cn.id}
@@ -569,6 +760,17 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
                   >
                     <span>#{cn.nome}</span>
                     {silenciado && <BellOff className="w-2.5 h-2.5 text-amber-600" />}
+                    {unreadCn > 0 && (
+                      <span
+                        className={`text-[9px] font-extrabold px-1.5 py-0.2 rounded-full ${
+                          silenciado
+                            ? 'bg-amber-500 text-white'
+                            : 'bg-rose-500 text-white'
+                        }`}
+                      >
+                        {unreadCn}
+                      </span>
+                    )}
                   </button>
                 );
               })}
