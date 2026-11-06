@@ -1,4 +1,5 @@
-import { MensagemPrivada, BloqueioUsuario } from '../types';
+import { MensagemPrivada, BloqueioUsuario, HistoricoEdicaoMensagem, Usuario } from '../types';
+import { podeEditarMensagemChat } from './chatStore';
 import { cloudSync } from './cloudSync';
 import { chatRealtimeClient } from './chatRealtimeClient';
 import { userRegistryStore } from './userRegistryStore';
@@ -411,5 +412,57 @@ export const dmStore = {
     );
     localStorage.setItem(BLOCK_STORAGE_KEY, JSON.stringify(blocks));
     window.dispatchEvent(new CustomEvent('certam_blocked_updated'));
+  },
+
+  removerMensagem(msgId: string) {
+    const list = this.getMensagens().filter((m) => m.id !== msgId);
+    this.salvarMensagens(list);
+  },
+
+  editarMensagem(
+    msgId: string,
+    novoTexto: string,
+    usuario: Usuario
+  ): { sucesso: boolean; erro?: string; msg?: MensagemPrivada } {
+    const list = this.getMensagens();
+    const m = list.find((msg) => msg.id === msgId);
+    if (!m) return { sucesso: false, erro: 'Mensagem não encontrada.' };
+
+    const isAdmin = Boolean(usuario.is_admin);
+    const checagem = podeEditarMensagemChat(
+      { created_at: m.created_at, email: m.remetente_email, autor: m.remetente_nome },
+      usuario,
+      isAdmin
+    );
+    if (!checagem.pode) {
+      return { sucesso: false, erro: checagem.motivo };
+    }
+
+    const textoLimpo = (novoTexto || '').trim();
+    if (!textoLimpo) {
+      return { sucesso: false, erro: 'O texto da mensagem não pode ficar vazio.' };
+    }
+
+    if (m.texto === textoLimpo) {
+      return { sucesso: true, msg: m };
+    }
+
+    const historicoItem: HistoricoEdicaoMensagem = {
+      texto_anterior: m.texto,
+      editado_em: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+      editado_por_nome: usuario.nome || 'Usuário',
+      editado_por_email: usuario.email,
+      is_admin: isAdmin,
+    };
+
+    m.historico_edicoes = m.historico_edicoes || [];
+    m.historico_edicoes.push(historicoItem);
+    m.texto = textoLimpo;
+    m.editado = true;
+    m.editado_em = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    m.updated_at = Date.now();
+
+    this.salvarMensagens(list);
+    return { sucesso: true, msg: m };
   },
 };

@@ -5,13 +5,15 @@ import {
   SalaChatConcurso,
   CATALOGO_EMOJIS_CATEGORIAS,
   TODOS_EMOJIS_CHAT,
+  podeEditarMensagemChat,
+  CHAT_EDIT_MAX_AGE_MS,
 } from '../store/chatStore';
 import { dmStore, ContatoConversa, SugestaoContatoDm } from '../store/dmStore';
 import { useAuth } from '../store/authContext';
 import { useNotifications } from '../store/notificationContext';
 import { useChatPermissions } from '../hooks/useChatPermissions';
 import { useMessageStatus } from '../hooks/useMessageStatus';
-import { Concurso, ChatMensagem, MensagemPrivada } from '../types';
+import { Concurso, ChatMensagem, MensagemPrivada, HistoricoEdicaoMensagem } from '../types';
 import { sanitizeInput } from '../utils/security';
 import {
   MessageSquare,
@@ -51,6 +53,10 @@ import {
   Download,
   Mic,
   Square,
+  Pencil,
+  History,
+  Clock,
+  Check,
 } from 'lucide-react';
 
 interface PersistentChatWidgetProps {
@@ -86,6 +92,15 @@ interface ChatMessageItemProps {
   readStatus: { isReadByOthers: boolean; readersCount: number };
   termoBusca: string;
   isAdmin: boolean;
+  podeEditar: boolean;
+  tempoRestanteMs?: number;
+  isEditing: boolean;
+  editingText: string;
+  onSetEditingText: (txt: string) => void;
+  onIniciarEdicao: (msg: ChatMensagem) => void;
+  onSalvarEdicao: () => void;
+  onCancelarEdicao: () => void;
+  onVerHistoricoOriginal: (msg: ChatMensagem) => void;
   isEmojiPickerOpen: boolean;
   categoriaEmojiAtiva: string;
   emojisFrequentes: string[];
@@ -113,6 +128,15 @@ const ChatMessageItem = React.memo<ChatMessageItemProps>(
     readStatus,
     termoBusca,
     isAdmin,
+    podeEditar,
+    tempoRestanteMs,
+    isEditing,
+    editingText,
+    onSetEditingText,
+    onIniciarEdicao,
+    onSalvarEdicao,
+    onCancelarEdicao,
+    onVerHistoricoOriginal,
     isEmojiPickerOpen,
     categoriaEmojiAtiva,
     emojisFrequentes,
@@ -191,12 +215,82 @@ const ChatMessageItem = React.memo<ChatMessageItemProps>(
               <span className="text-[10px] text-slate-400 font-mono shrink-0">
                 {msg.data_hora}
               </span>
+              {msg.editado && (
+                <span
+                  className="text-[10px] text-slate-400 italic font-normal shrink-0"
+                  title={msg.editado_em ? `Alterada às ${msg.editado_em}` : 'Mensagem alterada'}
+                >
+                  (editada)
+                </span>
+              )}
+              {isAdmin && Array.isArray(msg.historico_edicoes) && msg.historico_edicoes.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => onVerHistoricoOriginal(msg)}
+                  className="inline-flex items-center gap-0.5 text-[9px] font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200/80 px-1.5 py-0.5 rounded cursor-pointer transition-colors shrink-0"
+                  title="Ver conteúdo original antes das alterações (Exclusivo Administrador)"
+                >
+                  <History className="w-2.5 h-2.5 text-amber-600" />
+                  <span>Original ({msg.historico_edicoes.length})</span>
+                </button>
+              )}
             </div>
           </div>
 
-          <p className="text-slate-700 leading-relaxed whitespace-pre-line break-words mb-2">
-            {destacarTextoBusca(msg.texto, termoBusca)}
-          </p>
+          {isEditing ? (
+            <div className="my-2 p-2.5 bg-slate-50 border border-teal-300 rounded-xl space-y-2">
+              <div className="flex items-center justify-between text-[10px] text-teal-800 font-bold">
+                <span className="flex items-center gap-1">
+                  <Pencil className="w-3 h-3 text-teal-600" />
+                  <span>Editar mensagem</span>
+                </span>
+                {typeof tempoRestanteMs === 'number' && tempoRestanteMs < Infinity && (
+                  <span className="text-amber-700 font-mono text-[9px] flex items-center gap-1 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                    <Clock className="w-2.5 h-2.5" />
+                    <span>Restam {Math.max(1, Math.ceil(tempoRestanteMs / 60000))} min</span>
+                  </span>
+                )}
+              </div>
+              <textarea
+                value={editingText}
+                onChange={(e) => onSetEditingText(e.target.value)}
+                rows={2}
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    onSalvarEdicao();
+                  } else if (e.key === 'Escape') {
+                    onCancelarEdicao();
+                  }
+                }}
+                className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-teal-500"
+                placeholder="Digite o novo texto da mensagem..."
+              />
+              <div className="flex items-center justify-end gap-1.5">
+                <button
+                  type="button"
+                  onClick={onCancelarEdicao}
+                  className="px-2.5 py-1 text-[11px] font-bold text-slate-600 hover:bg-slate-200 rounded-lg cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={onSalvarEdicao}
+                  disabled={!editingText.trim()}
+                  className="px-3 py-1 text-[11px] font-bold bg-[#07192B] hover:bg-[#0C2640] text-[#2DD4AA] rounded-lg transition-all cursor-pointer disabled:opacity-50 flex items-center gap-1 shadow-2xs"
+                >
+                  <Check className="w-3 h-3" />
+                  <span>Salvar</span>
+                </button>
+              </div>
+            </div>
+          ) : (
+            <p className="text-slate-700 leading-relaxed whitespace-pre-line break-words mb-2">
+              {destacarTextoBusca(msg.texto, termoBusca)}
+            </p>
+          )}
 
           {msg.audio_base64 && (
             <div className="mb-2 p-2 rounded-xl bg-teal-50/70 border border-teal-200/80 flex flex-col gap-1">
@@ -405,24 +499,37 @@ const ChatMessageItem = React.memo<ChatMessageItemProps>(
               )}
             </div>
 
-            {isAdmin && (
-              <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5">
+              {podeEditar && !isEditing && (
                 <button
                   type="button"
-                  onClick={() => onAlternarFixado(msg.id)}
-                  className="text-[10px] text-amber-700 hover:underline cursor-pointer"
+                  onClick={() => onIniciarEdicao(msg)}
+                  className="text-[10px] text-teal-700 hover:text-teal-900 hover:underline flex items-center gap-0.5 cursor-pointer ml-1"
+                  title="Editar mensagem enviada (limite de 15 minutos)"
                 >
-                  {msg.is_fixado ? 'Desafixar' : 'Fixar'}
+                  <Pencil className="w-2.5 h-2.5" />
+                  <span>Editar</span>
                 </button>
-                <button
-                  type="button"
-                  onClick={() => onApagar(msg.id)}
-                  className="text-[10px] text-rose-600 hover:underline flex items-center gap-0.5 cursor-pointer"
-                >
-                  <Trash2 className="w-2.5 h-2.5" />
-                </button>
-              </div>
-            )}
+              )}
+              {isAdmin && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => onAlternarFixado(msg.id)}
+                    className="text-[10px] text-amber-700 hover:underline cursor-pointer"
+                  >
+                    {msg.is_fixado ? 'Desafixar' : 'Fixar'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onApagar(msg.id)}
+                    className="text-[10px] text-rose-600 hover:underline flex items-center gap-0.5 cursor-pointer"
+                  >
+                    <Trash2 className="w-2.5 h-2.5" />
+                  </button>
+                </>
+              )}
+            </div>
           </div>
         </div>
       </>
@@ -439,10 +546,37 @@ interface DmMessageItemProps {
   dmReadStatus: { isReadByOthers: boolean; readersCount: number };
   termoBusca: string;
   destacarTextoBusca: (txt: string, termo: string) => React.ReactNode;
+  isAdmin: boolean;
+  podeEditar: boolean;
+  tempoRestanteMs?: number;
+  isEditing: boolean;
+  editingText: string;
+  onSetEditingText: (txt: string) => void;
+  onIniciarEdicao: (m: MensagemPrivada) => void;
+  onSalvarEdicao: () => void;
+  onCancelarEdicao: () => void;
+  onVerHistoricoOriginal: (m: MensagemPrivada) => void;
 }
 
 const DmMessageItem = React.memo<DmMessageItemProps>(
-  ({ m, souEu, isPrimeiraNaoLida, dmReadStatus, termoBusca, destacarTextoBusca }) => {
+  ({
+    m,
+    souEu,
+    isPrimeiraNaoLida,
+    dmReadStatus,
+    termoBusca,
+    destacarTextoBusca,
+    isAdmin,
+    podeEditar,
+    tempoRestanteMs,
+    isEditing,
+    editingText,
+    onSetEditingText,
+    onIniciarEdicao,
+    onSalvarEdicao,
+    onCancelarEdicao,
+    onVerHistoricoOriginal,
+  }) => {
     return (
       <>
         {isPrimeiraNaoLida && (
@@ -467,9 +601,60 @@ const DmMessageItem = React.memo<DmMessageItemProps>(
                 : 'bg-white text-slate-800 rounded-bl-xs border border-slate-200 shadow-2xs'
             }`}
           >
-            <p className="whitespace-pre-line break-words">
-              {destacarTextoBusca(m.texto, termoBusca)}
-            </p>
+            {isEditing ? (
+              <div className="my-1.5 p-2 bg-slate-900/90 text-white border border-teal-400 rounded-xl space-y-2">
+                <div className="flex items-center justify-between text-[10px] text-teal-300 font-bold">
+                  <span className="flex items-center gap-1">
+                    <Pencil className="w-3 h-3" />
+                    <span>Editar mensagem privada</span>
+                  </span>
+                  {typeof tempoRestanteMs === 'number' && tempoRestanteMs < Infinity && (
+                    <span className="text-amber-300 font-mono text-[9px] flex items-center gap-1">
+                      <Clock className="w-2.5 h-2.5" />
+                      <span>Restam {Math.max(1, Math.ceil(tempoRestanteMs / 60000))} min</span>
+                    </span>
+                  )}
+                </div>
+                <textarea
+                  value={editingText}
+                  onChange={(e) => onSetEditingText(e.target.value)}
+                  rows={2}
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      onSalvarEdicao();
+                    } else if (e.key === 'Escape') {
+                      onCancelarEdicao();
+                    }
+                  }}
+                  className="w-full p-2 bg-slate-800 border border-slate-600 rounded-lg text-xs text-white focus:outline-none focus:ring-1 focus:ring-teal-400"
+                />
+                <div className="flex items-center justify-end gap-1.5">
+                  <button
+                    type="button"
+                    onClick={onCancelarEdicao}
+                    className="px-2 py-0.5 text-[11px] font-bold text-slate-300 hover:text-white cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onSalvarEdicao}
+                    disabled={!editingText.trim()}
+                    className="px-2.5 py-0.5 text-[11px] font-bold bg-[#2DD4AA] text-slate-950 rounded-lg cursor-pointer disabled:opacity-50 flex items-center gap-1 shadow-2xs"
+                  >
+                    <Check className="w-3 h-3" />
+                    <span>Salvar</span>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <p className="whitespace-pre-line break-words">
+                {destacarTextoBusca(m.texto, termoBusca)}
+              </p>
+            )}
+
             {m.audio_base64 && (
               <div
                 className={`mt-1.5 p-1.5 rounded-xl border ${
@@ -487,11 +672,43 @@ const DmMessageItem = React.memo<DmMessageItemProps>(
               </div>
             )}
             <div
-              className={`flex items-center justify-end gap-1 text-[9px] mt-1 font-mono ${
+              className={`flex items-center justify-end gap-1.5 text-[9px] mt-1 font-mono flex-wrap ${
                 souEu ? 'text-teal-300' : 'text-slate-400'
               }`}
             >
               <span>{m.data_hora}</span>
+              {m.editado && (
+                <span
+                  className="italic font-normal"
+                  title={m.editado_em ? `Alterada às ${m.editado_em}` : 'Mensagem alterada'}
+                >
+                  (editada)
+                </span>
+              )}
+              {isAdmin && Array.isArray(m.historico_edicoes) && m.historico_edicoes.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => onVerHistoricoOriginal(m)}
+                  className="inline-flex items-center gap-0.5 text-[9px] font-bold text-amber-300 bg-amber-950/60 border border-amber-500/40 px-1 py-0.2 rounded hover:bg-amber-900 cursor-pointer"
+                  title="Visualizar texto original antes das alterações (Exclusivo Administrador)"
+                >
+                  <History className="w-2.5 h-2.5 text-amber-400" />
+                  <span>Original ({m.historico_edicoes.length})</span>
+                </button>
+              )}
+              {podeEditar && !isEditing && (
+                <button
+                  type="button"
+                  onClick={() => onIniciarEdicao(m)}
+                  className={`hover:underline cursor-pointer flex items-center gap-0.5 ml-1 ${
+                    souEu ? 'text-teal-200' : 'text-teal-600'
+                  }`}
+                  title="Editar mensagem (limite de 15 minutos)"
+                >
+                  <Pencil className="w-2.5 h-2.5" />
+                  <span>Editar</span>
+                </button>
+              )}
               {souEu && dmReadStatus.isReadByOthers && (
                 <span
                   className="inline-flex items-center gap-0.5 text-teal-300"
@@ -544,6 +761,18 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
   const [dmMensagens, setDmMensagens] = useState<MensagemPrivada[]>([]);
   const [dmBusca, setDmBusca] = useState<string>('');
   const [dmIsBloqueado, setDmIsBloqueado] = useState<boolean>(false);
+
+  // Estados de edição de mensagens e histórico de alterações (15 minutos)
+  const [editingMsgId, setEditingMsgId] = useState<string | null>(null);
+  const [editingText, setEditingText] = useState<string>('');
+  const [editingType, setEditingType] = useState<'canal' | 'dm' | null>(null);
+  const [historicoModalMsg, setHistoricoModalMsg] = useState<ChatMensagem | MensagemPrivada | null>(null);
+  const [feedbackToast, setFeedbackToast] = useState<string | null>(null);
+
+  const mostrarFeedbackToast = (msg: string) => {
+    setFeedbackToast(msg);
+    setTimeout(() => setFeedbackToast(null), 3000);
+  };
 
 
   // Estados de Emojis
@@ -1993,6 +2222,67 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
     [concursoAtivoId, salaAtiva.cargoScope]
   );
 
+  const handleIniciarEdicaoCanal = React.useCallback((m: ChatMensagem) => {
+    setEditingMsgId(m.id);
+    setEditingText(m.texto);
+    setEditingType('canal');
+  }, []);
+
+  const handleSalvarEdicaoCanal = React.useCallback(() => {
+    if (!editingMsgId || !usuario) return;
+    const res = chatStore.editarMensagem(
+      concursoAtivoId,
+      salaAtiva.cargoScope,
+      'geral',
+      editingMsgId,
+      editingText,
+      usuario
+    );
+    if (res.sucesso) {
+      setEditingMsgId(null);
+      setEditingText('');
+      setEditingType(null);
+      carregarMensagensAtivas();
+      mostrarFeedbackToast('Mensagem editada com sucesso!');
+    } else {
+      alert(res.erro || 'Falha ao editar mensagem.');
+    }
+  }, [editingMsgId, usuario, concursoAtivoId, salaAtiva.cargoScope, editingText, carregarMensagensAtivas]);
+
+  const handleIniciarEdicaoDm = React.useCallback((m: MensagemPrivada) => {
+    setEditingMsgId(m.id);
+    setEditingText(m.texto);
+    setEditingType('dm');
+  }, []);
+
+  const handleSalvarEdicaoDm = React.useCallback(() => {
+    if (!editingMsgId || !usuario) return;
+    const res = dmStore.editarMensagem(editingMsgId, editingText, usuario);
+    if (res.sucesso) {
+      setEditingMsgId(null);
+      setEditingText('');
+      setEditingType(null);
+      setDmMensagens(dmStore.getMensagens());
+      mostrarFeedbackToast('Mensagem privada editada com sucesso!');
+    } else {
+      alert(res.erro || 'Falha ao editar mensagem privada.');
+    }
+  }, [editingMsgId, usuario, editingText]);
+
+  const handleCancelarEdicao = React.useCallback(() => {
+    setEditingMsgId(null);
+    setEditingText('');
+    setEditingType(null);
+  }, []);
+
+  const handleVerHistoricoOriginal = React.useCallback(
+    (m: ChatMensagem | MensagemPrivada) => {
+      if (!isAdmin) return;
+      setHistoricoModalMsg(m);
+    },
+    [isAdmin]
+  );
+
   const handleInserirEmojiTexto = (emoji: string) => {
     setTexto((prev) => `${prev}${emoji}`);
     chatStore.registrarUsoEmoji(emoji);
@@ -3094,6 +3384,9 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
                                 usuario
                               );
                               const readStatus = getMessageReadStatus(msg.id);
+                              const checagemEdicao = podeEditarMensagemChat(msg, usuario, Boolean(isAdmin));
+                              const podeEditar = checagemEdicao.pode;
+                              const isEditing = editingMsgId === msg.id && editingType === 'canal';
 
                               return (
                                 <ChatMessageItem
@@ -3108,6 +3401,15 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
                                   readStatus={readStatus}
                                   termoBusca={termoBuscaHistorico}
                                   isAdmin={Boolean(isAdmin)}
+                                  podeEditar={podeEditar}
+                                  tempoRestanteMs={checagemEdicao.tempoRestanteMs}
+                                  isEditing={isEditing}
+                                  editingText={isEditing ? editingText : ''}
+                                  onSetEditingText={setEditingText}
+                                  onIniciarEdicao={handleIniciarEdicaoCanal}
+                                  onSalvarEdicao={handleSalvarEdicaoCanal}
+                                  onCancelarEdicao={handleCancelarEdicao}
+                                  onVerHistoricoOriginal={handleVerHistoricoOriginal}
                                   isEmojiPickerOpen={emojiPickerMsgId === msg.id}
                                   categoriaEmojiAtiva={categoriaEmojiAtiva}
                                   emojisFrequentes={emojisFrequentes}
@@ -3300,6 +3602,14 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
                                 m.remetente_email.trim().toLowerCase() === meuEmail;
                               const isPrimeiraNaoLida = primeiraNaoLidaId === m.id;
                               const dmReadStatus = getMessageReadStatus(m.id);
+                              const checagemEdicaoDm = podeEditarMensagemChat(
+                                { created_at: m.created_at, email: m.remetente_email, autor: m.remetente_nome },
+                                usuario,
+                                Boolean(isAdmin)
+                              );
+                              const podeEditarDm = checagemEdicaoDm.pode;
+                              const isEditingDm = editingMsgId === m.id && editingType === 'dm';
+
                               return (
                                 <DmMessageItem
                                   key={m.id}
@@ -3309,6 +3619,16 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
                                   dmReadStatus={dmReadStatus}
                                   termoBusca={termoBuscaHistorico}
                                   destacarTextoBusca={destacarTextoBusca}
+                                  isAdmin={Boolean(isAdmin)}
+                                  podeEditar={podeEditarDm}
+                                  tempoRestanteMs={checagemEdicaoDm.tempoRestanteMs}
+                                  isEditing={isEditingDm}
+                                  editingText={isEditingDm ? editingText : ''}
+                                  onSetEditingText={setEditingText}
+                                  onIniciarEdicao={handleIniciarEdicaoDm}
+                                  onSalvarEdicao={handleSalvarEdicaoDm}
+                                  onCancelarEdicao={handleCancelarEdicao}
+                                  onVerHistoricoOriginal={handleVerHistoricoOriginal}
                                 />
                               );
                             });
@@ -3531,6 +3851,102 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
               )}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Modal Exclusivo para Administrador: Histórico de Alterações da Mensagem */}
+      {isAdmin && historicoModalMsg && (
+        <div className="fixed inset-0 z-[160] bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-lg w-full overflow-hidden flex flex-col max-h-[85vh] animate-in fade-in zoom-in-95 duration-150">
+            <div className="bg-[#07192B] text-white p-4 flex items-center justify-between border-b border-[#0F2942]">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center">
+                  <History className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-sm text-white">Histórico de Alterações</h4>
+                  <p className="text-[11px] text-teal-300 font-mono">
+                    Visualização restrita aos administradores
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setHistoricoModalMsg(null)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-4 overflow-y-auto space-y-3.5 text-xs">
+              <div className="p-3 bg-amber-50/80 border border-amber-200 rounded-xl text-amber-900 text-[11px] leading-relaxed flex items-start gap-2">
+                <ShieldAlert className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <div>
+                  <strong>Auditoria e Segurança:</strong> Apenas administradores do sistema têm permissão para visualizar o conteúdo pré-alteração. Candidatos comuns veem unicamente o rótulo <em>(editada)</em>.
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
+                  Versões Anteriores ({historicoModalMsg.historico_edicoes?.length || 0})
+                </span>
+
+                {historicoModalMsg.historico_edicoes?.map((hist, idx) => (
+                  <div
+                    key={idx}
+                    className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1.5"
+                  >
+                    <div className="flex items-center justify-between text-[10px] text-slate-500 font-mono">
+                      <span className="font-bold text-slate-800">
+                        {idx === 0
+                          ? '📝 Conteúdo Original (Antes da 1ª Edição)'
+                          : `Versão #${idx + 1}`}
+                      </span>
+                      <span>Registrado às {hist.editado_em}</span>
+                    </div>
+                    <p className="text-slate-900 bg-white p-2.5 rounded-lg border border-slate-200/90 whitespace-pre-line break-words text-xs font-sans leading-relaxed">
+                      {hist.texto_anterior}
+                    </p>
+                    <div className="text-[10px] text-slate-400 flex items-center justify-between">
+                      <span>Editado por: <strong className="text-slate-600">{hist.editado_por_nome}</strong></span>
+                      {hist.is_admin && (
+                        <span className="text-[9px] bg-teal-100 text-teal-800 px-1 rounded font-bold">Admin</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+
+                <div className="p-3 bg-teal-50/70 rounded-xl border border-teal-300 space-y-1.5 mt-2">
+                  <div className="flex items-center justify-between text-[10px] text-teal-900 font-mono font-bold">
+                    <span>✅ Versão Atual (Texto em Exibição)</span>
+                    <span>{historicoModalMsg.editado_em ? `Alterada às ${historicoModalMsg.editado_em}` : ''}</span>
+                  </div>
+                  <p className="text-slate-900 bg-white p-2.5 rounded-lg border border-teal-200 whitespace-pre-line break-words text-xs font-sans leading-relaxed">
+                    {historicoModalMsg.texto}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-3 bg-slate-50 border-t border-slate-200 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setHistoricoModalMsg(null)}
+                className="px-4 py-2 bg-[#07192B] hover:bg-[#0C2640] text-white font-bold text-xs rounded-xl cursor-pointer transition-colors"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Toast Feedback */}
+      {feedbackToast && (
+        <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[200] bg-slate-900 text-teal-300 text-xs font-bold px-4 py-2.5 rounded-xl shadow-xl border border-teal-500/40 flex items-center gap-2 animate-in fade-in slide-in-from-bottom-2 duration-150">
+          <Check className="w-4 h-4 text-emerald-400" />
+          <span>{feedbackToast}</span>
         </div>
       )}
     </div>

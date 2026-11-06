@@ -1,4 +1,4 @@
-import { ChatMensagem, CanalChatId, Usuario, Concurso, Candidato, Lote } from '../types';
+import { ChatMensagem, CanalChatId, Usuario, Concurso, Candidato, Lote, HistoricoEdicaoMensagem } from '../types';
 import { cloudSync } from './cloudSync';
 import { chatRealtimeClient, ChatConnectionState } from './chatRealtimeClient';
 import { lotesStore } from './lotesStore';
@@ -13,6 +13,33 @@ const CLIENT_ANON_ID_KEY = 'certam_chat_client_id_v1';
 // Limites de retenção para purga automática de mensagens antigas (evita sobrecarga do localStorage)
 export const CHAT_MAX_MESSAGES_PER_ROOM = 100;
 export const CHAT_RETENTION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 dias
+
+// Limite para edição de mensagens pelo autor (15 minutos)
+export const CHAT_EDIT_MAX_AGE_MS = 15 * 60 * 1000;
+
+export function podeEditarMensagemChat(
+  msg: { created_at?: number; email?: string; remetente_email?: string; autor?: string },
+  usuario: Usuario | null,
+  isAdmin: boolean
+): { pode: boolean; motivo?: string; tempoRestanteMs?: number } {
+  if (!usuario) return { pode: false, motivo: 'Você precisa estar autenticado.' };
+  if (isAdmin || Boolean(usuario.is_admin)) {
+    return { pode: true, tempoRestanteMs: Infinity };
+  }
+  const emailMsg = (msg.email || msg.remetente_email || '').toLowerCase().trim();
+  const userEmail = (usuario.email || '').toLowerCase().trim();
+  const ehAutor = Boolean(emailMsg && userEmail && emailMsg === userEmail);
+  if (!ehAutor) {
+    return { pode: false, motivo: 'Apenas o autor pode editar sua própria mensagem.' };
+  }
+  const now = Date.now();
+  const createdAt = typeof msg.created_at === 'number' && msg.created_at > 0 ? msg.created_at : now;
+  const diff = now - createdAt;
+  if (diff > CHAT_EDIT_MAX_AGE_MS) {
+    return { pode: false, motivo: 'O limite de 15 minutos para edição expirou.' };
+  }
+  return { pode: true, tempoRestanteMs: Math.max(0, CHAT_EDIT_MAX_AGE_MS - diff) };
+}
 
 export const DEFAULT_FREQUENT_EMOJIS = ['👍', '❤️', '🔥', '🎉', '🚀', '👏', '🙏', '💡'];
 
@@ -1318,5 +1345,52 @@ export const chatStore = {
 
   apagarMensagem(concursoId: string, cargoId: string, canalId: CanalChatId, msgId: string) {
     this.removerMensagem(concursoId, cargoId, canalId, msgId);
+  },
+
+  editarMensagem(
+    concursoId: string,
+    cargoId: string,
+    canalId: CanalChatId,
+    msgId: string,
+    novoTexto: string,
+    usuario: Usuario
+  ): { sucesso: boolean; erro?: string; msg?: ChatMensagem } {
+    const msgs = this.getMensagens(concursoId, cargoId, canalId);
+    const m = msgs.find((msg) => msg.id === msgId);
+    if (!m) return { sucesso: false, erro: 'Mensagem não encontrada.' };
+
+    const isAdmin = Boolean(usuario.is_admin);
+    const checagem = podeEditarMensagemChat(m, usuario, isAdmin);
+    if (!checagem.pode) {
+      return { sucesso: false, erro: checagem.motivo };
+    }
+
+    const textoLimpo = (novoTexto || '').trim();
+    if (!textoLimpo) {
+      return { sucesso: false, erro: 'O texto da mensagem não pode ficar vazio.' };
+    }
+
+    if (m.texto === textoLimpo) {
+      return { sucesso: true, msg: m };
+    }
+
+    // Salva histórico da edição (conteúdo original antes da alteração é restrito a administradores)
+    const historicoItem: HistoricoEdicaoMensagem = {
+      texto_anterior: m.texto,
+      editado_em: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+      editado_por_nome: usuario.nome || 'Usuário',
+      editado_por_email: usuario.email,
+      is_admin: isAdmin,
+    };
+
+    m.historico_edicoes = m.historico_edicoes || [];
+    m.historico_edicoes.push(historicoItem);
+    m.texto = textoLimpo;
+    m.editado = true;
+    m.editado_em = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    m.updated_at = Date.now();
+
+    this.salvarMensagens(concursoId, cargoId, canalId, msgs, true);
+    return { sucesso: true, msg: m };
   },
 };

@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { ChatMensagem, CanalChatId } from '../types';
+import { ChatMensagem, CanalChatId, HistoricoEdicaoMensagem } from '../types';
 import {
   chatStore,
   CATALOGO_EMOJIS_CATEGORIAS,
   TODOS_EMOJIS_CHAT,
   SalaChatConcurso,
+  podeEditarMensagemChat,
+  CHAT_EDIT_MAX_AGE_MS,
 } from '../store/chatStore';
 import { dmStore } from '../store/dmStore';
 import { certamStore } from '../store/certamStore';
@@ -36,6 +38,12 @@ import {
   Layers,
   Briefcase,
   ArrowDown,
+  Pencil,
+  History,
+  Clock,
+  Check,
+  X,
+  ShieldAlert,
 } from 'lucide-react';
 
 interface CommunityForumProps {
@@ -77,6 +85,41 @@ export const CommunityForum: React.FC<CommunityForumProps> = ({
   const [, setMuteVersion] = useState(0);
   const [primeiraNaoLidaId, setPrimeiraNaoLidaId] = useState<string | null>(null);
   const [mostrarBotaoDescer, setMostrarBotaoDescer] = useState(false);
+
+  // Estados de edição de mensagens e histórico de alterações (15 minutos)
+  const [editingMsgId, setEditingMsgId] = useState<string | null>(null);
+  const [editingText, setEditingText] = useState<string>('');
+  const [historicoModalMsg, setHistoricoModalMsg] = useState<ChatMensagem | null>(null);
+
+  const handleIniciarEdicao = (msg: ChatMensagem) => {
+    setEditingMsgId(msg.id);
+    setEditingText(msg.texto);
+  };
+
+  const handleSalvarEdicao = (msgId: string, cargoScope: string) => {
+    if (!usuario) return;
+    const res = chatStore.editarMensagem(
+      concursoId,
+      cargoScope,
+      'geral',
+      msgId,
+      editingText,
+      usuario
+    );
+    if (res.sucesso) {
+      setEditingMsgId(null);
+      setEditingText('');
+      const atualizadas = chatStore.getMensagens(concursoId, cargoScope, 'geral');
+      setMensagens(atualizadas);
+    } else {
+      alert(res.erro || 'Falha ao editar mensagem.');
+    }
+  };
+
+  const handleCancelarEdicao = () => {
+    setEditingMsgId(null);
+    setEditingText('');
+  };
 
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const lastRoomSelectionKeyRef = useRef<string>('');
@@ -648,7 +691,7 @@ export const CommunityForum: React.FC<CommunityForumProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             {usuario && usuario.email.toLowerCase() !== msg.email.toLowerCase() && (
               <>
                 <button
@@ -668,6 +711,17 @@ export const CommunityForum: React.FC<CommunityForumProps> = ({
                   <Ban className="w-3 h-3" /> Bloquear
                 </button>
               </>
+            )}
+
+            {podeEditarMensagemChat(msg, usuario, Boolean(isAdmin)).pode && editingMsgId !== msg.id && (
+              <button
+                type="button"
+                onClick={() => handleIniciarEdicao(msg)}
+                className="text-xs text-teal-700 hover:text-teal-900 font-medium flex items-center gap-1 cursor-pointer"
+                title="Editar mensagem (limite de 15 minutos)"
+              >
+                <Pencil className="w-3 h-3" /> Editar
+              </button>
             )}
 
             {isAdmin && (
@@ -908,11 +962,61 @@ export const CommunityForum: React.FC<CommunityForumProps> = ({
                               </span>
                             )}
                           </div>
-                          <span className="text-2xs text-slate-400 font-mono">{msg.data_hora}</span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-2xs text-slate-400 font-mono">{msg.data_hora}</span>
+                            {msg.editado && (
+                              <span
+                                className="text-2xs text-slate-400 italic"
+                                title={msg.editado_em ? `Alterada às ${msg.editado_em}` : 'Mensagem alterada'}
+                              >
+                                (editada)
+                              </span>
+                            )}
+                            {isAdmin && Array.isArray(msg.historico_edicoes) && msg.historico_edicoes.length > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => setHistoricoModalMsg(msg)}
+                                className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-800 bg-amber-100/80 hover:bg-amber-200 border border-amber-300 px-2 py-0.5 rounded-md cursor-pointer transition-colors"
+                                title="Visualizar texto original antes das alterações (Exclusivo Administrador)"
+                              >
+                                <History className="w-3 h-3 text-amber-700" />
+                                <span>Original ({msg.historico_edicoes.length})</span>
+                              </button>
+                            )}
+                          </div>
                         </div>
-                        <p className="text-xs text-slate-700 leading-relaxed whitespace-pre-line mb-2">
-                          {msg.texto}
-                        </p>
+                        {editingMsgId === msg.id ? (
+                          <div className="my-2 p-3 bg-white border border-teal-300 rounded-xl space-y-2">
+                            <textarea
+                              value={editingText}
+                              onChange={(e) => setEditingText(e.target.value)}
+                              rows={2}
+                              autoFocus
+                              className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-teal-500"
+                            />
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                type="button"
+                                onClick={handleCancelarEdicao}
+                                className="px-3 py-1 text-xs font-bold text-slate-600 hover:bg-slate-200 rounded-lg cursor-pointer"
+                              >
+                                Cancelar
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleSalvarEdicao(msg.id, salaAtual.cargoScope)}
+                                disabled={!editingText.trim()}
+                                className="px-3 py-1 text-xs font-bold bg-[#07192B] text-[#2DD4AA] rounded-lg cursor-pointer disabled:opacity-50 flex items-center gap-1"
+                              >
+                                <Check className="w-3.5 h-3.5" /> Salvar
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="text-xs text-slate-700 leading-relaxed whitespace-pre-line mb-2">
+                            {msg.texto}
+                          </p>
+                        )}
                         {renderMessageActionsAndReactions(msg)}
                       </div>
                     ))}
@@ -973,14 +1077,73 @@ export const CommunityForum: React.FC<CommunityForumProps> = ({
                                     </span>
                                   )}
                                 </div>
-                                <span className="text-2xs text-slate-400 font-mono">
-                                  {msg.data_hora}
-                                </span>
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="text-2xs text-slate-400 font-mono">
+                                    {msg.data_hora}
+                                  </span>
+                                  {msg.editado && (
+                                    <span
+                                      className="text-2xs text-slate-400 italic"
+                                      title={msg.editado_em ? `Alterada às ${msg.editado_em}` : 'Mensagem alterada'}
+                                    >
+                                      (editada)
+                                    </span>
+                                  )}
+                                  {isAdmin && Array.isArray(msg.historico_edicoes) && msg.historico_edicoes.length > 0 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setHistoricoModalMsg(msg)}
+                                      className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2 py-0.5 rounded-md cursor-pointer transition-colors"
+                                      title="Visualizar texto original antes das alterações (Exclusivo Administrador)"
+                                    >
+                                      <History className="w-3 h-3 text-amber-600" />
+                                      <span>Original ({msg.historico_edicoes.length})</span>
+                                    </button>
+                                  )}
+                                </div>
                               </div>
 
-                              <p className="text-xs text-slate-700 leading-relaxed whitespace-pre-line mt-1 mb-2.5">
-                                {msg.texto}
-                              </p>
+                              {editingMsgId === msg.id ? (
+                                <div className="my-2 p-3 bg-slate-50 border border-teal-300 rounded-xl space-y-2">
+                                  <div className="flex items-center justify-between text-[11px] font-bold text-teal-800">
+                                    <span className="flex items-center gap-1">
+                                      <Pencil className="w-3.5 h-3.5 text-teal-600" />
+                                      <span>Editar mensagem enviada</span>
+                                    </span>
+                                    <span className="text-[10px] text-amber-700 font-mono bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                                      Prazo de edição: até 15 min
+                                    </span>
+                                  </div>
+                                  <textarea
+                                    value={editingText}
+                                    onChange={(e) => setEditingText(e.target.value)}
+                                    rows={2}
+                                    autoFocus
+                                    className="w-full p-2.5 bg-white border border-slate-300 rounded-lg text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-teal-500"
+                                  />
+                                  <div className="flex items-center justify-end gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={handleCancelarEdicao}
+                                      className="px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-200 rounded-lg cursor-pointer"
+                                    >
+                                      Cancelar
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleSalvarEdicao(msg.id, salaAtual.cargoScope)}
+                                      disabled={!editingText.trim()}
+                                      className="px-3.5 py-1.5 text-xs font-bold bg-[#07192B] text-[#2DD4AA] rounded-lg cursor-pointer disabled:opacity-50 flex items-center gap-1 shadow-2xs"
+                                    >
+                                      <Check className="w-3.5 h-3.5" /> Salvar Alteração
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <p className="text-xs text-slate-700 leading-relaxed whitespace-pre-line mt-1 mb-2.5">
+                                  {msg.texto}
+                                </p>
+                              )}
 
                               {renderMessageActionsAndReactions(msg)}
                             </div>
@@ -1099,6 +1262,94 @@ export const CommunityForum: React.FC<CommunityForumProps> = ({
           )}
         </div>
       </div>
+
+      {/* Modal Exclusivo para Administrador: Histórico de Alterações da Mensagem */}
+      {isAdmin && historicoModalMsg && (
+        <div className="fixed inset-0 z-[160] bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-lg w-full overflow-hidden flex flex-col max-h-[85vh] animate-in fade-in zoom-in-95 duration-150">
+            <div className="bg-[#07192B] text-white p-4 flex items-center justify-between border-b border-[#0F2942]">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center">
+                  <History className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-sm text-white">Histórico de Alterações</h4>
+                  <p className="text-[11px] text-teal-300 font-mono">
+                    Visualização restrita aos administradores
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setHistoricoModalMsg(null)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-4 overflow-y-auto space-y-3.5 text-xs">
+              <div className="p-3 bg-amber-50/80 border border-amber-200 rounded-xl text-amber-900 text-[11px] leading-relaxed flex items-start gap-2">
+                <ShieldAlert className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <div>
+                  <strong>Auditoria e Segurança:</strong> Apenas administradores do sistema têm permissão para visualizar o conteúdo pré-alteração. Candidatos comuns veem unicamente o rótulo <em>(editada)</em>.
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
+                  Versões Anteriores ({historicoModalMsg.historico_edicoes?.length || 0})
+                </span>
+
+                {historicoModalMsg.historico_edicoes?.map((hist, idx) => (
+                  <div
+                    key={idx}
+                    className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1.5"
+                  >
+                    <div className="flex items-center justify-between text-[10px] text-slate-500 font-mono">
+                      <span className="font-bold text-slate-800">
+                        {idx === 0
+                          ? '📝 Conteúdo Original (Antes da 1ª Edição)'
+                          : `Versão #${idx + 1}`}
+                      </span>
+                      <span>Registrado às {hist.editado_em}</span>
+                    </div>
+                    <p className="text-slate-900 bg-white p-2.5 rounded-lg border border-slate-200/90 whitespace-pre-line break-words text-xs font-sans leading-relaxed">
+                      {hist.texto_anterior}
+                    </p>
+                    <div className="text-[10px] text-slate-400 flex items-center justify-between">
+                      <span>Editado por: <strong className="text-slate-600">{hist.editado_por_nome}</strong></span>
+                      {hist.is_admin && (
+                        <span className="text-[9px] bg-teal-100 text-teal-800 px-1 rounded font-bold">Admin</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+
+                <div className="p-3 bg-teal-50/70 rounded-xl border border-teal-300 space-y-1.5 mt-2">
+                  <div className="flex items-center justify-between text-[10px] text-teal-900 font-mono font-bold">
+                    <span>✅ Versão Atual (Texto em Exibição)</span>
+                    <span>{historicoModalMsg.editado_em ? `Alterada às ${historicoModalMsg.editado_em}` : ''}</span>
+                  </div>
+                  <p className="text-slate-900 bg-white p-2.5 rounded-lg border border-teal-200 whitespace-pre-line break-words text-xs font-sans leading-relaxed">
+                    {historicoModalMsg.texto}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-3 bg-slate-50 border-t border-slate-200 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setHistoricoModalMsg(null)}
+                className="px-4 py-2 bg-[#07192B] hover:bg-[#0C2640] text-white font-bold text-xs rounded-xl cursor-pointer transition-colors"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

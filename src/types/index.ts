@@ -280,6 +280,14 @@ export interface FaqItem {
 
 export type CanalChatId = 'geral' | 'lotacao' | 'posse' | 'recursos';
 
+export interface HistoricoEdicaoMensagem {
+  texto_anterior: string;
+  editado_em: string;
+  editado_por_nome: string;
+  editado_por_email?: string;
+  is_admin?: boolean;
+}
+
 export interface ChatMensagem {
   id: string;
   sender_id?: string;
@@ -300,6 +308,9 @@ export interface ChatMensagem {
   reacoes?: Record<string, string[]>;
   created_at?: number;
   updated_at?: number;
+  editado?: boolean;
+  editado_em?: string;
+  historico_edicoes?: HistoricoEdicaoMensagem[];
   status_envio?: 'enviando' | 'entregue' | 'erro';
   ack_at?: number;
   erro_envio?: string;
@@ -474,6 +485,9 @@ export interface MensagemPrivada {
   lida: boolean;
   created_at?: number;
   updated_at?: number;
+  editado?: boolean;
+  editado_em?: string;
+  historico_edicoes?: HistoricoEdicaoMensagem[];
   audio_base64?: string;
   audio_duracao?: number;
   audio_mime_type?: string;

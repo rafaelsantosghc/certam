@@ -698,9 +698,59 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
     }
   };
 
-  // Escolha de comarcas na aba candidato
+  // Escolha de lotações na aba candidato
   const [minhasEscolhas, setMinhasEscolhas] = useState<string[]>([]);
   const [minhaIntencao, setMinhaIntencao] = useState<'Sim' | 'Talvez' | 'final_fila' | 'Não'>('Sim');
+  const [filtroLotacaoBusca, setFiltroLotacaoBusca] = useState('');
+
+  const termoLotacaoSingular = concurso?.tipo_lotacao || 'Lotação';
+  const termoLotacaoPlural = useMemo(() => {
+    switch (termoLotacaoSingular) {
+      case 'Comarca':
+        return 'Comarcas';
+      case 'Região':
+        return 'Regiões';
+      case 'Cidade':
+        return 'Cidades';
+      case 'Estado':
+        return 'Estados';
+      case 'Unidade':
+        return 'Unidades';
+      case 'Setor':
+        return 'Setores';
+      default:
+        return 'Lotações';
+    }
+  }, [termoLotacaoSingular]);
+
+  // Catálogo oficial de lotações pré-cadastradas no concurso pelo painel administrativo
+  const catalogoLotacoesDisponiveis = useMemo(() => {
+    if (concurso?.catalogo_lotacoes && concurso.catalogo_lotacoes.length > 0) {
+      return concurso.catalogo_lotacoes.map((item, idx) => ({
+        id: item.id || `lot-${idx}`,
+        nome: item.nome,
+        regiao: item.regiao || 'Geral',
+        vagas_total: item.vagas_total || 1,
+        ativo: item.ativo !== false,
+      }));
+    }
+    // Fallback apenas se não houver catálogo cadastrado no concurso
+    return COMARCAS_RS.map((c) => ({
+      id: `lot-${c.id}`,
+      nome: c.nome,
+      regiao: c.regiao,
+      vagas_total: c.vagas_total || 1,
+      ativo: true,
+    }));
+  }, [concurso?.catalogo_lotacoes]);
+
+  const catalogoLotacoesFiltradas = useMemo(() => {
+    const q = filtroLotacaoBusca.trim().toLowerCase();
+    if (!q) return catalogoLotacoesDisponiveis;
+    return catalogoLotacoesDisponiveis.filter(
+      (l) => l.nome.toLowerCase().includes(q) || (l.regiao && l.regiao.toLowerCase().includes(q))
+    );
+  }, [catalogoLotacoesDisponiveis, filtroLotacaoBusca]);
 
   useEffect(() => {
     if (meuCandidato) {
@@ -1016,7 +1066,7 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
             }`}
           >
             <UserCheck className="w-4 h-4" />
-            <span>Preferências de Comarcas</span>
+            <span>Preferências de Lotação</span>
           </button>
 
           <button
@@ -2758,71 +2808,103 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
                 </div>
               </div>
 
-              {/* Construtor de Lista de Comarcas */}
+              {/* Construtor de Lista de Lotações */}
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                {/* Comarcas Disponíveis com Termômetro de Disputa (Melhoria 1) */}
+                {/* Lotações Disponíveis com Termômetro de Disputa */}
                 <div className="lg:col-span-6 bg-slate-50 rounded-2xl border border-slate-200 p-4 space-y-3">
-                  <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
                     <span className="text-xs font-bold text-slate-800 uppercase tracking-wider block">
-                      Comarcas do Estado ({COMARCAS_RS.length})
+                      {termoLotacaoPlural} do Concurso ({catalogoLotacoesFiltradas.length})
                     </span>
                     <span className="inline-flex items-center gap-1 text-[10px] font-mono font-bold text-teal-800 bg-teal-50 border border-teal-200 px-2 py-0.5 rounded-md">
                       <Flame className="w-3 h-3 text-amber-500" />
                       <span>Termômetro de Disputa Ativo</span>
                     </span>
                   </div>
-                  <div className="max-h-[420px] overflow-y-auto space-y-1.5 pr-1">
-                    {COMARCAS_RS.map((comarca) => {
-                      const jaEscolhida = minhasEscolhas.includes(comarca.nome);
-                      const minhaPos = meuCandidato?.posicao ?? 999999;
-                      const concorrentesNaFrente = candidatos.filter((c) => {
-                        if (c.posicao >= minhaPos) return false;
-                        if (c.intencao === 'Não' || c.status === 'Desistência' || c.status === 'Desistente' || c.status === 'Nomeado') return false;
-                        const primOpcao = c.escolhas_comarcas?.[0] || c.comarca_desejada_1 || '';
-                        return normalizarTexto(primOpcao) === normalizarTexto(comarca.nome);
-                      }).length;
-                      const vagasDaComarca = Math.max(1, comarca.vagas_total || 1);
 
-                      return (
-                        <div
-                          key={comarca.id}
-                          className="p-2.5 bg-white rounded-xl border border-slate-200 flex items-center justify-between gap-2 text-xs hover:border-teal-400 transition-colors"
-                        >
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className="font-bold text-slate-800">{comarca.nome}</span>
-                              <span className="text-2xs text-slate-400">({comarca.regiao})</span>
-                            </div>
-                            <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                              <span className="text-[10px] font-mono text-slate-500">
-                                {vagasDaComarca} {vagasDaComarca === 1 ? 'vaga ref.' : 'vagas ref.'}
-                              </span>
-                              {concorrentesNaFrente < vagasDaComarca ? (
-                                <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
-                                  🟢 Alta Chance ({concorrentesNaFrente} à frente em 1ª op.)
-                                </span>
-                              ) : concorrentesNaFrente === vagasDaComarca ? (
-                                <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
-                                  🟡 Disputa Moderada ({concorrentesNaFrente} à frente)
-                                </span>
-                              ) : (
-                                <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-rose-50 text-rose-800 border border-rose-200">
-                                  🔴 Alta Concorrência ({concorrentesNaFrente} à frente)
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                          <button
-                            type="button"
-                            disabled={jaEscolhida}
-                            onClick={() => adicionarComarca(comarca.nome)}
-                            className="px-2.5 py-1 bg-teal-50 hover:bg-teal-100 text-teal-800 font-bold text-[11px] rounded-lg transition-colors cursor-pointer disabled:opacity-40 shrink-0"
+                  {/* Campo de Busca Rápida de Lotações */}
+                  <div className="relative">
+                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      value={filtroLotacaoBusca}
+                      onChange={(e) => setFiltroLotacaoBusca(e.target.value)}
+                      placeholder={`Buscar ${termoLotacaoSingular.toLowerCase()} por nome ou região...`}
+                      className="w-full pl-8 pr-7 py-1.5 bg-white border border-slate-300 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-teal-500 placeholder:text-slate-400"
+                    />
+                    {filtroLotacaoBusca && (
+                      <button
+                        type="button"
+                        onClick={() => setFiltroLotacaoBusca('')}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs cursor-pointer"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="max-h-[420px] overflow-y-auto space-y-1.5 pr-1">
+                    {catalogoLotacoesFiltradas.length === 0 ? (
+                      <div className="p-8 text-center text-xs text-slate-400 bg-white rounded-xl border border-dashed border-slate-200">
+                        Nenhuma {termoLotacaoSingular.toLowerCase()} encontrada para a busca informada.
+                      </div>
+                    ) : (
+                      catalogoLotacoesFiltradas.map((comarca) => {
+                        const jaEscolhida = minhasEscolhas.some(
+                          (m) => normalizarTexto(m) === normalizarTexto(comarca.nome)
+                        );
+                        const minhaPos = meuCandidato?.posicao ?? 999999;
+                        const concorrentesNaFrente = candidatos.filter((c) => {
+                          if (c.posicao >= minhaPos) return false;
+                          if (c.intencao === 'Não' || c.status === 'Desistência' || c.status === 'Desistente' || c.status === 'Nomeado') return false;
+                          const primOpcao = c.escolhas_comarcas?.[0] || c.comarca_desejada_1 || '';
+                          return normalizarTexto(primOpcao) === normalizarTexto(comarca.nome);
+                        }).length;
+                        const vagasDaComarca = Math.max(1, comarca.vagas_total || 1);
+
+                        return (
+                          <div
+                            key={comarca.id}
+                            className="p-2.5 bg-white rounded-xl border border-slate-200 flex items-center justify-between gap-2 text-xs hover:border-teal-400 transition-colors"
                           >
-                            {jaEscolhida ? 'Adicionada' : '+ Adicionar'}
-                          </button>
-                        </div>
-                      );
-                    })}
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="font-bold text-slate-800">{comarca.nome}</span>
+                                {comarca.regiao && (
+                                  <span className="text-2xs text-slate-400">({comarca.regiao})</span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                                <span className="text-[10px] font-mono text-slate-500">
+                                  {vagasDaComarca} {vagasDaComarca === 1 ? 'vaga ref.' : 'vagas ref.'}
+                                </span>
+                                {concorrentesNaFrente < vagasDaComarca ? (
+                                  <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                                    🟢 Alta Chance ({concorrentesNaFrente} à frente em 1ª op.)
+                                  </span>
+                                ) : concorrentesNaFrente === vagasDaComarca ? (
+                                  <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                                    🟡 Disputa Moderada ({concorrentesNaFrente} à frente)
+                                  </span>
+                                ) : (
+                                  <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-rose-50 text-rose-800 border border-rose-200">
+                                    🔴 Alta Concorrência ({concorrentesNaFrente} à frente)
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              disabled={jaEscolhida}
+                              onClick={() => adicionarComarca(comarca.nome)}
+                              className="px-2.5 py-1 bg-teal-50 hover:bg-teal-100 text-teal-800 font-bold text-[11px] rounded-lg transition-colors cursor-pointer disabled:opacity-40 shrink-0"
+                            >
+                              {jaEscolhida ? 'Adicionada' : '+ Adicionar'}
+                            </button>
+                          </div>
+                        );
+                      })
+                    )}
                   </div>
                 </div>
 
@@ -2836,7 +2918,7 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
                       <button
                         type="button"
                         onClick={() => setMinhasEscolhas([])}
-                        className="text-2xs font-semibold text-rose-600 hover:underline"
+                        className="text-2xs font-semibold text-rose-600 hover:underline cursor-pointer"
                       >
                         Limpar Lista
                       </button>
@@ -2844,49 +2926,90 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
 
                     <div className="max-h-[380px] overflow-y-auto space-y-1.5 pr-1">
                       {minhasEscolhas.length === 0 ? (
-                        <div className="p-8 text-center text-xs text-slate-400">
+                        <div className="p-8 text-center text-xs text-slate-400 bg-white/70 rounded-xl border border-dashed border-slate-200">
                           Clique em &apos;+ Adicionar&apos; ao lado para montar sua ordem de prioridade.
                         </div>
                       ) : (
-                        minhasEscolhas.map((comarca, idx) => (
-                          <div
-                            key={comarca}
-                            className="p-2.5 bg-white rounded-xl border border-teal-200 flex items-center justify-between text-xs shadow-2xs"
-                          >
-                            <div className="flex items-center gap-2">
-                              <span className="w-5 h-5 rounded bg-[#07192B] text-teal-300 font-mono font-bold text-xs flex items-center justify-center">
-                                {idx + 1}
-                              </span>
-                              <span className="font-bold text-slate-800">{comarca}</span>
-                            </div>
+                        minhasEscolhas.map((comarca, idx) => {
+                          const existeNoCatalogo = catalogoLotacoesDisponiveis.some(
+                            (l) => normalizarTexto(l.nome) === normalizarTexto(comarca)
+                          );
 
-                            <div className="flex items-center gap-1">
-                              <button
-                                type="button"
-                                disabled={idx === 0}
-                                onClick={() => moverComarca(idx, 'cima')}
-                                className="p-1 hover:bg-slate-100 rounded disabled:opacity-30 cursor-pointer"
+                          if (!existeNoCatalogo) {
+                            return (
+                              <div
+                                key={comarca}
+                                className="p-2.5 bg-rose-50 rounded-xl border-2 border-rose-400 flex items-center justify-between text-xs shadow-2xs animate-in fade-in duration-200"
                               >
-                                <ArrowUp className="w-3.5 h-3.5" />
-                              </button>
-                              <button
-                                type="button"
-                                disabled={idx === minhasEscolhas.length - 1}
-                                onClick={() => moverComarca(idx, 'baixo')}
-                                className="p-1 hover:bg-slate-100 rounded disabled:opacity-30 cursor-pointer"
-                              >
-                                <ArrowDown className="w-3.5 h-3.5" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => removerComarca(comarca)}
-                                className="p-1 hover:bg-rose-50 text-rose-500 rounded cursor-pointer"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <span className="w-5 h-5 rounded bg-rose-700 text-white font-mono font-bold text-xs flex items-center justify-center shrink-0">
+                                    {idx + 1}
+                                  </span>
+                                  <div className="min-w-0">
+                                    <span className="font-bold text-rose-950 truncate block line-through decoration-rose-600">
+                                      {comarca}
+                                    </span>
+                                    <span className="text-[10px] font-bold text-rose-700 block">
+                                      ⚠️ Removida do concurso (remova das preferências)
+                                    </span>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-1 shrink-0">
+                                  <button
+                                    type="button"
+                                    onClick={() => removerComarca(comarca)}
+                                    className="px-2 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg cursor-pointer flex items-center gap-1 text-[11px] font-bold transition-colors"
+                                    title="Remover das preferências"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                    <span>Remover</span>
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          }
+
+                          return (
+                            <div
+                              key={comarca}
+                              className="p-2.5 bg-white rounded-xl border border-teal-200 flex items-center justify-between text-xs shadow-2xs"
+                            >
+                              <div className="flex items-center gap-2">
+                                <span className="w-5 h-5 rounded bg-[#07192B] text-teal-300 font-mono font-bold text-xs flex items-center justify-center">
+                                  {idx + 1}
+                                </span>
+                                <span className="font-bold text-slate-800">{comarca}</span>
+                              </div>
+
+                              <div className="flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  disabled={idx === 0}
+                                  onClick={() => moverComarca(idx, 'cima')}
+                                  className="p-1 hover:bg-slate-100 rounded disabled:opacity-30 cursor-pointer"
+                                >
+                                  <ArrowUp className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={idx === minhasEscolhas.length - 1}
+                                  onClick={() => moverComarca(idx, 'baixo')}
+                                  className="p-1 hover:bg-slate-100 rounded disabled:opacity-30 cursor-pointer"
+                                >
+                                  <ArrowDown className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => removerComarca(comarca)}
+                                  className="p-1 hover:bg-rose-50 text-rose-500 rounded cursor-pointer"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
                             </div>
-                          </div>
-                        ))
+                          );
+                        })
                       )}
                     </div>
                   </div>
