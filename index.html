@@ -37,19 +37,22 @@
       SafeWebSocket.CLOSING = OriginalWebSocket.CLOSING;
       SafeWebSocket.CLOSED = OriginalWebSocket.CLOSED;
       window.WebSocket = SafeWebSocket;
-      if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.getRegistrations().then(function (regs) {
-          for (var i = 0; i < regs.length; i++) {
-            regs[i].unregister();
-          }
-        }).catch(function () {});
-      }
       if ('caches' in window) {
         window.caches.keys().then(function (keys) {
           for (var j = 0; j < keys.length; j++) {
             window.caches.delete(keys[j]);
           }
         }).catch(function () {});
+      }
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(function (regs) {
+          for (var i = 0; i < regs.length; i++) {
+            regs[i].update().catch(function () {});
+          }
+        }).catch(function () {});
+        window.addEventListener('load', function () {
+          navigator.serviceWorker.register('/sw.js', { scope: '/', updateViaCache: 'none' }).catch(function () {});
+        });
       }
     })();
   </script>
@@ -68,6 +71,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="CERTAM">
   <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="manifest" href="/manifest.webmanifest">
 
   <!-- Favicon Oficial CERTAM -->
   <link rel="icon" type="image/svg+xml" href="/icon.svg">

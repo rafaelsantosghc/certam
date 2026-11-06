@@ -134,20 +134,48 @@ export const certamStore = {
     const list = this.getConcursos();
     const exact = list.find((c) => c.id === id);
     if (exact) return exact;
-    const normTarget = id.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_');
+    const normTarget = id.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+    const rawSlugTarget = id.trim().toLowerCase().replace(/[^a-z0-9]/g, '_');
     return (
-      list.find(
-        (c) =>
-          c.id.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_') === normTarget ||
-          `${(c.orgao || '').trim().toLowerCase()}_${(c.ano || '').trim()}` === normTarget
-      ) || null
+      list.find((c) => {
+        const cIdNorm = c.id.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+        const orgaoAnoNorm = `${(c.orgao || '').trim().toLowerCase()}_${(c.ano || '').trim()}`
+          .replace(/[^a-z0-9]+/g, '_')
+          .replace(/^_+|_+$/g, '');
+        const nomeNorm = (c.nome || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+        const nomeRawSlug = (c.nome || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '_');
+        return (
+          cIdNorm === normTarget ||
+          orgaoAnoNorm === normTarget ||
+          (nomeNorm && (nomeNorm === normTarget || nomeNorm.startsWith(normTarget) || normTarget.startsWith(nomeNorm))) ||
+          (nomeRawSlug && (nomeRawSlug === rawSlugTarget || nomeRawSlug.startsWith(rawSlugTarget)))
+        );
+      }) || null
     );
   },
 
   getCargo(concursoId: string, cargoId: string): Cargo | null {
     const conc = this.getConcurso(concursoId);
     if (!conc || !conc.cargos) return null;
-    return conc.cargos.find((cg) => cg.id === cargoId) || conc.cargos[0] || null;
+    if (!cargoId) return conc.cargos[0] || null;
+    const exact = conc.cargos.find((cg) => cg.id === cargoId);
+    if (exact) return exact;
+    const normCargo = cargoId.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+    const rawSlugCargo = cargoId.trim().toLowerCase().replace(/[^a-z0-9]/g, '_');
+    return (
+      conc.cargos.find((cg) => {
+        const cgIdNorm = cg.id.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+        const cgNomeNorm = (cg.nome || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+        const cgNomeRawSlug = (cg.nome || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '_');
+        return (
+          cgIdNorm === normCargo ||
+          (cgNomeNorm && (cgNomeNorm === normCargo || cgNomeNorm.startsWith(normCargo))) ||
+          (cgNomeRawSlug && (cgNomeRawSlug === rawSlugCargo || cgNomeRawSlug.startsWith(rawSlugCargo)))
+        );
+      }) ||
+      conc.cargos[0] ||
+      null
+    );
   },
 
   salvarConcurso(concurso: Concurso, forceReplace = true): boolean {

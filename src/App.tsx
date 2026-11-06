@@ -129,12 +129,17 @@ export const AppContent: React.FC = () => {
       const urlLote = params.get('lote');
 
       const concursosDisponiveis = certamStore.getConcursos();
-      const concursoValido = urlId ? concursosDisponiveis.find((c) => c.id === urlId) : null;
-      const cId = concursoValido ? urlId! : concursosDisponiveis[0]?.id || 'tjrs_2025';
+      const concursoValido = urlId ? certamStore.getConcurso(urlId) : null;
+      const cId = concursoValido ? concursoValido.id : urlId || concursosDisponiveis[0]?.id || 'tjrs_2025';
       const concRef = concursoValido || concursosDisponiveis[0];
 
+      const cargoValido =
+        urlCargo && concRef
+          ? certamStore.getCargo(concRef.id, urlCargo)
+          : null;
       const cgId =
-        (urlCargo && concRef?.cargos?.some((cg) => cg.id === urlCargo) ? urlCargo : null) ||
+        cargoValido?.id ||
+        urlCargo ||
         concRef?.cargos?.[0]?.id ||
         '';
 
@@ -213,15 +218,29 @@ export const AppContent: React.FC = () => {
     const handleConcursosSync = () => {
       const lista = certamStore.getConcursos();
       if (lista.length > 0) {
-        setConcursoId((prev) => {
-          if (prev && lista.some((c) => c.id === prev)) return prev;
-          return lista[0].id;
-        });
-        setCargoId((prev) => {
-          const conc = lista.find((c) => c.id === concursoId) || lista[0];
-          if (prev && conc?.cargos?.some((cg) => cg.id === prev)) return prev;
-          return conc?.cargos?.[0]?.id || '';
-        });
+        const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams();
+        const urlId = params.get('id');
+        const urlCargo = params.get('cargo');
+
+        let resolvedConc = urlId ? certamStore.getConcurso(urlId) : null;
+        if (!resolvedConc) {
+          resolvedConc = certamStore.getConcurso(concursoId) || lista[0];
+        }
+
+        if (resolvedConc) {
+          setConcursoId(resolvedConc.id);
+          setCargoId((prev) => {
+            if (urlCargo) {
+              const fromUrl = certamStore.getCargo(resolvedConc!.id, urlCargo);
+              if (fromUrl) return fromUrl.id;
+            }
+            if (prev) {
+              const fromPrev = certamStore.getCargo(resolvedConc!.id, prev);
+              if (fromPrev) return fromPrev.id;
+            }
+            return resolvedConc!.cargos?.[0]?.id || '';
+          });
+        }
       }
     };
     window.addEventListener('certam_concursos_updated', handleConcursosSync);

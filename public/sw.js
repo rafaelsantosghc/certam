@@ -1,50 +1,23 @@
-const CACHE_NAME = 'certam-cache-v2';
-const STATIC_ASSETS = [
-  '/',
-  '/index.html'
-];
+// CERTAM Safe Service Worker (v3)
+// Limpa caches legados do Workbox que causavam ERR_FAILED ao recarregar URLs com parâmetros (/?id=...&cargo=...)
 
-self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(STATIC_ASSETS);
-    }).then(() => self.skipWaiting())
-  );
+self.addEventListener('install', () => {
+  self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((keys) => {
-      return Promise.all(
-        keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))
-      );
-    }).then(() => self.clients.claim())
+    caches
+      .keys()
+      .then((keys) => Promise.all(keys.map((key) => caches.delete(key))))
+      .then(() => self.clients.claim())
   );
 });
 
 self.addEventListener('fetch', (event) => {
-  const { request } = event;
-  if (request.method !== 'GET') return;
-
-  // Stale-While-Revalidate Strategy
-  event.respondWith(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.match(request).then((cachedResponse) => {
-        const fetchPromise = fetch(request).then((networkResponse) => {
-          if (networkResponse && (networkResponse.status === 200 || networkResponse.type === 'basic' || networkResponse.type === 'cors')) {
-            cache.put(request, networkResponse.clone());
-          }
-          return networkResponse;
-        }).catch(() => {
-          return cachedResponse;
-        });
-
-        return cachedResponse || fetchPromise;
-      });
-    }).catch(() => {
-      if (request.mode === 'navigate') {
-        return caches.match('/');
-      }
-    })
-  );
+  // Não intercepta requisições de navegação (mode === 'navigate') nem de API,
+  // permitindo que o navegador resolva qualquer rota /?id=...&cargo=...&tab=... diretamente sem ERR_FAILED.
+  if (!event || !event.request) return;
+  return;
 });
+
