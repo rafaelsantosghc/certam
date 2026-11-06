@@ -190,7 +190,9 @@ function normalizeAndMigrateDb(db: SyncDbFileFormat): { db: SyncDbFileFormat; mi
     if (
       !k.startsWith('certam_') ||
       k === 'certam_diag_heartbeat' ||
-      (k.startsWith('certam_chat_') && !k.startsWith('certam_chat_messages_'))
+      (k.startsWith('certam_chat_') &&
+        !k.startsWith('certam_chat_messages_') &&
+        k !== 'certam_chat_read_timestamps_v1')
     ) {
       delete entries[k];
       delete versions[k];
@@ -887,7 +889,11 @@ function certamSyncPlugin(): Plugin {
             for (const [rawKey, v] of Object.entries(incoming)) {
               if (rawKey === '_test_ping') continue;
               const k = LEGACY_KEY_MIGRATIONS[rawKey] || rawKey;
-              if (k.startsWith('certam_chat_') && !k.startsWith('certam_chat_messages_')) {
+              if (
+                k.startsWith('certam_chat_') &&
+                !k.startsWith('certam_chat_messages_') &&
+                k !== 'certam_chat_read_timestamps_v1'
+              ) {
                 continue;
               }
               if (typeof v === 'string') {

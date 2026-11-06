@@ -9,6 +9,7 @@ import {
 import { dmStore, ContatoConversa, SugestaoContatoDm } from '../store/dmStore';
 import { useAuth } from '../store/authContext';
 import { useChatPermissions } from '../hooks/useChatPermissions';
+import { useMessageStatus } from '../hooks/useMessageStatus';
 import { Concurso, ChatMensagem, MensagemPrivada } from '../types';
 import { sanitizeInput } from '../utils/security';
 import {
@@ -45,6 +46,7 @@ import {
   Briefcase,
   Award,
   Layers,
+  Eye,
 } from 'lucide-react';
 
 interface PersistentChatWidgetProps {
@@ -92,6 +94,9 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
   const [dmMensagens, setDmMensagens] = useState<MensagemPrivada[]>([]);
   const [dmBusca, setDmBusca] = useState<string>('');
   const [dmIsBloqueado, setDmIsBloqueado] = useState<boolean>(false);
+
+  // Busca em tempo real no histórico de mensagens da conversa ativa
+  const [termoBuscaHistorico, setTermoBuscaHistorico] = useState<string>('');
 
   // Estados de Emojis
   const [emojiPickerMsgId, setEmojiPickerMsgId] = useState<string | null>(null);
@@ -201,6 +206,67 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
       setSalaAtivaId(salasDoConcursoAtivo[0].id);
     }
   }, [salasDoConcursoAtivo, salaAtivaId]);
+
+  const chaveSalaStatusLeitura = useMemo(() => {
+    if (abaModo === 'concursos') {
+      return `${concursoAtivoId}_${salaAtiva.id}`;
+    }
+    if (abaModo === 'privadas' && dmContatoEmail && meuEmail) {
+      const par = [meuEmail.toLowerCase(), dmContatoEmail.toLowerCase()].sort().join('__');
+      return `dm_${par}`;
+    }
+    return '';
+  }, [abaModo, concursoAtivoId, salaAtiva.id, dmContatoEmail, meuEmail]);
+
+  // Hook useMessageStatus: cruza timestamps de leitura do localStorage com o array de mensagens
+  const { getMessageReadStatus } = useMessageStatus(
+    abaModo === 'concursos' ? mensagens : dmMensagens,
+    chaveSalaStatusLeitura,
+    usuario,
+    isOpen && mobileViewMode === 'mensagens'
+  );
+
+  // Filtra histórico de mensagens pelo texto buscado em tempo real
+  const mensagensFiltradasBusca = useMemo(() => {
+    const q = termoBuscaHistorico.trim().toLowerCase();
+    if (!q) return mensagens;
+    return mensagens.filter(
+      (m) =>
+        m.texto.toLowerCase().includes(q) ||
+        (m.autor && m.autor.toLowerCase().includes(q))
+    );
+  }, [mensagens, termoBuscaHistorico]);
+
+  const dmMensagensFiltradasBusca = useMemo(() => {
+    const q = termoBuscaHistorico.trim().toLowerCase();
+    if (!q) return dmMensagens;
+    return dmMensagens.filter((m) => m.texto.toLowerCase().includes(q));
+  }, [dmMensagens, termoBuscaHistorico]);
+
+  const destacarTextoBusca = (textoOriginal: string, termo: string): React.ReactNode => {
+    const limpo = termo.trim();
+    if (!limpo || !textoOriginal) return textoOriginal;
+    try {
+      const escapado = limpo.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = new RegExp(`(${escapado})`, 'gi');
+      const partes = textoOriginal.split(regex);
+      if (partes.length <= 1) return textoOriginal;
+      return partes.map((parte, idx) =>
+        parte.toLowerCase() === limpo.toLowerCase() ? (
+          <mark
+            key={`hl-${idx}`}
+            className="bg-amber-200 text-slate-950 font-bold px-0.5 rounded-xs"
+          >
+            {parte}
+          </mark>
+        ) : (
+          <React.Fragment key={`txt-${idx}`}>{parte}</React.Fragment>
+        )
+      );
+    } catch {
+      return textoOriginal;
+    }
+  };
 
   /**
    * Identifica o ID da mensagem mais antiga não lida em uma sala de concurso ANTES de marcá-la como lida.
@@ -954,7 +1020,7 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
   };
 
   return (
-    <div className="fixed bottom-4 right-4 z-[9990] flex flex-col items-end max-w-[calc(100vw-1rem)]">
+    <div className="fixed bottom-4 right-4 z-[45] flex flex-col items-end max-w-[calc(100vw-1rem)]">
       {/* Balãozinho flutuante compacto no canto inferior direito seguindo o padrão visual do botão de abrir conversas */}
       {resumoBanner && (
         <div
@@ -1607,21 +1673,59 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
                     </div>
                   ) : (
                     <>
+                      {/* Barra de Busca em Tempo Real no Histórico de Mensagens */}
+                      <div className="px-2.5 py-1.5 bg-white border-b border-slate-200/80 flex items-center gap-1.5 shrink-0">
+                        <div className="relative flex-1">
+                          <Search className="w-3 h-3 text-slate-400 absolute left-2.5 top-2" />
+                          <input
+                            type="text"
+                            value={termoBuscaHistorico}
+                            onChange={(e) => setTermoBuscaHistorico(e.target.value)}
+                            placeholder="Buscar no histórico desta conversa..."
+                            className="w-full pl-7 pr-6 py-1 bg-slate-50 border border-slate-200 rounded-lg text-[10px] text-slate-800 placeholder:text-slate-400 focus:outline-hidden focus:border-teal-500 focus:bg-white"
+                          />
+                          {termoBuscaHistorico && (
+                            <button
+                              type="button"
+                              onClick={() => setTermoBuscaHistorico('')}
+                              className="absolute right-1.5 top-1.5 text-slate-400 hover:text-slate-600 cursor-pointer"
+                              title="Limpar busca"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
+                        {termoBuscaHistorico.trim() && (
+                          <span className="text-[9px] font-mono font-bold text-teal-700 bg-teal-50 border border-teal-200 px-1.5 py-0.5 rounded shrink-0">
+                            {mensagensFiltradasBusca.length} resultado(s)
+                          </span>
+                        )}
+                      </div>
+
                       {/* Container de tamanho fixo com overflow-y-auto posicionado a partir da mensagem mais antiga não lida */}
                       <div
                         ref={messagesContainerRef}
                         onScroll={handleContainerScroll}
                         className={`overflow-y-auto overscroll-contain p-3 space-y-2.5 bg-slate-50/60 shrink-0 relative ${
-                          isExpanded ? 'h-[400px]' : 'h-[300px]'
+                          isExpanded ? 'h-[365px]' : 'h-[265px]'
                         }`}
                       >
-                        {mensagens.length === 0 ? (
+                        {mensagensFiltradasBusca.length === 0 ? (
                           <div className="text-center py-12 px-4 text-slate-400 text-xs">
-                            Nenhuma mensagem em <strong>{salaAtiva.tituloCurto}</strong> de{' '}
-                            {concursoAtivo?.orgao}. Inicie a conversa!
+                            {termoBuscaHistorico.trim() ? (
+                              <>
+                                Nenhuma mensagem encontrada contendo{' '}
+                                <strong>"{termoBuscaHistorico}"</strong>.
+                              </>
+                            ) : (
+                              <>
+                                Nenhuma mensagem em <strong>{salaAtiva.tituloCurto}</strong> de{' '}
+                                {concursoAtivo?.orgao}. Inicie a conversa!
+                              </>
+                            )}
                           </div>
                         ) : (
-                          mensagens.map((msg) => {
+                          mensagensFiltradasBusca.map((msg) => {
                             const jaCurtiu = chatStore.usuarioCurtiuMensagem(msg, usuario);
                             const minhaReacao = chatStore.obterReacaoDoUsuario(msg, usuario);
                             const totalCurtidas = Array.isArray(msg.curtido_por)
@@ -1635,6 +1739,7 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
                               msg,
                               usuario
                             );
+                            const readStatus = getMessageReadStatus(msg.id);
 
                             return (
                               <React.Fragment key={msg.id}>
@@ -1709,7 +1814,7 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
                                   </div>
 
                                   <p className="text-slate-700 leading-relaxed whitespace-pre-line break-words mb-2">
-                                    {msg.texto}
+                                    {destacarTextoBusca(msg.texto, termoBuscaHistorico)}
                                   </p>
 
                                   {msg.status_envio === 'enviando' && (
@@ -1750,6 +1855,23 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
                                             <CheckCheck className="w-3 h-3" />
                                           </span>
                                         )}
+                                      {readStatus.isReadByOthers && (
+                                        <span
+                                          className="inline-flex items-center gap-0.5 text-[10px] font-bold text-teal-700 bg-teal-50 border border-teal-200/80 px-1.5 py-0.5 rounded-full"
+                                          title={
+                                            readStatus.readersCount > 1
+                                              ? `Mensagem visualizada por ${readStatus.readersCount} participantes`
+                                              : 'Mensagem visualizada por outro participante'
+                                          }
+                                        >
+                                          <Eye className="w-3 h-3 text-teal-600" />
+                                          {readStatus.readersCount > 1 && (
+                                            <span className="text-[9px]">
+                                              {readStatus.readersCount}
+                                            </span>
+                                          )}
+                                        </span>
+                                      )}
                                       <button
                                         type="button"
                                         onClick={() => handleCurtir(msg.id)}
@@ -2011,11 +2133,40 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
                         </div>
                       </div>
 
+                      {/* Barra de Busca em Tempo Real nas Mensagens Privadas */}
+                      <div className="px-2.5 py-1.5 bg-white border-b border-slate-200/80 flex items-center gap-1.5 shrink-0">
+                        <div className="relative flex-1">
+                          <Search className="w-3 h-3 text-slate-400 absolute left-2.5 top-2" />
+                          <input
+                            type="text"
+                            value={termoBuscaHistorico}
+                            onChange={(e) => setTermoBuscaHistorico(e.target.value)}
+                            placeholder="Buscar nesta conversa privada..."
+                            className="w-full pl-7 pr-6 py-1 bg-slate-50 border border-slate-200 rounded-lg text-[10px] text-slate-800 placeholder:text-slate-400 focus:outline-hidden focus:border-teal-500 focus:bg-white"
+                          />
+                          {termoBuscaHistorico && (
+                            <button
+                              type="button"
+                              onClick={() => setTermoBuscaHistorico('')}
+                              className="absolute right-1.5 top-1.5 text-slate-400 hover:text-slate-600 cursor-pointer"
+                              title="Limpar busca"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
+                        {termoBuscaHistorico.trim() && (
+                          <span className="text-[9px] font-mono font-bold text-teal-700 bg-teal-50 border border-teal-200 px-1.5 py-0.5 rounded shrink-0">
+                            {dmMensagensFiltradasBusca.length} resultado(s)
+                          </span>
+                        )}
+                      </div>
+
                       <div
                         ref={messagesContainerRef}
                         onScroll={handleContainerScroll}
                         className={`overflow-y-auto overscroll-contain p-3 space-y-2.5 bg-slate-50/60 shrink-0 relative ${
-                          isExpanded ? 'h-[410px]' : 'h-[310px]'
+                          isExpanded ? 'h-[375px]' : 'h-[275px]'
                         }`}
                       >
                         {dmIsBloqueado && (
@@ -2028,16 +2179,26 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
                           </div>
                         )}
 
-                        {dmMensagens.length === 0 ? (
+                        {dmMensagensFiltradasBusca.length === 0 ? (
                           <div className="text-center py-12 px-4 text-slate-400 text-xs">
-                            Envie a primeira mensagem privada para{' '}
-                            <strong>{dmContatoNome || dmContatoEmail}</strong>.
+                            {termoBuscaHistorico.trim() ? (
+                              <>
+                                Nenhuma mensagem encontrada contendo{' '}
+                                <strong>"{termoBuscaHistorico}"</strong>.
+                              </>
+                            ) : (
+                              <>
+                                Envie a primeira mensagem privada para{' '}
+                                <strong>{dmContatoNome || dmContatoEmail}</strong>.
+                              </>
+                            )}
                           </div>
                         ) : (
-                          dmMensagens.map((m) => {
+                          dmMensagensFiltradasBusca.map((m) => {
                             const souEu =
                               m.remetente_email.trim().toLowerCase() === meuEmail;
                             const isPrimeiraNaoLida = primeiraNaoLidaId === m.id;
+                            const dmReadStatus = getMessageReadStatus(m.id);
                             return (
                               <React.Fragment key={m.id}>
                                 {isPrimeiraNaoLida && (
@@ -2062,14 +2223,24 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
                                         : 'bg-white text-slate-800 rounded-bl-xs border border-slate-200 shadow-2xs'
                                     }`}
                                   >
-                                    <p className="whitespace-pre-line break-words">{m.texto}</p>
-                                    <span
-                                      className={`block text-[9px] mt-1 text-right font-mono ${
+                                    <p className="whitespace-pre-line break-words">
+                                      {destacarTextoBusca(m.texto, termoBuscaHistorico)}
+                                    </p>
+                                    <div
+                                      className={`flex items-center justify-end gap-1 text-[9px] mt-1 font-mono ${
                                         souEu ? 'text-teal-300' : 'text-slate-400'
                                       }`}
                                     >
-                                      {m.data_hora}
-                                    </span>
+                                      <span>{m.data_hora}</span>
+                                      {souEu && dmReadStatus.isReadByOthers && (
+                                        <span
+                                          className="inline-flex items-center gap-0.5 text-teal-300"
+                                          title="Mensagem visualizada pelo destinatário"
+                                        >
+                                          <Eye className="w-3 h-3" />
+                                        </span>
+                                      )}
+                                    </div>
                                   </div>
                                 </div>
                               </React.Fragment>

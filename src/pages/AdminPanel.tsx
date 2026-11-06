@@ -1583,8 +1583,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     <div className="space-y-6 max-w-[1880px] w-full mx-auto">
       {/* Toast flutuante */}
       {toastMsg && (
-        <div className="fixed bottom-5 right-5 z-50 flex items-center gap-2 px-4 py-3 rounded-xl shadow-xl text-xs font-semibold text-white bg-[#07192B] border border-[#2DD4AA]/40 animate-bounce">
-          <CheckCircle2 className="w-4 h-4 text-[#2DD4AA]" />
+        <div className="fixed bottom-24 right-4 sm:right-6 z-[999999] flex items-center gap-2 px-4 py-3 rounded-xl shadow-2xl text-xs font-semibold text-white bg-[#07192B] border border-[#2DD4AA]/60 animate-bounce">
+          <CheckCircle2 className="w-4 h-4 text-[#2DD4AA] shrink-0" />
           <span>{toastMsg}</span>
         </div>
       )}

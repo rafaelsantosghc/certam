@@ -778,7 +778,7 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
       {/* Toast Feedback (Item 4: XCircle para erro e CheckCircle2 para sucesso) */}
       {toastData && (
         <div
-          className={`fixed bottom-6 right-6 z-[200] px-5 py-3 rounded-xl shadow-2xl flex items-center gap-3 animate-fade-in ${
+          className={`fixed bottom-24 right-4 sm:right-6 z-[999999] px-5 py-3 rounded-xl shadow-2xl flex items-center gap-3 animate-fade-in ${
             toastData.tipo === 'erro'
               ? 'bg-[#21090f] text-rose-200 border border-rose-500/70'
               : 'bg-[#07192B] text-white border border-[#2DD4AA]'

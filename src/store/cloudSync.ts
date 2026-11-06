@@ -386,7 +386,11 @@ function shouldSyncKey(key: string): boolean {
   ) {
     return false;
   }
-  if (key.startsWith('certam_chat_') && !key.startsWith('certam_chat_messages_')) {
+  if (
+    key.startsWith('certam_chat_') &&
+    !key.startsWith('certam_chat_messages_') &&
+    key !== 'certam_chat_read_timestamps_v1'
+  ) {
     return false;
   }
   if (/^certam_candidatos_data_v[1-5]_/.test(key)) {

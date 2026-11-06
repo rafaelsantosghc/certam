@@ -257,7 +257,7 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
     <div className="space-y-8 max-w-[1880px] w-full mx-auto">
       {/* Toast Notification */}
       {toastMsg && (
-        <div className="fixed bottom-6 right-6 z-50 bg-[#07192B] text-white px-5 py-3 rounded-xl shadow-2xl border border-teal-400 flex items-center gap-3 animate-fade-in">
+        <div className="fixed bottom-24 right-4 sm:right-6 z-[999999] bg-[#07192B] text-white px-5 py-3 rounded-xl shadow-2xl border border-teal-400 flex items-center gap-3 animate-fade-in">
           <CheckCircle2 className="w-5 h-5 text-[#2DD4AA] shrink-0" />
           <span className="text-xs sm:text-sm font-semibold">{toastMsg}</span>
         </div>
