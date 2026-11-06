@@ -35,11 +35,34 @@ function isNotificacaoChatSilenciada(item: NotificacaoItem, canaisSilenciadosUsu
   return false;
 }
 
+export interface BrowserChatNotificationPayload {
+  id: string;
+  modo: 'concursos' | 'privadas';
+  concursoId?: string;
+  concursoSigla: string;
+  salaId?: string;
+  salaTitulo: string;
+  dmEmail?: string;
+  autor: string;
+  resumoTexto: string;
+  senderId?: string;
+  onClickAbrir?: () => void;
+}
+
 interface NotificationContextType {
   notificacoes: NotificacaoItem[];
   notificacoesVisiveis: NotificacaoItem[];
   naoLidasCount: number;
   toastAtivo: NotificacaoItem | null;
+  browserNotificationPermission: NotificationPermission;
+  solicitarPermissaoNotificacaoNavegador: () => Promise<NotificationPermission>;
+  dispararNotificacaoNavegador: (params: {
+    titulo: string;
+    corpo: string;
+    tag?: string;
+    onClick?: () => void;
+  }) => void;
+  notificarNovaMensagemChat: (payload: BrowserChatNotificationPayload) => void;
   exibirToast: (notif: NotificacaoItem) => void;
   fecharToast: () => void;
   marcarComoLida: (id: string) => void;
@@ -52,6 +75,10 @@ const NotificationContext = createContext<NotificationContextType>({
   notificacoesVisiveis: [],
   naoLidasCount: 0,
   toastAtivo: null,
+  browserNotificationPermission: 'default',
+  solicitarPermissaoNotificacaoNavegador: async () => 'default',
+  dispararNotificacaoNavegador: () => {},
+  notificarNovaMensagemChat: () => {},
   exibirToast: () => {},
   fecharToast: () => {},
   marcarComoLida: () => {},
@@ -65,8 +92,127 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     notificationStore.getNotificacoes()
   );
   const [toastAtivo, setToastAtivo] = useState<NotificacaoItem | null>(null);
+  const [browserNotificationPermission, setBrowserNotificationPermission] =
+    useState<NotificationPermission>(() => {
+      if (typeof window !== 'undefined' && 'Notification' in window) {
+        return window.Notification.permission;
+      }
+      return 'default';
+    });
+
   const toastTimerRef = useRef<any>(null);
   const lastProcessedIdRef = useRef<string | null>(null);
+  const notifiedBrowserChatIdsRef = useRef<Set<string>>(new Set());
+
+  const solicitarPermissaoNotificacaoNavegador = useCallback(async (): Promise<NotificationPermission> => {
+    if (typeof window === 'undefined' || !('Notification' in window)) {
+      return 'denied';
+    }
+    try {
+      if (window.Notification.permission === 'granted') {
+        setBrowserNotificationPermission('granted');
+        return 'granted';
+      }
+      const result = await window.Notification.requestPermission();
+      setBrowserNotificationPermission(result);
+      return result;
+    } catch {
+      return window.Notification.permission;
+    }
+  }, []);
+
+  const dispararNotificacaoNavegador = useCallback(
+    ({
+      titulo,
+      corpo,
+      tag,
+      onClick,
+    }: {
+      titulo: string;
+      corpo: string;
+      tag?: string;
+      onClick?: () => void;
+    }) => {
+      if (typeof window === 'undefined' || !('Notification' in window)) return;
+      if (window.Notification.permission !== 'granted') return;
+
+      try {
+        const notif = new window.Notification(titulo, {
+          body: corpo,
+          icon: '/icon.svg',
+          badge: '/icon.svg',
+          tag: tag || `certam-notif-${Date.now()}`,
+          silent: false,
+        });
+
+        notif.onclick = () => {
+          try {
+            window.focus();
+          } catch {
+            // ignore
+          }
+          onClick?.();
+          notif.close();
+        };
+
+        setTimeout(() => {
+          try {
+            notif.close();
+          } catch {
+            // ignore
+          }
+        }, 7000);
+      } catch {
+        // Fallback caso o ambiente restrinja construtor direto de Notification
+      }
+    },
+    []
+  );
+
+  const notificarNovaMensagemChat = useCallback(
+    (payload: BrowserChatNotificationPayload) => {
+      if (!payload || !payload.id) return;
+      if (notifiedBrowserChatIdsRef.current.has(payload.id)) return;
+
+      // Garante que o próprio remetente nunca receba alerta de suas próprias mensagens
+      const meusSenderIds = chatStore.obterConjuntoSenderIdsUsuarioAtual(usuario);
+      const senderNorm = String(payload.senderId || '').trim().toLowerCase();
+      if (senderNorm && meusSenderIds.has(senderNorm)) {
+        return;
+      }
+
+      // Respeita silenciamento individual de sala/concurso/DM
+      if (payload.modo === 'privadas' && payload.dmEmail) {
+        if (chatStore.isDmSilenciada(payload.dmEmail)) return;
+      } else if (payload.concursoId) {
+        if (
+          chatStore.isSalaSilenciada(payload.concursoId, payload.salaId || 'geral') ||
+          chatStore.isConcursoSilenciado(payload.concursoId)
+        ) {
+          return;
+        }
+      }
+
+      notifiedBrowserChatIdsRef.current.add(payload.id);
+
+      const titulo =
+        payload.modo === 'privadas'
+          ? `Nova mensagem privada de ${payload.autor}`
+          : `${payload.concursoSigla} • ${payload.salaTitulo}`;
+      const corpo =
+        payload.modo === 'privadas'
+          ? payload.resumoTexto
+          : `${payload.autor}: ${payload.resumoTexto}`;
+
+      dispararNotificacaoNavegador({
+        titulo,
+        corpo,
+        tag: `certam-chat-${payload.concursoId || 'dm'}-${payload.salaId || payload.dmEmail || 'geral'}`,
+        onClick: payload.onClickAbrir,
+      });
+    },
+    [usuario, dispararNotificacaoNavegador]
+  );
 
   // Filtra notificações rigorosamente de acordo com o destinatário, o papel do usuário e exclui o próprio sender_id
   const filtrarVisiveis = useCallback(
@@ -122,12 +268,19 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
       setToastAtivo(item);
 
+      // Também dispara na API de notificações do navegador caso permitido
+      dispararNotificacaoNavegador({
+        titulo: item.titulo,
+        corpo: item.mensagem,
+        tag: `certam-portal-${item.id}`,
+      });
+
       // Mantém exibição do resumo pelo período exato de 5 segundos (5000ms)
       toastTimerRef.current = setTimeout(() => {
         setToastAtivo(null);
       }, 5000);
     },
-    [usuario?.canais_silenciados]
+    [usuario, dispararNotificacaoNavegador]
   );
 
   const fecharToast = useCallback(() => {
@@ -167,7 +320,6 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
       const readIds = usuario?.read_notification_ids || [];
 
-      // Se recebemos um item específico via evento, exibe APENAS se o usuário atual for o destinatário válido
       if (novaNotifDireta) {
         if (podeExibirNotificacaoParaUsuario(novaNotifDireta, usuario, isAdmin)) {
           lastProcessedIdRef.current = novaNotifDireta.id;
@@ -176,7 +328,6 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         return;
       }
 
-      // Caso contrário, avalia a mais recente da lista visível para este usuário
       const visiveis = filtrarVisiveis(listaMaisRecente);
       if (visiveis.length > 0) {
         const top = visiveis[0];
@@ -194,7 +345,6 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       }
     };
 
-    // Handler do evento 'certam_notifications_updated'
     const handleNotificationsUpdated = (e: any) => {
       const items =
         e?.detail && Array.isArray(e.detail) ? e.detail : notificationStore.getNotificacoes();
@@ -210,7 +360,6 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
           typeof sessionStorage !== 'undefined' &&
           sessionStorage.getItem(`certam_toast_shown_${top.id}`) === 'true';
 
-        // Dispara o Toast se a notificação for nova, não lida e visível para este usuário
         if (isNaoLida && !jaExibida && lastProcessedIdRef.current !== top.id) {
           lastProcessedIdRef.current = top.id;
           exibirToast(top);
@@ -286,6 +435,10 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         notificacoesVisiveis,
         naoLidasCount,
         toastAtivo,
+        browserNotificationPermission,
+        solicitarPermissaoNotificacaoNavegador,
+        dispararNotificacaoNavegador,
+        notificarNovaMensagemChat,
         exibirToast,
         fecharToast,
         marcarComoLida,

@@ -25,13 +25,72 @@ export interface SugestaoContatoDm {
   detalhe?: string;
 }
 
+const DM_MAX_MESSAGES_PER_CONVERSATION = 100;
+const DM_RETENTION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 dias
+
+function extrairTimestampDm(m: MensagemPrivada): number {
+  const match = String(m.id || '').match(/^dm-([a-z0-9]+)-/i);
+  if (match && match[1]) {
+    const parsed = parseInt(match[1], 36);
+    if (!Number.isNaN(parsed) && parsed > 1000000000000) return parsed;
+  }
+  return -1;
+}
+
+function aplicarRetencaoDm(
+  list: MensagemPrivada[],
+  maxPerPair: number = DM_MAX_MESSAGES_PER_CONVERSATION,
+  maxAgeMs: number = DM_RETENTION_MAX_AGE_MS
+): { mantidas: MensagemPrivada[]; removidas: number } {
+  if (!Array.isArray(list) || list.length === 0) {
+    return { mantidas: [], removidas: 0 };
+  }
+  const now = Date.now();
+  const porPar = new Map<string, MensagemPrivada[]>();
+
+  for (const m of list) {
+    if (!m || !m.remetente_email || !m.destinatario_email) continue;
+    const ts = extrairTimestampDm(m);
+    if (ts > 1000000000000 && now - ts > maxAgeMs) {
+      continue;
+    }
+    const parKey = [
+      m.remetente_email.trim().toLowerCase(),
+      m.destinatario_email.trim().toLowerCase(),
+    ]
+      .sort()
+      .join('__');
+    const arr = porPar.get(parKey) || [];
+    arr.push(m);
+    porPar.set(parKey, arr);
+  }
+
+  const idsMantidos = new Set<string>();
+  for (const arr of porPar.values()) {
+    const recortado = arr.length > maxPerPair ? arr.slice(arr.length - maxPerPair) : arr;
+    recortado.forEach((item) => idsMantidos.add(item.id));
+  }
+
+  const mantidas = list.filter((m) => m && idsMantidos.has(m.id));
+  return {
+    mantidas,
+    removidas: Math.max(0, list.length - mantidas.length),
+  };
+}
+
 export const dmStore = {
   getMensagens(): MensagemPrivada[] {
     try {
       const stored = cloudSync.getItem(DM_STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed)) return parsed;
+        if (Array.isArray(parsed)) {
+          const { mantidas, removidas } = aplicarRetencaoDm(parsed);
+          if (removidas > 0) {
+            cloudSync.setItemLocalOnly(DM_STORAGE_KEY, mantidas);
+          }
+          return mantidas;
+        }
       }
     } catch {
       // ignore
@@ -39,10 +98,30 @@ export const dmStore = {
     return DEFAULT_DMS;
   },
 
+  purgarMensagensAntigas(
+    maxPerPair: number = DM_MAX_MESSAGES_PER_CONVERSATION,
+    maxAgeMs: number = DM_RETENTION_MAX_AGE_MS
+  ): number {
+    try {
+      const stored = cloudSync.getItem(DM_STORAGE_KEY);
+      if (!stored) return 0;
+      const parsed = JSON.parse(stored);
+      if (!Array.isArray(parsed)) return 0;
+      const { mantidas, removidas } = aplicarRetencaoDm(parsed, maxPerPair, maxAgeMs);
+      if (removidas > 0) {
+        this.salvarMensagens(mantidas);
+      }
+      return removidas;
+    } catch {
+      return 0;
+    }
+  },
+
   salvarMensagens(list: MensagemPrivada[]) {
-    cloudSync.setItem(DM_STORAGE_KEY, list, false);
+    const { mantidas } = aplicarRetencaoDm(list);
+    cloudSync.setItem(DM_STORAGE_KEY, mantidas, false);
     if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('certam_dm_updated', { detail: list }));
+      window.dispatchEvent(new CustomEvent('certam_dm_updated', { detail: mantidas }));
     }
   },
 

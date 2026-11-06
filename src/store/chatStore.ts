@@ -10,6 +10,10 @@ const MUTED_ROOMS_STORAGE_KEY = 'certam_chat_muted_rooms_v1';
 const FREQUENT_EMOJIS_STORAGE_KEY = 'certam_frequent_emojis_v1';
 const CLIENT_ANON_ID_KEY = 'certam_chat_client_id_v1';
 
+// Limites de retenção para purga automática de mensagens antigas (evita sobrecarga do localStorage)
+export const CHAT_MAX_MESSAGES_PER_ROOM = 100;
+export const CHAT_RETENTION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 dias
+
 export const DEFAULT_FREQUENT_EMOJIS = ['👍', '❤️', '🔥', '🎉', '🚀', '👏', '🙏', '💡'];
 
 export type TipoSalaChatConcurso = 'geral' | 'cargo' | 'aprovados' | 'lote';
@@ -294,6 +298,56 @@ function extrairTimestampOrdenacao(m: ChatMensagem, fallbackIndex: number): numb
     }
   }
   return fallbackIndex;
+}
+
+/**
+ * Purga mensagens antigas (acima de `maxAgeMs`) ou excedentes ao limite `maxCount` por sala,
+ * preservando sempre as mensagens fixadas (`is_fixado: true`) e o histórico recente relevante.
+ */
+export function aplicarPoliticaRetencaoMensagens(
+  msgs: ChatMensagem[],
+  maxCount: number = CHAT_MAX_MESSAGES_PER_ROOM,
+  maxAgeMs: number = CHAT_RETENTION_MAX_AGE_MS
+): { mantidas: ChatMensagem[]; removidas: number } {
+  if (!Array.isArray(msgs) || msgs.length === 0) {
+    return { mantidas: [], removidas: 0 };
+  }
+
+  const now = Date.now();
+  const fixadas: ChatMensagem[] = [];
+  const regularesRecentes: ChatMensagem[] = [];
+
+  for (let i = 0; i < msgs.length; i++) {
+    const m = msgs[i];
+    if (!m) continue;
+    if (m.is_fixado) {
+      fixadas.push(m);
+      continue;
+    }
+    const ts = extrairTimestampOrdenacao(m, -1);
+    const temTimestampReal = ts > 1000000000000;
+    if (temTimestampReal && now - ts > maxAgeMs) {
+      // Purga mensagem expirada por idade (> 30 dias)
+      continue;
+    }
+    regularesRecentes.push(m);
+  }
+
+  const regularesLimitadas =
+    regularesRecentes.length > maxCount
+      ? regularesRecentes.slice(regularesRecentes.length - maxCount)
+      : regularesRecentes;
+
+  const idsMantidos = new Set<string>([
+    ...fixadas.map((m) => m.id),
+    ...regularesLimitadas.map((m) => m.id),
+  ]);
+
+  const mantidas = msgs.filter((m) => m && idsMantidos.has(m.id));
+  return {
+    mantidas,
+    removidas: Math.max(0, msgs.length - mantidas.length),
+  };
 }
 
 const selfSentMessageIds = new Set<string>();
@@ -654,9 +708,88 @@ export const chatStore = {
       // ignore
     }
 
-    return Array.from(msgMap.values())
+    const ordenadas = Array.from(msgMap.values())
       .sort((a, b) => a.order - b.order)
       .map((entry) => entry.msg);
+
+    const { mantidas, removidas } = aplicarPoliticaRetencaoMensagens(ordenadas);
+    if (removidas > 0) {
+      cloudSync.setItemLocalOnly(targetKey, mantidas);
+    }
+    return mantidas;
+  },
+
+  /**
+   * Executa a purga proativa de mensagens antigas ou excedentes em todas as salas do `localStorage`,
+   * mantendo apenas o histórico relevante e limpando IDs órfãos do mapa de leitura.
+   */
+  purgarMensagensAntigas(
+    maxCount: number = CHAT_MAX_MESSAGES_PER_ROOM,
+    maxAgeMs: number = CHAT_RETENTION_MAX_AGE_MS
+  ): { totalRemovidas: number; salasAfetadas: number } {
+    if (typeof window === 'undefined') {
+      return { totalRemovidas: 0, salasAfetadas: 0 };
+    }
+
+    let totalRemovidas = 0;
+    let salasAfetadas = 0;
+    const chatKeys: string[] = [];
+
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith(`${CHAT_KEY}_`)) {
+          chatKeys.push(k);
+        }
+      }
+
+      for (const key of chatKeys) {
+        const raw = localStorage.getItem(key) || cloudSync.getItem(key);
+        if (!raw) continue;
+        try {
+          const parsed = JSON.parse(raw);
+          if (!Array.isArray(parsed)) continue;
+          const normalizadas = parsed
+            .filter((item) => item && typeof item === 'object' && item.id)
+            .map((item) => normalizarMensagem(item as ChatMensagem));
+
+          const { mantidas, removidas } = aplicarPoliticaRetencaoMensagens(
+            normalizadas,
+            maxCount,
+            maxAgeMs
+          );
+          if (removidas > 0) {
+            totalRemovidas += removidas;
+            salasAfetadas++;
+            cloudSync.setItem(key, mantidas, true);
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      // Também limita o histórico de IDs lidos em certam_chat_read_msg_ids_v1 para não crescer indefinidamente
+      const readRaw = localStorage.getItem('certam_chat_read_msg_ids_v1');
+      if (readRaw) {
+        const readMap = JSON.parse(readRaw);
+        if (readMap && typeof readMap === 'object') {
+          let readChanged = false;
+          for (const [rk, arr] of Object.entries(readMap)) {
+            if (Array.isArray(arr) && arr.length > maxCount * 2) {
+              readMap[rk] = arr.slice(arr.length - maxCount * 2);
+              readChanged = true;
+            }
+          }
+          if (readChanged) {
+            localStorage.setItem('certam_chat_read_msg_ids_v1', JSON.stringify(readMap));
+          }
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    return { totalRemovidas, salasAfetadas };
   },
 
   salvarMensagensLocalmente(
@@ -666,19 +799,20 @@ export const chatStore = {
     msgs: ChatMensagem[]
   ): Record<string, string> {
     const normalizedMsgs = msgs.map((m) => normalizarMensagem(m));
-    const serialized = JSON.stringify(normalizedMsgs);
+    const { mantidas } = aplicarPoliticaRetencaoMensagens(normalizedMsgs);
+    const serialized = JSON.stringify(mantidas);
     const scope = cargoId || 'geral';
     const targetKey = `${CHAT_KEY}_${concursoId}_${scope}_${canalId}`;
     const entries: Record<string, string> = {
       [targetKey]: serialized,
     };
 
-    cloudSync.setItemLocalOnly(targetKey, normalizedMsgs);
+    cloudSync.setItemLocalOnly(targetKey, mantidas);
 
     if (typeof window !== 'undefined') {
       window.dispatchEvent(
         new CustomEvent('certam_chat_updated', {
-          detail: { concursoId, cargoId: scope, canalId, msgs: normalizedMsgs },
+          detail: { concursoId, cargoId: scope, canalId, msgs: mantidas },
         })
       );
     }
@@ -694,15 +828,16 @@ export const chatStore = {
     forceReplace = false
   ) {
     const normalizedMsgs = msgs.map((m) => normalizarMensagem(m));
+    const { mantidas } = aplicarPoliticaRetencaoMensagens(normalizedMsgs);
     const scope = cargoId || 'geral';
     const targetKey = `${CHAT_KEY}_${concursoId}_${scope}_${canalId}`;
 
-    cloudSync.setItem(targetKey, normalizedMsgs, forceReplace);
+    cloudSync.setItem(targetKey, mantidas, forceReplace);
 
     if (typeof window !== 'undefined') {
       window.dispatchEvent(
         new CustomEvent('certam_chat_updated', {
-          detail: { concursoId, cargoId: scope, canalId, msgs: normalizedMsgs },
+          detail: { concursoId, cargoId: scope, canalId, msgs: mantidas },
         })
       );
     }

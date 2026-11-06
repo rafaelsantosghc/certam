@@ -8,6 +8,7 @@ import {
 } from '../store/chatStore';
 import { dmStore, ContatoConversa, SugestaoContatoDm } from '../store/dmStore';
 import { useAuth } from '../store/authContext';
+import { useNotifications } from '../store/notificationContext';
 import { useChatPermissions } from '../hooks/useChatPermissions';
 import { useMessageStatus } from '../hooks/useMessageStatus';
 import { Concurso, ChatMensagem, MensagemPrivada } from '../types';
@@ -72,6 +73,11 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
   onRequireAuth,
 }) => {
   const { usuario, isAdmin } = useAuth();
+  const {
+    notificarNovaMensagemChat,
+    browserNotificationPermission,
+    solicitarPermissaoNotificacaoNavegador,
+  } = useNotifications();
 
   const [isOpen, setIsOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -535,6 +541,21 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
     setMostrarBotaoDescer(distanceFromBottom > 48);
   };
 
+  // Purga automática de mensagens antigas (por período de retenção ou limite de contagem) ao inicializar e periodicamente para preservar o localStorage
+  useEffect(() => {
+    const executarPurgaHistorico = () => {
+      const resultadoPurgaChat = chatStore.purgarMensagensAntigas();
+      const removidasDm = dmStore.purgarMensagensAntigas();
+      if (resultadoPurgaChat.totalRemovidas > 0 || removidasDm > 0) {
+        setDadosVersion((v) => v + 1);
+      }
+    };
+
+    executarPurgaHistorico();
+    const purgeInterval = window.setInterval(executarPurgaHistorico, 10 * 60 * 1000);
+    return () => window.clearInterval(purgeInterval);
+  }, []);
+
   // Inicializa IDs de mensagens já existentes para só notificar mensagens novas que chegarem a partir de agora
   useEffect(() => {
     if (initializedKnownIdsRef.current) return;
@@ -705,6 +726,27 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
                   resumoTexto: resumoCurto,
                   dataHora: m.data_hora || 'Agora',
                 };
+
+                // Dispara alerta via API de Notificações do Navegador integrada ao NotificationProvider (mesmo com o chat fechado)
+                notificarNovaMensagemChat({
+                  id: m.id,
+                  modo: 'concursos',
+                  concursoId: conc.id,
+                  concursoSigla: sigla,
+                  salaId: sala.id,
+                  salaTitulo: sala.tituloCurto,
+                  autor: m.autor,
+                  resumoTexto: resumoCurto,
+                  senderId: m.sender_id || m.email,
+                  onClickAbrir: () => {
+                    setAbaModo('concursos');
+                    setConcursoAtivoId(conc.id);
+                    setSalaAtivaId(sala.id);
+                    setMobileViewMode('mensagens');
+                    setIsOpen(true);
+                    setResumoBanner(null);
+                  },
+                });
               }
             }
           });
@@ -744,6 +786,26 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
               resumoTexto: resumoCurto,
               dataHora: dm.data_hora || 'Agora',
             };
+
+            // Dispara alerta de Mensagem Privada via API de Notificações do Navegador integrada ao NotificationProvider
+            notificarNovaMensagemChat({
+              id: dm.id,
+              modo: 'privadas',
+              concursoSigla: 'Mensagem Privada',
+              salaTitulo: dm.remetente_nome || remEmail,
+              dmEmail: dm.remetente_email,
+              autor: dm.remetente_nome || remEmail,
+              resumoTexto: resumoCurto,
+              senderId: dm.remetente_email,
+              onClickAbrir: () => {
+                setAbaModo('privadas');
+                setDmContatoEmail(dm.remetente_email);
+                setDmContatoNome(dm.remetente_nome || remEmail);
+                setMobileViewMode('mensagens');
+                setIsOpen(true);
+                setResumoBanner(null);
+              },
+            });
           }
         });
       }
@@ -833,6 +895,9 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
   ]);
 
   const handleToggleMuteSalaAtual = () => {
+    if (browserNotificationPermission === 'default') {
+      void solicitarPermissaoNotificacaoNavegador();
+    }
     if (abaModo === 'privadas') {
       if (dmContatoEmail) {
         chatStore.alternarSilenciarDm(dmContatoEmail);
@@ -845,6 +910,9 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
   };
 
   const handleToggleMuteConcursoAtual = () => {
+    if (browserNotificationPermission === 'default') {
+      void solicitarPermissaoNotificacaoNavegador();
+    }
     chatStore.alternarSilenciarConcurso(concursoAtivoId);
     setMuteVersion((v) => v + 1);
   };
@@ -1110,6 +1178,9 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
         <button
           type="button"
           onClick={() => {
+            if (browserNotificationPermission === 'default') {
+              void solicitarPermissaoNotificacaoNavegador();
+            }
             setIsOpen(true);
             setResumoBanner(null);
           }}
