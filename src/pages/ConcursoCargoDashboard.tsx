@@ -1770,234 +1770,236 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
                           topScrollRef1.current.scrollLeft = bottomScrollRef1.current.scrollLeft;
                         }
                       }}
-                      className="overflow-x-auto"
+                      className="overflow-x-auto w-full max-w-full"
+                      style={{ overflowX: 'auto', tableLayout: 'auto' }}
                     >
-                      <div className="grid grid-cols-[64px_220px_80px_80px_95px_110px_minmax(130px,1fr)_minmax(150px,1fr)_120px_80px] min-w-[1070px] text-xs divide-y divide-slate-100">
-                        {/* Header da Grid */}
-                        <div className="bg-[#07192B] text-white font-serif text-[11px] uppercase tracking-wider col-span-10 grid grid-cols-subgrid items-center">
-                          <div className="text-center font-semibold sticky left-0 z-30 bg-[#07192B] py-2.5 px-2">Pos.</div>
-                          <div className="font-semibold sticky left-[64px] z-30 bg-[#07192B] py-2.5 pl-2 pr-3 border-r border-[#0F2942] shadow-[4px_0_6px_-2px_rgba(0,0,0,0.35)]">Candidato</div>
-                          <div className="text-center font-semibold py-2.5 px-2">Cota</div>
-                          <div className="text-right font-semibold py-2.5 px-2">Nota Final</div>
-                          <div className="text-center font-semibold py-2.5 px-2">Lote Convocado</div>
-                          <div className="text-center font-semibold py-2.5 px-2">Data Convocação</div>
-                          <div className="font-semibold py-2.5 px-2">{tipoLotacao} Definitiva</div>
-                          <div className="font-semibold py-2.5 px-2">Preferências Informadas</div>
-                          <div className="text-center font-semibold py-2.5 px-2">Status</div>
-                          <div className="text-center font-semibold py-2.5 px-2">Ações</div>
-                        </div>
-
-                        {candidatosPaginados.length === 0 ? (
-                          <div className="col-span-10 py-10 text-center text-xs text-slate-400">
-                            Nenhum candidato localizado com os filtros selecionados.
-                          </div>
-                        ) : (
-                          candidatosPaginados.map((cand) => (
-                            <div
-                              key={cand.id}
-                              className="col-span-10 grid grid-cols-subgrid items-center hover:bg-slate-50 transition-colors group"
-                            >
-                              <div className="text-center font-mono font-bold text-slate-900 sticky left-0 z-20 bg-white group-hover:bg-slate-50 transition-colors py-2.5 px-2">
-                                <div>{cand.posicao}º</div>
-                                {(() => {
-                                  const simInfo = simulacaoFilaEfetiva.posEfetivaPorCandidatoId.get(cand.id);
-                                  if (!simInfo || !simInfo.posicaoEfetiva) return null;
-                                  return (
-                                    <span
-                                      className={`inline-block px-1 py-0.2 rounded text-[9px] font-mono font-bold mt-0.5 ${
-                                        simInfo.contempladoSimulacao
-                                          ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
-                                          : 'bg-slate-100 text-slate-600'
-                                      }`}
-                                      title="Posição efetiva na fila líquida (descontando nomeados, desistentes e aplicando alternância de cotas)"
-                                    >
-                                      Fila: {simInfo.posicaoEfetiva}º
-                                    </span>
-                                  );
-                                })()}
-                              </div>
-                              <div className="font-bold text-slate-900 sticky left-[64px] z-20 bg-white group-hover:bg-slate-50 transition-colors py-2.5 pl-2 pr-3 border-r border-slate-200/90 shadow-[4px_0_6px_-2px_rgba(0,0,0,0.06)] overflow-hidden">
-                                <div className="flex items-center gap-1.5 flex-wrap">
-                                  <span>{cand.nome}</span>
-                                  {(() => {
-                                    const infoVinc = userRegistryStore.verificarVinculoCandidato(cand);
-                                    return infoVinc.vinculado ? (
-                                      <span
-                                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 whitespace-nowrap"
-                                        title="Candidato já acessou e vinculou conta no portal"
-                                      >
-                                        <UserCheck className="w-2.5 h-2.5 text-emerald-700" />
-                                        <span>Vinculado</span>
-                                      </span>
-                                    ) : null;
-                                  })()}
+                      <table className="w-full min-w-[1070px] text-xs border-collapse break-words" style={{ tableLayout: 'auto', wordBreak: 'break-word' }}>
+                        <thead>
+                          <tr className="bg-[#07192B] text-white font-serif text-[11px] uppercase tracking-wider">
+                            <th className="py-2.5 px-3 text-center w-16">Pos.</th>
+                            <th className="py-2.5 px-3 text-left w-56">Candidato</th>
+                            <th className="py-2.5 px-3 text-center w-20">Cota</th>
+                            <th className="py-2.5 px-3 text-right w-20">Nota Final</th>
+                            <th className="py-2.5 px-3 text-center w-24">Lote Convocado</th>
+                            <th className="py-2.5 px-3 text-center w-28">Data Convocação</th>
+                            <th className="py-2.5 px-3 text-left">{tipoLotacao} Definitiva</th>
+                            <th className="py-2.5 px-3 text-left">Preferências Informadas</th>
+                            <th className="py-2.5 px-3 text-center w-28">Status</th>
+                            <th className="py-2.5 px-3 text-center w-20">Ações</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {candidatosPaginados.length === 0 ? (
+                            <tr>
+                              <td colSpan={10} className="py-10 text-center text-xs text-slate-400">
+                                Nenhum candidato localizado com os filtros selecionados.
+                              </td>
+                            </tr>
+                          ) : (
+                            candidatosPaginados.map((cand) => (
+                              <tr key={cand.id} className="hover:bg-slate-50 transition-colors">
+                                <td className="py-2.5 px-3 text-center font-mono font-bold text-slate-900">
+                                  <div>{cand.posicao}º</div>
                                   {(() => {
                                     const simInfo = simulacaoFilaEfetiva.posEfetivaPorCandidatoId.get(cand.id);
-                                    if (!simInfo?.contempladoSimulacao) return null;
+                                    if (!simInfo || !simInfo.posicaoEfetiva) return null;
                                     return (
                                       <span
-                                        className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-teal-50 text-teal-800 border border-teal-300 whitespace-nowrap"
-                                        title={`Contemplado na simulação de +${vagasSimuladasChamamento} vagas (${simInfo.vagaCotaSimulada || 'Ampla'})`}
+                                        className={`inline-block px-1 py-0.2 rounded text-[9px] font-mono font-bold mt-0.5 ${
+                                          simInfo.contempladoSimulacao
+                                            ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                                            : 'bg-slate-100 text-slate-600'
+                                        }`}
+                                        title="Posição efetiva na fila líquida (descontando nomeados, desistentes e aplicando alternância de cotas)"
                                       >
-                                        <span>⚡ Simulado ({simInfo.posicaoEfetiva}º)</span>
+                                        Fila: {simInfo.posicaoEfetiva}º
                                       </span>
                                     );
                                   })()}
-                                  {(() => {
-                                    const outros = mapaDuplaAprovacao.get(cand.id);
-                                    if (!outros || outros.length === 0) return null;
-                                    const prim = outros[0];
-                                    return (
-                                      <span
-                                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-indigo-50 text-indigo-900 border border-indigo-200 whitespace-nowrap"
-                                        title={`Também aprovado em: ${outros.map((o) => `${o.orgao} - ${o.cargoNome} (${o.posicao}º)`).join(' | ')}`}
-                                      >
-                                        <Award className="w-2.5 h-2.5 text-indigo-600 shrink-0" />
-                                        <span>★ {prim.orgao}: {prim.cargoNome} ({prim.posicao}º)</span>
-                                      </span>
-                                    );
-                                  })()}
-                                </div>
-                                {isCandidatoAprovado && cand.cpf && (
-                                  <span className="text-[10px] font-mono text-slate-400 block font-normal">
-                                    CPF: {formatarCpfSeguroLgpd(cand.cpf, cand.id)}
-                                  </span>
-                                )}
-                              </div>
-                              <div className="text-center font-mono py-2.5 px-2">
-                                {isCandidatoAprovado ? (
-                                  <div className="flex items-center justify-center gap-1 flex-wrap">
+                                </td>
+                                <td className="py-2.5 px-3 font-bold text-slate-900">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span>{cand.nome}</span>
                                     {(() => {
-                                      const listaCotas =
-                                        cand.cotas && cand.cotas.length > 0
-                                          ? cand.cotas.filter((ct, _, arr) =>
-                                              arr.length > 1 ? ct !== 'Ampla' : true
-                                            )
-                                          : [cand.cota];
-                                      return listaCotas.map((ct, idxCt) => (
+                                      const infoVinc = userRegistryStore.verificarVinculoCandidato(cand);
+                                      return infoVinc.vinculado ? (
                                         <span
-                                          key={idxCt}
-                                          className={`box-decoration-clone px-2 py-0.5 rounded text-[10px] font-bold whitespace-nowrap ${
-                                            ct === 'PCD'
-                                              ? 'bg-purple-100 text-purple-900 border border-purple-200'
-                                              : ct === 'PPP' || (ct as string) === 'CN'
-                                              ? 'bg-amber-100 text-amber-900 border border-amber-200'
-                                              : ct === 'Indígena'
-                                              ? 'bg-emerald-100 text-emerald-900 border border-emerald-200'
-                                              : ct === 'Trans'
-                                              ? 'bg-pink-100 text-pink-900 border border-pink-200'
-                                              : 'bg-slate-100 text-slate-700'
-                                          }`}
+                                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 whitespace-nowrap"
+                                          title="Candidato já acessou e vinculou conta no portal"
                                         >
-                                          {ct === 'PPP' || (ct as string) === 'CN' ? 'PPP / CN' : ct}
+                                          <UserCheck className="w-2.5 h-2.5 text-emerald-700" />
+                                          <span>Vinculado</span>
                                         </span>
-                                      ));
+                                      ) : null;
+                                    })()}
+                                    {(() => {
+                                      const simInfo = simulacaoFilaEfetiva.posEfetivaPorCandidatoId.get(cand.id);
+                                      if (!simInfo?.contempladoSimulacao) return null;
+                                      return (
+                                        <span
+                                          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-teal-50 text-teal-800 border border-teal-300 whitespace-nowrap"
+                                          title={`Contemplado na simulação de +${vagasSimuladasChamamento} vagas (${simInfo.vagaCotaSimulada || 'Ampla'})`}
+                                        >
+                                          <span>⚡ Simulado ({simInfo.posicaoEfetiva}º)</span>
+                                        </span>
+                                      );
+                                    })()}
+                                    {(() => {
+                                      const outros = mapaDuplaAprovacao.get(cand.id);
+                                      if (!outros || outros.length === 0) return null;
+                                      const prim = outros[0];
+                                      return (
+                                        <span
+                                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-indigo-50 text-indigo-900 border border-indigo-200 whitespace-nowrap"
+                                          title={`Também aprovado em: ${outros.map((o) => `${o.orgao} - ${o.cargoNome} (${o.posicao}º)`).join(' | ')}`}
+                                        >
+                                          <Award className="w-2.5 h-2.5 text-indigo-600 shrink-0" />
+                                          <span>★ {prim.orgao}: {prim.cargoNome} ({prim.posicao}º)</span>
+                                        </span>
+                                      );
                                     })()}
                                   </div>
-                                ) : (
-                                  <span className="text-slate-400 text-2xs italic whitespace-nowrap">Restrito</span>
-                                )}
-                              </div>
-                              <div className="text-right font-mono font-bold text-slate-900 py-2.5 px-2">
-                                {isCandidatoAprovado ? (
-                                  cand.nota_final.toFixed(2)
-                                ) : (
-                                  <span className="text-slate-400 font-normal text-2xs italic">Restrito</span>
-                                )}
-                              </div>
-                              <div className="text-center py-2.5 px-2">
-                                {cand.numero_lote_convocado ? (
-                                  <span className="box-decoration-clone px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-teal-50 text-teal-800 border border-teal-200 whitespace-nowrap">
-                                    {cand.numero_lote_convocado}
-                                  </span>
-                                ) : (
-                                  <span className="text-slate-400 font-mono">-</span>
-                                )}
-                              </div>
-                              <div className="text-center font-mono text-slate-700 whitespace-nowrap py-2.5 px-2">
-                                {cand.data_convocacao || cand.data_nomeacao || '-'}
-                              </div>
-                              <div className="text-slate-700 py-2.5 px-2">
-                                {cand.comarca_definitiva ? (
-                                  <span className="box-decoration-clone inline-block font-semibold text-purple-950 bg-purple-50 px-2 py-0.5 rounded-md border border-purple-200 text-[11px]">
-                                    {cand.comarca_definitiva}
-                                  </span>
-                                ) : (
-                                  <span className="text-slate-400 font-mono text-[11px]">-</span>
-                                )}
-                              </div>
-                              <div className="text-slate-700 py-2.5 px-2">
-                                {cand.escolhas_comarcas && cand.escolhas_comarcas.length > 0 ? (
-                                  <span
-                                    className="text-slate-700 text-[11px] truncate block"
-                                    title={cand.escolhas_comarcas.map((e, idx) => `${idx + 1}ª: ${e}`).join(' | ')}
-                                  >
-                                    {cand.escolhas_comarcas[0]} {cand.escolhas_comarcas.length > 1 && `(+${cand.escolhas_comarcas.length - 1})`}
-                                  </span>
-                                ) : cand.comarca_desejada_1 ? (
-                                  <span className="text-slate-600 text-[11px]">
-                                    {cand.comarca_desejada_1}
-                                  </span>
-                                ) : (
-                                  <span className="text-slate-400 text-2xs italic">Pendente</span>
-                                )}
-                              </div>
-                              <div className="text-center py-2.5 px-2">
-                                {renderBadgeStatus(cand.status)}
-                              </div>
-                              <div className="text-center py-2.5 px-2">
-                                <div className="flex items-center justify-center gap-1">
-                                  {isAdmin && (
-                                    <>
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          setCandidatoEditandoAdmin(cand);
-                                          setModalEditarCandidatoAdminAberto(true);
-                                        }}
-                                        className="p-1 text-amber-700 hover:text-amber-950 bg-amber-50 hover:bg-amber-100 rounded border border-amber-300 cursor-pointer transition-colors shadow-2xs"
-                                        title="Editar manualmente campos deste candidato (Admin)"
-                                      >
-                                        <Pencil className="w-3.5 h-3.5" />
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => handleExcluirCandidato(cand)}
-                                        className="p-1 text-rose-600 hover:text-rose-950 bg-rose-50 hover:bg-rose-100 rounded border border-rose-300 cursor-pointer transition-colors shadow-2xs"
-                                        title="Excluir este candidato da lista (Admin)"
-                                      >
-                                        <Trash2 className="w-3.5 h-3.5" />
-                                      </button>
-                                    </>
+                                  {isCandidatoAprovado && cand.cpf && (
+                                    <span className="text-[10px] font-mono text-slate-400 block font-normal mt-0.5">
+                                      CPF: {formatarCpfSeguroLgpd(cand.cpf, cand.id)}
+                                    </span>
                                   )}
-                                  {isCandidatoAprovado && (
-                                    <>
-                                      <button
-                                        type="button"
-                                        onClick={() => setCandidatoModal(cand)}
-                                        className="p-1 text-slate-600 hover:text-teal-700 rounded hover:bg-slate-100 cursor-pointer"
-                                        title="Visualizar notas detalhadas"
-                                      >
-                                        <Eye className="w-3.5 h-3.5" />
-                                      </button>
-                                      {usuario && (
+                                </td>
+                                <td className="py-2.5 px-3 text-center font-mono">
+                                  {isCandidatoAprovado ? (
+                                    <div className="flex items-center justify-center gap-1 flex-wrap">
+                                      {(() => {
+                                        const listaCotas =
+                                          cand.cotas && cand.cotas.length > 0
+                                            ? cand.cotas.filter((ct, _, arr) =>
+                                                arr.length > 1 ? ct !== 'Ampla' : true
+                                              )
+                                            : [cand.cota];
+                                        return listaCotas.map((ct, idxCt) => (
+                                          <span
+                                            key={idxCt}
+                                            className={`px-2 py-0.5 rounded text-[10px] font-bold whitespace-nowrap ${
+                                              ct === 'PCD'
+                                                ? 'bg-purple-100 text-purple-900 border border-purple-200'
+                                                : ct === 'PPP' || (ct as string) === 'CN'
+                                                ? 'bg-amber-100 text-amber-900 border border-amber-200'
+                                                : ct === 'Indígena'
+                                                ? 'bg-emerald-100 text-emerald-900 border border-emerald-200'
+                                                : ct === 'Trans'
+                                                ? 'bg-pink-100 text-pink-900 border border-pink-200'
+                                                : 'bg-slate-100 text-slate-700'
+                                            }`}
+                                          >
+                                            {ct === 'PPP' || (ct as string) === 'CN' ? 'PPP / CN' : ct}
+                                          </span>
+                                        ));
+                                      })()}
+                                    </div>
+                                  ) : (
+                                    <span className="text-slate-400 text-2xs italic whitespace-nowrap">Restrito</span>
+                                  )}
+                                </td>
+                                <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900">
+                                  {isCandidatoAprovado ? (
+                                    cand.nota_final.toFixed(2)
+                                  ) : (
+                                    <span className="text-slate-400 font-normal text-2xs italic">Restrito</span>
+                                  )}
+                                </td>
+                                <td className="py-2.5 px-3 text-center">
+                                  {cand.numero_lote_convocado ? (
+                                    <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-teal-50 text-teal-800 border border-teal-200 whitespace-nowrap inline-block">
+                                      {cand.numero_lote_convocado}
+                                    </span>
+                                  ) : (
+                                    <span className="text-slate-400 font-mono">-</span>
+                                  )}
+                                </td>
+                                <td className="py-2.5 px-3 text-center font-mono text-slate-700 whitespace-nowrap">
+                                  {cand.data_convocacao || cand.data_nomeacao || '-'}
+                                </td>
+                                <td className="py-2.5 px-3 text-slate-700">
+                                  {cand.comarca_definitiva ? (
+                                    <span className="inline-block font-semibold text-purple-950 bg-purple-50 px-2 py-0.5 rounded-md border border-purple-200 text-[11px]">
+                                      {cand.comarca_definitiva}
+                                    </span>
+                                  ) : (
+                                    <span className="text-slate-400 font-mono text-[11px]">-</span>
+                                  )}
+                                </td>
+                                <td className="py-2.5 px-3 text-slate-700">
+                                  {cand.escolhas_comarcas && cand.escolhas_comarcas.length > 0 ? (
+                                    <span
+                                      className="text-slate-700 text-[11px] truncate block max-w-xs"
+                                      title={cand.escolhas_comarcas.map((e, idx) => `${idx + 1}ª: ${e}`).join(' | ')}
+                                    >
+                                      {cand.escolhas_comarcas[0]} {cand.escolhas_comarcas.length > 1 && `(+${cand.escolhas_comarcas.length - 1})`}
+                                    </span>
+                                  ) : cand.comarca_desejada_1 ? (
+                                    <span className="text-slate-600 text-[11px]">
+                                      {cand.comarca_desejada_1}
+                                    </span>
+                                  ) : (
+                                    <span className="text-slate-400 text-2xs italic">Pendente</span>
+                                  )}
+                                </td>
+                                <td className="py-2.5 px-3 text-center">
+                                  {renderBadgeStatus(cand.status)}
+                                </td>
+                                <td className="py-2.5 px-3 text-center">
+                                  <div className="flex items-center justify-center gap-1">
+                                    {isAdmin && (
+                                      <>
                                         <button
                                           type="button"
-                                          onClick={() => handleAbrirMensagemComCandidato(cand)}
-                                          className="p-1 text-slate-600 hover:text-[#135A7A] rounded hover:bg-slate-100 cursor-pointer"
-                                          title="Enviar mensagem privada 1 a 1"
+                                          onClick={() => {
+                                            setCandidatoEditandoAdmin(cand);
+                                            setModalEditarCandidatoAdminAberto(true);
+                                          }}
+                                          className="p-1 text-amber-700 hover:text-amber-950 bg-amber-50 hover:bg-amber-100 rounded border border-amber-300 cursor-pointer transition-colors shadow-2xs"
+                                          title="Editar manualmente campos deste candidato (Admin)"
                                         >
-                                          <MessageCircle className="w-3.5 h-3.5" />
+                                          <Pencil className="w-3.5 h-3.5" />
                                         </button>
-                                      )}
-                                    </>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          ))
-                        )}
-                      </div>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleExcluirCandidato(cand)}
+                                          className="p-1 text-rose-600 hover:text-rose-950 bg-rose-50 hover:bg-rose-100 rounded border border-rose-300 cursor-pointer transition-colors shadow-2xs"
+                                          title="Excluir este candidato da lista (Admin)"
+                                        >
+                                          <Trash2 className="w-3.5 h-3.5" />
+                                        </button>
+                                      </>
+                                    )}
+                                    {isCandidatoAprovado && (
+                                      <>
+                                        <button
+                                          type="button"
+                                          onClick={() => setCandidatoModal(cand)}
+                                          className="p-1 text-slate-600 hover:text-teal-700 rounded hover:bg-slate-100 cursor-pointer"
+                                          title="Visualizar notas detalhadas"
+                                        >
+                                          <Eye className="w-3.5 h-3.5" />
+                                        </button>
+                                        {usuario && (
+                                          <button
+                                            type="button"
+                                            onClick={() => handleAbrirMensagemComCandidato(cand)}
+                                            className="p-1 text-slate-600 hover:text-[#135A7A] rounded hover:bg-slate-100 cursor-pointer"
+                                            title="Enviar mensagem privada 1 a 1"
+                                          >
+                                            <MessageCircle className="w-3.5 h-3.5" />
+                                          </button>
+                                        )}
+                                      </>
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
                     </div>
 
                     {/* Paginação Inferior */}

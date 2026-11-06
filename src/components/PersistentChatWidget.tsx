@@ -1550,8 +1550,49 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
     }
   };
 
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const [sidebarRetraido, setSidebarRetraido] = useState(false);
+  const dragRelRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+
+  const handleMouseDownHeader = (e: React.MouseEvent) => {
+    setDragging(true);
+    const box = (e.currentTarget as HTMLElement).closest('.chat-widget-box')?.getBoundingClientRect() || { left: window.innerWidth - 600, top: window.innerHeight - 600 };
+    dragRelRef.current = {
+      x: e.clientX - box.left,
+      y: e.clientY - box.top,
+    };
+    e.stopPropagation();
+  };
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!dragging) return;
+      const newX = Math.max(10, Math.min(window.innerWidth - 120, e.clientX - dragRelRef.current.x));
+      const newY = Math.max(10, Math.min(window.innerHeight - 100, e.clientY - dragRelRef.current.y));
+      setPos({ x: newX, y: newY });
+    };
+    const handleMouseUp = () => setDragging(false);
+
+    if (dragging) {
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+    }
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [dragging]);
+
   return (
-    <div className="fixed bottom-4 right-4 z-[45] flex flex-col items-end max-w-[calc(100vw-1rem)]">
+    <div
+      className="fixed z-[45] flex flex-col items-end max-w-[calc(100vw-1rem)] chat-widget-box"
+      style={
+        pos
+          ? { left: `${pos.x}px`, top: `${pos.y}px`, bottom: 'auto', right: 'auto' }
+          : { bottom: '24px', right: '24px' }
+      }
+    >
       {/* Balãozinho flutuante compacto no canto inferior direito seguindo o padrão visual do botão de abrir conversas */}
       {resumoBanner && (
         <div
@@ -1672,16 +1713,21 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
           </div>
         </button>
       ) : (
-        /* Janela Persistente do Chat com Layout de Lista Lateral Responsivo */
+        /* Janela Persistente do Chat com Layout de Lista Lateral Responsivo, Resizável e Movível */
         <div
           className={`bg-white rounded-2xl shadow-2xl border border-slate-300 flex flex-col overflow-hidden transition-all duration-200 ${
             isExpanded
               ? 'w-[96vw] sm:w-[720px] md:w-[800px]'
               : 'w-[94vw] sm:w-[580px] md:w-[640px]'
           }`}
+          style={{ resize: 'both', overflow: 'auto', minWidth: '340px', minHeight: '460px', maxWidth: '98vw', maxHeight: '92vh' }}
         >
-          {/* Cabeçalho Principal */}
-          <div className="bg-gradient-to-r from-[#07192B] via-[#0A2540] to-[#0D3B56] px-3.5 py-2.5 text-white flex items-center justify-between gap-2 shrink-0">
+          {/* Cabeçalho Principal (Movível / Draggable) */}
+          <div
+            onMouseDown={handleMouseDownHeader}
+            className="bg-gradient-to-r from-[#07192B] via-[#0A2540] to-[#0D3B56] px-3.5 py-2.5 text-white flex items-center justify-between gap-2 shrink-0 cursor-move select-none"
+            title="Arraste para mover a janela do chat"
+          >
             <div className="flex items-center gap-2 min-w-0">
               <button
                 type="button"
@@ -1746,7 +1792,18 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
               </div>
             </div>
 
-            <div className="flex items-center gap-1 shrink-0">
+            <div className="flex items-center gap-1 shrink-0" onMouseDown={(e) => e.stopPropagation()}>
+              {/* Botão Retrair / Expandir Menu de Conversas */}
+              <button
+                type="button"
+                onClick={() => setSidebarRetraido(!sidebarRetraido)}
+                title={sidebarRetraido ? 'Expandir menu de conversas' : 'Retrair menu de conversas'}
+                className="p-1.5 rounded-lg hover:bg-white/10 text-teal-300 transition-colors cursor-pointer hidden sm:flex items-center gap-1 text-[10px] font-bold"
+              >
+                <ChevronLeft className={`w-3.5 h-3.5 transition-transform ${sidebarRetraido ? 'rotate-180' : ''}`} />
+                <span className="hidden md:inline">{sidebarRetraido ? 'Expandir' : 'Retrair'}</span>
+              </button>
+
               {/* Silenciar Conversa Atual */}
               <button
                 type="button"
@@ -1832,7 +1889,7 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
             {/* Lista Lateral Responsiva: Alterna entre Concursos e Mensagens Privadas */}
             <aside
               className={`${
-                mobileViewMode === 'conversas' ? 'flex w-full' : 'hidden sm:flex'
+                sidebarRetraido ? 'hidden sm:hidden' : mobileViewMode === 'conversas' ? 'flex w-full' : 'hidden sm:flex'
               } sm:w-48 md:w-56 bg-slate-900 border-r border-slate-800 flex-col shrink-0`}
             >
               {/* Seletor Principal: Concursos vs Mensagens Privadas */}
