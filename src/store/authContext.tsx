@@ -68,6 +68,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             localStorage.removeItem(AUTH_STORAGE_KEY);
             return null;
           }
+          const isParsedAdmin = Boolean(
+            parsed.is_admin ||
+              parsed.role === 'admin' ||
+              parsed.tipo_usuario === 'admin' ||
+              ADMIN_EMAILS.some((adm) => adm.toLowerCase() === String(parsed.email || '').toLowerCase())
+          );
           try {
             const fromRegistry =
               (parsed.id && userRegistryStore.getUserById(parsed.id)) ||
@@ -75,24 +81,43 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               (parsed.email && userRegistryStore.getUserByEmail(parsed.email)) ||
               (parsed.cpf && userRegistryStore.getUserByCpf(parsed.cpf));
             if (fromRegistry) {
+              const preserveAdmin = Boolean(
+                isParsedAdmin ||
+                  fromRegistry.is_admin ||
+                  fromRegistry.role === 'admin' ||
+                  ADMIN_EMAILS.some(
+                    (adm) => adm.toLowerCase() === String(fromRegistry.email || '').toLowerCase()
+                  )
+              );
               return {
                 ...parsed,
                 ...fromRegistry,
                 id: fromRegistry.id || parsed.id,
                 cpf: fromRegistry.cpf || parsed.cpf,
                 nome: fromRegistry.nome || parsed.nome,
+                email: fromRegistry.email || parsed.email,
                 data_nascimento: fromRegistry.data_nascimento || parsed.data_nascimento,
                 whatsapp: fromRegistry.whatsapp || parsed.whatsapp,
                 telefone: fromRegistry.telefone || parsed.telefone,
                 email_contato: fromRegistry.email_contato || parsed.email_contato,
                 status_cadastro: fromRegistry.status_cadastro || parsed.status_cadastro,
-                bloqueado: Boolean(fromRegistry.bloqueado),
+                is_admin: preserveAdmin,
+                role: preserveAdmin ? 'admin' : fromRegistry.role || parsed.role || 'candidato',
+                tipo_usuario: preserveAdmin
+                  ? 'admin'
+                  : fromRegistry.tipo_usuario || parsed.tipo_usuario || 'candidato',
+                bloqueado: preserveAdmin ? false : Boolean(fromRegistry.bloqueado),
               };
             }
           } catch {
             // ignore
           }
-          return parsed;
+          return {
+            ...parsed,
+            is_admin: isParsedAdmin,
+            role: isParsedAdmin ? 'admin' : parsed.role || 'candidato',
+            tipo_usuario: isParsedAdmin ? 'admin' : parsed.tipo_usuario || 'candidato',
+          };
         }
       }
     } catch {
@@ -289,11 +314,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const handleSyncFromRegistry = () => {
       setUsuario((prev) => {
         if (!prev) return null;
-        const fromRegistry =
-          (prev.id && userRegistryStore.getUserById(prev.id)) ||
-          (prev.candidato_id && userRegistryStore.getUserById(prev.candidato_id)) ||
-          (prev.email && userRegistryStore.getUserByEmail(prev.email)) ||
-          (prev.cpf && userRegistryStore.getUserByCpf(prev.cpf));
+        const fromRegistry: Usuario | null | undefined =
+          (prev.id ? userRegistryStore.getUserById(prev.id) : null) ||
+          (prev.candidato_id ? userRegistryStore.getUserById(prev.candidato_id) : null) ||
+          (prev.email ? userRegistryStore.getUserByEmail(prev.email) : null) ||
+          (prev.cpf ? userRegistryStore.getUserByCpf(prev.cpf) : null);
+
+        const preserveAdmin = Boolean(
+          prev.is_admin ||
+            prev.role === 'admin' ||
+            prev.tipo_usuario === 'admin' ||
+            fromRegistry?.is_admin ||
+            fromRegistry?.role === 'admin' ||
+            ADMIN_EMAILS.some(
+              (adm) =>
+                adm.toLowerCase() === String(fromRegistry?.email || prev.email || '').toLowerCase()
+            )
+        );
 
         if (
           fromRegistry &&
@@ -303,7 +340,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             fromRegistry.telefone !== prev.telefone ||
             fromRegistry.email_contato !== prev.email_contato ||
             fromRegistry.status_cadastro !== prev.status_cadastro ||
-            Boolean(fromRegistry.bloqueado) !== Boolean(prev.bloqueado))
+            Boolean(fromRegistry.bloqueado) !== Boolean(prev.bloqueado) ||
+            Boolean(prev.is_admin) !== preserveAdmin)
         ) {
           const atualizado: Usuario = {
             ...prev,
@@ -315,7 +353,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             whatsapp: fromRegistry.whatsapp || prev.whatsapp,
             telefone: fromRegistry.telefone || prev.telefone,
             status_cadastro: fromRegistry.status_cadastro || prev.status_cadastro,
-            bloqueado: Boolean(fromRegistry.bloqueado),
+            is_admin: preserveAdmin,
+            role: preserveAdmin ? 'admin' : fromRegistry.role || prev.role || 'candidato',
+            tipo_usuario: preserveAdmin
+              ? 'admin'
+              : fromRegistry.tipo_usuario || prev.tipo_usuario || 'candidato',
+            bloqueado: preserveAdmin ? false : Boolean(fromRegistry.bloqueado),
           };
           try {
             localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(atualizado));
@@ -342,10 +385,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           (prevCpf.length >= 7 && updCpf.length >= 7 && prevCpf === updCpf);
 
         if (isMatch) {
+          const preserveAdmin = Boolean(
+            prev.is_admin ||
+              updated.is_admin ||
+              prev.role === 'admin' ||
+              updated.role === 'admin' ||
+              ADMIN_EMAILS.some(
+                (adm) =>
+                  adm.toLowerCase() === String(updated.email || prev.email || '').toLowerCase()
+              )
+          );
           const atualizado: Usuario = {
             ...prev,
             ...updated,
             nome: updated.nome || prev.nome,
+            is_admin: preserveAdmin,
+            role: preserveAdmin ? 'admin' : updated.role || prev.role || 'candidato',
+            tipo_usuario: preserveAdmin
+              ? 'admin'
+              : updated.tipo_usuario || prev.tipo_usuario || 'candidato',
           };
           try {
             localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(atualizado));
@@ -630,7 +688,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     <AuthContext.Provider
       value={{
         usuario,
-        isAdmin: !!usuario?.is_admin,
+        isAdmin: Boolean(
+          usuario?.is_admin ||
+            usuario?.role === 'admin' ||
+            usuario?.tipo_usuario === 'admin' ||
+            (usuario?.email &&
+              ADMIN_EMAILS.some((adm) => adm.toLowerCase() === usuario.email.toLowerCase()))
+        ),
         loginGoogle,
         redirecionarGoogleOAuth,
         loginAdmin,

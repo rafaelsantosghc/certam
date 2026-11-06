@@ -39,7 +39,8 @@ export const AdminOverlay: React.FC<AdminOverlayProps> = ({
   concursoAtualId = 'tjrs_2025',
   cargoAtualId = 'analista_judiciario',
 }) => {
-  const { usuario, isAdmin, alternarModoAdminPreview, loginAdminPreview } = useAuth();
+  const { usuario, isAdmin, alternarModoAdminPreview, loginAdminPreview, atualizarDadosUsuario } =
+    useAuth();
   const { dispararNotificacao, exibirToast } = useNotifications();
   
   // Aberto por padrão no preview para que o usuário localize o painel imediatamente
@@ -101,9 +102,22 @@ export const AdminOverlay: React.FC<AdminOverlayProps> = ({
     };
   }, []);
 
-  // Renderiza EXCLUSIVAMENTE se for o administrador oficial autorizado (is_admin === true)
+  // Garante que as credenciais completas do administrador (is_admin, role, email) estejam sempre propagadas para o PersistentChatWidget
+  useEffect(() => {
+    if (!isAdmin || !usuario) return;
+    if (!usuario.is_admin || usuario.role !== 'admin' || !usuario.email) {
+      atualizarDadosUsuario({
+        is_admin: true,
+        role: 'admin',
+        tipo_usuario: 'admin',
+        email: usuario.email || 'rafasms0@hotmail.com',
+      });
+    }
+  }, [isAdmin, usuario, atualizarDadosUsuario]);
+
+  // Renderiza EXCLUSIVAMENTE se for o administrador oficial autorizado
   // Oculta completamente qualquer interface administrativa de teste para usuários comuns mesmo em desenvolvimento
-  if (!isAdmin || !usuario?.is_admin || !isDebugMode()) {
+  if (!isAdmin || !usuario || !isDebugMode()) {
     return null;
   }
 
@@ -159,7 +173,7 @@ export const AdminOverlay: React.FC<AdminOverlayProps> = ({
 
   return createPortal(
     <>
-      <div className="fixed bottom-5 right-5 z-[999999] select-none font-sans no-print">
+      <div className="fixed bottom-5 left-5 z-[999999] select-none font-sans no-print">
         {/* Painel Lateral Retrátil Flutuante */}
         {expandido ? (
           <aside 

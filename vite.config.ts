@@ -336,6 +336,18 @@ function mergeKeyedObjectItems(existingItem: any, incomingItem: any): any {
     ? { ...existingItem, ...incomingItem }
     : { ...incomingItem, ...existingItem };
 
+  // Garante que o sender_id e credenciais de admin nunca sejam perdidos na mesclagem de mensagens
+  if (!merged.sender_id && (incomingItem?.sender_id || existingItem?.sender_id)) {
+    merged.sender_id = incomingItem?.sender_id || existingItem?.sender_id;
+  }
+  if (incomingItem?.is_admin || existingItem?.is_admin) {
+    merged.is_admin = true;
+  }
+  // Uma mensagem já confirmada como 'entregue' nunca deve regredir para 'enviando' ou 'erro'
+  if (existingItem?.status_envio === 'entregue' || incomingItem?.status_envio === 'entregue') {
+    merged.status_envio = 'entregue';
+  }
+
   if (
     isResolvedModerationStatus(existingItem?.status) &&
     (incomingItem?.status === 'pendente' || incomingItem?.status === 'aberto')
@@ -353,14 +365,55 @@ function mergeKeyedObjectItems(existingItem: any, incomingItem: any): any {
   return merged;
 }
 
+function logChatEntriesDebug(
+  origin: string,
+  keyName: string,
+  rawStr: string,
+  extraMeta?: Record<string, any>
+): void {
+  if (!keyName.startsWith('certam_chat_') && !keyName.startsWith('certam_dm_')) return;
+  try {
+    const parsed = JSON.parse(rawStr);
+    if (Array.isArray(parsed)) {
+      const lastItem = parsed[parsed.length - 1];
+      console.log(`[certamSyncPlugin][${origin}] Key="${keyName}" totalMsgs=${parsed.length}`, {
+        lastMsgId: lastItem?.id || null,
+        senderId: lastItem?.sender_id || lastItem?.email || null,
+        autor: lastItem?.autor || null,
+        isAdmin: Boolean(lastItem?.is_admin),
+        statusEnvio: lastItem?.status_envio || null,
+        ...extraMeta,
+      });
+    }
+  } catch (err) {
+    console.warn(`[certamSyncPlugin][${origin}] Erro ao inspecionar JSON de ${keyName}:`, err);
+  }
+}
+
 function mergeSyncValues(
   existingStr: string | undefined,
   incomingStr: string,
   forceReplace?: boolean,
   keyName?: string
 ): string {
-  if (!existingStr || existingStr === incomingStr) return incomingStr;
+  const isChatOrDmKey =
+    Boolean(keyName) &&
+    (keyName!.startsWith('certam_chat_') || keyName!.startsWith('certam_dm_'));
+
+  if (!existingStr || existingStr === incomingStr) {
+    if (isChatOrDmKey && keyName) {
+      logChatEntriesDebug('mergeSyncValues:initOrIdentical', keyName, incomingStr, {
+        hadExisting: Boolean(existingStr),
+      });
+    }
+    return incomingStr;
+  }
   if ((incomingStr === '[]' || incomingStr === '{}') && existingStr.length > 2 && !forceReplace) {
+    if (isChatOrDmKey && keyName) {
+      console.warn(
+        `[certamSyncPlugin][mergeSyncValues] Ignorando payload vazio para chave protegida "${keyName}"`
+      );
+    }
     return existingStr;
   }
   if (forceReplace) {
@@ -374,47 +427,78 @@ function mergeSyncValues(
         if (incomingArr.length === 0 && existingArr.length > 0) {
           return existingStr;
         }
+
+        // Verifica se os itens possuem chave identificadora (id, email ou sender_id) sem bloquear todo o lote por itens legados
+        const getItemKey = (item: any, idx: number): string | null => {
+          if (!item || typeof item !== 'object') return null;
+          const k = item.id || item.email || (isChatOrDmKey ? item.sender_id : null);
+          if (k) return String(k);
+          if (isChatOrDmKey) {
+            return `legacy_${idx}_${item.data_hora || ''}_${item.autor || ''}`;
+          }
+          return null;
+        };
+
         const hasKeyedItems =
-          existingArr.every((item: any) => item && typeof item === 'object' && (item.id || item.email)) &&
-          incomingArr.every((item: any) => item && typeof item === 'object' && (item.id || item.email));
+          existingArr.every((item: any, idx: number) => Boolean(getItemKey(item, idx))) &&
+          incomingArr.every((item: any, idx: number) => Boolean(getItemKey(item, idx)));
+
         if (!hasKeyedItems) {
+          if (isChatOrDmKey && keyName) {
+            console.warn(
+              `[certamSyncPlugin][mergeSyncValues] Aviso: Itens sem chave padrão detectados em "${keyName}", usando incomingArr diretamente.`
+            );
+          }
           return incomingStr;
         }
-        const isChronologicalChatOrDm =
-          Boolean(keyName) &&
-          (keyName!.startsWith('certam_chat_') || keyName!.startsWith('certam_dm_'));
 
         const map = new Map<string, any>();
-        if (isChronologicalChatOrDm) {
+        if (isChatOrDmKey) {
           // Mensagens de chat e DM mantêm ordem cronológica (existentes primeiro, novas ao final)
-          existingArr.forEach((item: any) => {
-            const k = item.id || item.email;
-            map.set(String(k), item);
+          existingArr.forEach((item: any, idx: number) => {
+            const k = getItemKey(item, idx);
+            if (k) map.set(k, item);
           });
-          incomingArr.forEach((item: any) => {
-            const k = item.id || item.email;
-            const prev = map.get(String(k));
-            map.set(String(k), prev ? mergeKeyedObjectItems(prev, item) : item);
+          incomingArr.forEach((item: any, idx: number) => {
+            const k = getItemKey(item, idx);
+            if (!k) return;
+            const prev = map.get(k);
+            const normalizedItem =
+              item.status_envio === 'enviando' || item.status_envio === 'erro'
+                ? { ...item, status_envio: 'entregue' }
+                : item;
+            map.set(k, prev ? mergeKeyedObjectItems(prev, normalizedItem) : normalizedItem);
           });
         } else {
           // Filas administrativas (auditoria/notificações) mantêm itens novos na frente
-          incomingArr.forEach((item: any) => {
-            const k = item.id || item.email;
-            map.set(String(k), item);
+          incomingArr.forEach((item: any, idx: number) => {
+            const k = getItemKey(item, idx);
+            if (k) map.set(k, item);
           });
-          existingArr.forEach((item: any) => {
-            const k = item.id || item.email;
-            const incomingItem = map.get(String(k));
+          existingArr.forEach((item: any, idx: number) => {
+            const k = getItemKey(item, idx);
+            if (!k) return;
+            const incomingItem = map.get(k);
             map.set(
-              String(k),
+              k,
               incomingItem ? mergeKeyedObjectItems(item, incomingItem) : item
             );
           });
         }
-        return JSON.stringify(Array.from(map.values()));
+        const mergedResult = JSON.stringify(Array.from(map.values()));
+        if (isChatOrDmKey && keyName) {
+          logChatEntriesDebug('mergeSyncValues:merged', keyName, mergedResult, {
+            existingCount: existingArr.length,
+            incomingCount: incomingArr.length,
+            mergedCount: map.size,
+          });
+        }
+        return mergedResult;
       }
-    } catch {
-      // fallback
+    } catch (err) {
+      if (isChatOrDmKey && keyName) {
+        console.error(`[certamSyncPlugin][mergeSyncValues] Erro ao mesclar "${keyName}":`, err);
+      }
     }
   }
   if (existingStr.startsWith('{') && incomingStr.startsWith('{')) {
@@ -627,6 +711,7 @@ function attachChatWebSocketServer(httpServer: any): void {
               for (const [rawKey, v] of Object.entries(entries)) {
                 if (typeof v !== 'string') continue;
                 const k = LEGACY_KEY_MIGRATIONS[rawKey] || rawKey;
+                logChatEntriesDebug('ws:chat:send:incoming', k, v, { ackId, msgId });
                 const nextVal = mergeSyncValues(db.entries[k], v, false, k);
                 db.entries[k] = nextVal;
                 db.versions[k] = now;
@@ -663,8 +748,8 @@ function attachChatWebSocketServer(httpServer: any): void {
               );
             }
           }
-        } catch {
-          // ignore malformed frame
+        } catch (err) {
+          console.warn('[certamSyncPlugin][ws] Erro ao processar pacote WS:', err);
         }
       }
     });
@@ -702,6 +787,7 @@ function certamSyncPlugin(): Plugin {
               for (const [rawKey, v] of Object.entries(entries)) {
                 if (typeof v !== 'string') continue;
                 const k = LEGACY_KEY_MIGRATIONS[rawKey] || rawKey;
+                logChatEntriesDebug('http:/api/chat-ack:incoming', k, v, { ackId, msgId });
                 const nextVal = mergeSyncValues(db.entries[k], v, false, k);
                 db.entries[k] = nextVal;
                 db.versions[k] = now;
@@ -731,7 +817,8 @@ function certamSyncPlugin(): Plugin {
                 entries: updatedEntries,
               })
             );
-          } catch {
+          } catch (err) {
+            console.error('[certamSyncPlugin][/api/chat-ack] Falha ao processar POST:', err);
             res.statusCode = 400;
             res.end(JSON.stringify({ ok: false }));
           }
@@ -791,6 +878,9 @@ function certamSyncPlugin(): Plugin {
               if (rawKey === '_test_ping') continue;
               const k = LEGACY_KEY_MIGRATIONS[rawKey] || rawKey;
               if (typeof v === 'string') {
+                if (k.startsWith('certam_chat_') || k.startsWith('certam_dm_')) {
+                  logChatEntriesDebug('http:/api/sync:incoming', k, v, { forceReplace });
+                }
                 const sanitizedIncoming = sanitizeSyncEntryValue(k, v);
                 // Concursos, lotes e listas de classificação vindos do Admin têm autoridade absoluta (forceReplace)
                 const shouldForceKey =

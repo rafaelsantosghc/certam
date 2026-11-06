@@ -448,25 +448,45 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
   const handleEnviar = (e: React.FormEvent) => {
     e.preventDefault();
     if (!texto.trim()) return;
-    if (!usuario) {
+    if (!usuario && !isAdmin) {
       onRequireAuth?.();
       return;
     }
 
+    const isUserAdmin = Boolean(
+      isAdmin ||
+        usuario?.is_admin ||
+        usuario?.role === 'admin' ||
+        usuario?.tipo_usuario === 'admin' ||
+        usuario?.email?.toLowerCase() === 'rafasms0@hotmail.com'
+    );
+
+    const nomeAutor =
+      usuario?.nome?.trim() || (isUserAdmin ? 'Rafael Santos Morais da Silva' : 'Candidato');
+    const emailAutor =
+      usuario?.email?.trim().toLowerCase() ||
+      (isUserAdmin ? 'rafasms0@hotmail.com' : 'candidato@certam.com.br');
+
     const cores = ['#0D5C75', '#0F766E', '#1D4ED8', '#6366F1', '#475569'];
     const corHash =
       cores[
-        usuario.nome.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) % cores.length
+        nomeAutor.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) % cores.length
       ];
-    const currentSenderId = chatStore.obterIdentificadorUsuario(usuario);
+    const currentSenderId = chatStore.obterIdentificadorUsuario(
+      usuario || {
+        nome: nomeAutor,
+        email: emailAutor,
+        is_admin: isUserAdmin,
+      }
+    );
 
     const nova = chatStore.enviarMensagem(concursoAtivoId, 'geral', canalAtivo, {
       sender_id: currentSenderId,
-      autor: usuario.nome,
-      email: usuario.email,
+      autor: nomeAutor,
+      email: emailAutor,
       avatar_cor: corHash,
       texto: texto.trim(),
-      is_admin: isAdmin,
+      is_admin: isUserAdmin,
       is_fixado: false,
       curtidas: 0,
       curtido_por: [],

@@ -83,9 +83,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   onNavigate,
   onVoltar,
 }) => {
-  const { usuario, isAdmin, loginGoogle, atualizarDadosUsuario } = useAuth();
+  const { usuario, isAdmin, loginGoogle, loginAdminPreview, atualizarDadosUsuario } = useAuth();
   const [senhaAdmin, setSenhaAdmin] = useState('');
   const [erroSenha, setErroSenha] = useState(false);
+
+  // Garante que as credenciais do administrador estejam sincronizadas no contexto global ao acessar o AdminPanel
+  useEffect(() => {
+    if (isAdmin && usuario && (!usuario.is_admin || usuario.role !== 'admin' || !usuario.email)) {
+      atualizarDadosUsuario({
+        is_admin: true,
+        role: 'admin',
+        tipo_usuario: 'admin',
+        email: usuario.email || 'rafasms0@hotmail.com',
+      });
+    }
+  }, [isAdmin, usuario, atualizarDadosUsuario]);
 
   const abasAdminValidas = new Set([
     'concursos',
@@ -914,8 +926,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     });
   }, [usuariosGerais, buscaUsuario, filtroStatusUsuario, filtroRoleUsuario]);
 
-  // Se não for o administrador oficial autorizado com is_admin === true, bloqueia imediatamente
-  if (!isAdmin || !usuario?.is_admin) {
+  // Se não for o administrador oficial autorizado, bloqueia imediatamente
+  if (!isAdmin || !usuario) {
     return (
       <div className="max-w-md mx-auto my-12 p-6 sm:p-8 bg-white rounded-2xl shadow-xl border border-slate-200 text-center space-y-4">
         <div className="w-12 h-12 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center mx-auto">

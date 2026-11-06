@@ -85,9 +85,12 @@ function getOrCreateAnonId(): string {
 export function obterIdentificadorUsuarioChat(
   usuarioOuEmail?: string | Usuario | null
 ): string {
+  const isCpfRealValido = (cpfDigits: string) =>
+    cpfDigits.length >= 9 && !/^0+$/.test(cpfDigits);
+
   if (usuarioOuEmail && typeof usuarioOuEmail === 'object') {
     const cpfLimpo = String(usuarioOuEmail.cpf || '').replace(/\D/g, '');
-    if (cpfLimpo.length >= 9) return `cpf:${cpfLimpo}`;
+    if (isCpfRealValido(cpfLimpo)) return `cpf:${cpfLimpo}`;
     const emailLimpo = String(usuarioOuEmail.email || '').trim().toLowerCase();
     if (emailLimpo && emailLimpo !== 'candidato@certam.com.br') return emailLimpo;
     if (usuarioOuEmail.id) return String(usuarioOuEmail.id).trim().toLowerCase();
@@ -107,7 +110,7 @@ export function obterIdentificadorUsuarioChat(
         const parsed = JSON.parse(rawAuth);
         if (parsed && typeof parsed === 'object') {
           const cpfLimpo = String(parsed.cpf || '').replace(/\D/g, '');
-          if (cpfLimpo.length >= 9) return `cpf:${cpfLimpo}`;
+          if (isCpfRealValido(cpfLimpo)) return `cpf:${cpfLimpo}`;
           const emailLimpo = String(parsed.email || '').trim().toLowerCase();
           if (emailLimpo && emailLimpo !== 'candidato@certam.com.br') return emailLimpo;
         }
