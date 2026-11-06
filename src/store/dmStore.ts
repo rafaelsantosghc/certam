@@ -430,7 +430,13 @@ export const dmStore = {
 
     const isAdmin = Boolean(usuario.is_admin);
     const checagem = podeEditarMensagemChat(
-      { created_at: m.created_at, email: m.remetente_email, autor: m.remetente_nome },
+      {
+        id: m.id,
+        created_at: m.created_at,
+        data_hora: m.data_hora,
+        email: m.remetente_email,
+        autor: m.remetente_nome,
+      },
       usuario,
       isAdmin
     );

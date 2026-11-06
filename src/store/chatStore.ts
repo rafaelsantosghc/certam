@@ -14,31 +14,101 @@ const CLIENT_ANON_ID_KEY = 'certam_chat_client_id_v1';
 export const CHAT_MAX_MESSAGES_PER_ROOM = 100;
 export const CHAT_RETENTION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 dias
 
-// Limite para edição de mensagens pelo autor (15 minutos)
+// Limite para edição de mensagens pelo autor (15 minutos contados a partir do horário de envio)
 export const CHAT_EDIT_MAX_AGE_MS = 15 * 60 * 1000;
 
-export function podeEditarMensagemChat(
-  msg: { created_at?: number; email?: string; remetente_email?: string; autor?: string },
-  usuario: Usuario | null,
-  isAdmin: boolean
-): { pode: boolean; motivo?: string; tempoRestanteMs?: number } {
-  if (!usuario) return { pode: false, motivo: 'Você precisa estar autenticado.' };
-  if (isAdmin || Boolean(usuario.is_admin)) {
-    return { pode: true, tempoRestanteMs: Infinity };
+export function extrairTimestampEnvioMensagem(msg: {
+  id?: string;
+  created_at?: number;
+  data_hora?: string;
+}): number {
+  if (typeof msg.created_at === 'number' && msg.created_at > 1000000000000) {
+    return msg.created_at;
   }
+  const idStr = String(msg.id || '');
+  const idMatch = idStr.match(/^(?:msg|dm)-([a-z0-9]+)-/i);
+  if (idMatch && idMatch[1]) {
+    const parsed = parseInt(idMatch[1], 36);
+    if (!Number.isNaN(parsed) && parsed > 1000000000000) {
+      return parsed;
+    }
+  }
+  const dh = String(msg.data_hora || '').trim();
+  const hojeMatch = dh.match(/^(?:Hoje\s+às\s+)?(\d{1,2}):(\d{2})$/i);
+  if (hojeMatch) {
+    const hh = parseInt(hojeMatch[1], 10);
+    const mm = parseInt(hojeMatch[2], 10);
+    if (hh >= 0 && hh <= 23 && mm >= 0 && mm <= 59) {
+      const d = new Date();
+      d.setHours(hh, mm, 0, 0);
+      return d.getTime();
+    }
+  }
+  const dataHoraMatch = dh.match(/^(\d{2})\/(\d{2})(?:\/(\d{2,4}))?\s+às\s+(\d{1,2}):(\d{2})$/i);
+  if (dataHoraMatch) {
+    const dia = parseInt(dataHoraMatch[1], 10);
+    const mes = parseInt(dataHoraMatch[2], 10) - 1;
+    const anoRaw = dataHoraMatch[3] ? parseInt(dataHoraMatch[3], 10) : new Date().getFullYear();
+    const ano = anoRaw < 100 ? 2000 + anoRaw : anoRaw;
+    const hh = parseInt(dataHoraMatch[4], 10);
+    const mm = parseInt(dataHoraMatch[5], 10);
+    const d = new Date(ano, mes, dia, hh, mm, 0, 0);
+    if (!Number.isNaN(d.getTime())) {
+      return d.getTime();
+    }
+  }
+  return 0;
+}
+
+export function podeEditarMensagemChat(
+  msg: {
+    id?: string;
+    created_at?: number;
+    data_hora?: string;
+    email?: string;
+    remetente_email?: string;
+    sender_id?: string;
+    autor?: string;
+  },
+  usuario: Usuario | null,
+  _isAdmin?: boolean
+): { pode: boolean; motivo?: string; tempoRestanteMs?: number; expiraEm?: number; horarioLimite?: string } {
+  if (!usuario) return { pode: false, motivo: 'Você precisa estar autenticado.' };
+
   const emailMsg = (msg.email || msg.remetente_email || '').toLowerCase().trim();
   const userEmail = (usuario.email || '').toLowerCase().trim();
-  const ehAutor = Boolean(emailMsg && userEmail && emailMsg === userEmail);
+  const ehAutorPorEmail = Boolean(emailMsg && userEmail && emailMsg === userEmail);
+  const ehAutor =
+    ehAutorPorEmail ||
+    chatStore.isMensagemDoProprioUsuario(msg as ChatMensagem, usuario);
+
   if (!ehAutor) {
     return { pode: false, motivo: 'Apenas o autor pode editar sua própria mensagem.' };
   }
-  const now = Date.now();
-  const createdAt = typeof msg.created_at === 'number' && msg.created_at > 0 ? msg.created_at : now;
-  const diff = now - createdAt;
-  if (diff > CHAT_EDIT_MAX_AGE_MS) {
-    return { pode: false, motivo: 'O limite de 15 minutos para edição expirou.' };
+
+  const createdAt = extrairTimestampEnvioMensagem(msg);
+  if (!createdAt || createdAt <= 0) {
+    return { pode: false, motivo: 'O limite de 15 minutos após o envio para edição já expirou.' };
   }
-  return { pode: true, tempoRestanteMs: Math.max(0, CHAT_EDIT_MAX_AGE_MS - diff) };
+
+  const now = Date.now();
+  const diff = Math.max(0, now - createdAt);
+  if (diff > CHAT_EDIT_MAX_AGE_MS) {
+    return { pode: false, motivo: 'O limite de 15 minutos após o envio para edição já expirou.' };
+  }
+
+  const expiraEm = createdAt + CHAT_EDIT_MAX_AGE_MS;
+  const horarioLimite = new Date(expiraEm).toLocaleTimeString('pt-BR', {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+
+  return {
+    pode: true,
+    tempoRestanteMs: Math.max(0, CHAT_EDIT_MAX_AGE_MS - diff),
+    expiraEm,
+    horarioLimite,
+  };
 }
 
 export const DEFAULT_FREQUENT_EMOJIS = ['👍', '❤️', '🔥', '🎉', '🚀', '👏', '🙏', '💡'];

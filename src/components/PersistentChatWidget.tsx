@@ -762,12 +762,20 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
   const [dmBusca, setDmBusca] = useState<string>('');
   const [dmIsBloqueado, setDmIsBloqueado] = useState<boolean>(false);
 
-  // Estados de edição de mensagens e histórico de alterações (15 minutos)
+  // Estados de edição de mensagens e histórico de alterações (15 minutos contados do envio)
   const [editingMsgId, setEditingMsgId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState<string>('');
   const [editingType, setEditingType] = useState<'canal' | 'dm' | null>(null);
   const [historicoModalMsg, setHistoricoModalMsg] = useState<ChatMensagem | MensagemPrivada | null>(null);
   const [feedbackToast, setFeedbackToast] = useState<string | null>(null);
+  const [, setEditWindowTick] = useState<number>(0);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setEditWindowTick((prev) => prev + 1);
+    }, 15000);
+    return () => clearInterval(timer);
+  }, []);
 
   const mostrarFeedbackToast = (msg: string) => {
     setFeedbackToast(msg);
@@ -2245,7 +2253,10 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
       carregarMensagensAtivas();
       mostrarFeedbackToast('Mensagem editada com sucesso!');
     } else {
-      alert(res.erro || 'Falha ao editar mensagem.');
+      setEditingMsgId(null);
+      setEditingText('');
+      setEditingType(null);
+      mostrarFeedbackToast(res.erro || 'O limite de 15 minutos para edição expirou.');
     }
   }, [editingMsgId, usuario, concursoAtivoId, salaAtiva.cargoScope, editingText, carregarMensagensAtivas]);
 
@@ -2265,7 +2276,10 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
       setDmMensagens(dmStore.getMensagens());
       mostrarFeedbackToast('Mensagem privada editada com sucesso!');
     } else {
-      alert(res.erro || 'Falha ao editar mensagem privada.');
+      setEditingMsgId(null);
+      setEditingText('');
+      setEditingType(null);
+      mostrarFeedbackToast(res.erro || 'O limite de 15 minutos para edição expirou.');
     }
   }, [editingMsgId, usuario, editingText]);
 
@@ -3386,7 +3400,11 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
                               const readStatus = getMessageReadStatus(msg.id);
                               const checagemEdicao = podeEditarMensagemChat(msg, usuario, Boolean(isAdmin));
                               const podeEditar = checagemEdicao.pode;
-                              const isEditing = editingMsgId === msg.id && editingType === 'canal';
+                              const tempoRestanteQuantizado =
+                                podeEditar && typeof checagemEdicao.tempoRestanteMs === 'number'
+                                  ? Math.ceil(checagemEdicao.tempoRestanteMs / 60000) * 60000
+                                  : undefined;
+                              const isEditing = podeEditar && editingMsgId === msg.id && editingType === 'canal';
 
                               return (
                                 <ChatMessageItem
@@ -3402,7 +3420,7 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
                                   termoBusca={termoBuscaHistorico}
                                   isAdmin={Boolean(isAdmin)}
                                   podeEditar={podeEditar}
-                                  tempoRestanteMs={checagemEdicao.tempoRestanteMs}
+                                  tempoRestanteMs={tempoRestanteQuantizado}
                                   isEditing={isEditing}
                                   editingText={isEditing ? editingText : ''}
                                   onSetEditingText={setEditingText}
@@ -3603,12 +3621,22 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
                               const isPrimeiraNaoLida = primeiraNaoLidaId === m.id;
                               const dmReadStatus = getMessageReadStatus(m.id);
                               const checagemEdicaoDm = podeEditarMensagemChat(
-                                { created_at: m.created_at, email: m.remetente_email, autor: m.remetente_nome },
+                                {
+                                  id: m.id,
+                                  created_at: m.created_at,
+                                  data_hora: m.data_hora,
+                                  email: m.remetente_email,
+                                  autor: m.remetente_nome,
+                                },
                                 usuario,
                                 Boolean(isAdmin)
                               );
                               const podeEditarDm = checagemEdicaoDm.pode;
-                              const isEditingDm = editingMsgId === m.id && editingType === 'dm';
+                              const tempoRestanteDmQuantizado =
+                                podeEditarDm && typeof checagemEdicaoDm.tempoRestanteMs === 'number'
+                                  ? Math.ceil(checagemEdicaoDm.tempoRestanteMs / 60000) * 60000
+                                  : undefined;
+                              const isEditingDm = podeEditarDm && editingMsgId === m.id && editingType === 'dm';
 
                               return (
                                 <DmMessageItem
@@ -3621,7 +3649,7 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
                                   destacarTextoBusca={destacarTextoBusca}
                                   isAdmin={Boolean(isAdmin)}
                                   podeEditar={podeEditarDm}
-                                  tempoRestanteMs={checagemEdicaoDm.tempoRestanteMs}
+                                  tempoRestanteMs={tempoRestanteDmQuantizado}
                                   isEditing={isEditingDm}
                                   editingText={isEditingDm ? editingText : ''}
                                   onSetEditingText={setEditingText}

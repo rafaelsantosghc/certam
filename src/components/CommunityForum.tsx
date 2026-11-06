@@ -86,10 +86,18 @@ export const CommunityForum: React.FC<CommunityForumProps> = ({
   const [primeiraNaoLidaId, setPrimeiraNaoLidaId] = useState<string | null>(null);
   const [mostrarBotaoDescer, setMostrarBotaoDescer] = useState(false);
 
-  // Estados de edição de mensagens e histórico de alterações (15 minutos)
+  // Estados de edição de mensagens e histórico de alterações (15 minutos contados do envio)
   const [editingMsgId, setEditingMsgId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState<string>('');
   const [historicoModalMsg, setHistoricoModalMsg] = useState<ChatMensagem | null>(null);
+  const [, setEditWindowTick] = useState<number>(0);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setEditWindowTick((prev) => prev + 1);
+    }, 15000);
+    return () => clearInterval(timer);
+  }, []);
 
   const handleIniciarEdicao = (msg: ChatMensagem) => {
     setEditingMsgId(msg.id);
@@ -112,7 +120,8 @@ export const CommunityForum: React.FC<CommunityForumProps> = ({
       const atualizadas = chatStore.getMensagens(concursoId, cargoScope, 'geral');
       setMensagens(atualizadas);
     } else {
-      alert(res.erro || 'Falha ao editar mensagem.');
+      setEditingMsgId(null);
+      setEditingText('');
     }
   };
 
