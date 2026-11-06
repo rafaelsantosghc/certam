@@ -89,7 +89,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
           type="button"
           onClick={() => handleLinkClick('portal')}
           title="Portal CERTAM"
-          className="h-[76px] flex items-center px-4 sm:px-6 border-b border-[#0F2942] gap-3 group text-left w-full cursor-pointer"
+          className={`h-[76px] flex items-center border-b border-[#0F2942] gap-3 group text-left w-full cursor-pointer transition-all ${
+            efetivamenteColapsado ? 'justify-center px-2' : 'px-4 sm:px-6'
+          }`}
         >
           <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#135A7A] via-[#1D8A8A] to-[#2DD4AA] p-1.5 flex items-center justify-center shrink-0 shadow-sm group-hover:brightness-110 transition-all">
             <svg className="w-full h-full" viewBox="0 0 100 100" fill="none">
@@ -109,7 +111,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
               />
             </svg>
           </div>
-          <div className={`transition-opacity duration-200 overflow-hidden whitespace-nowrap ${efetivamenteColapsado ? 'opacity-0 w-0' : 'opacity-100'}`}>
+          <div
+            className={`transition-all duration-200 overflow-hidden whitespace-nowrap ${
+              efetivamenteColapsado ? 'opacity-0 w-0 pointer-events-none' : 'opacity-100 flex-1'
+            }`}
+          >
             <span className="text-xl font-bold tracking-widest text-white font-serif uppercase">
               CERTAM
             </span>
@@ -126,7 +132,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
             type="button"
             onClick={() => handleLinkClick('portal')}
             title="Concursos cadastrados"
-            className={`w-full flex items-center gap-3.5 px-4 sm:px-6 py-3 text-sm font-medium transition-all cursor-pointer text-left ${
+            className={`w-full flex items-center gap-3.5 py-3 text-sm font-medium transition-all cursor-pointer text-left ${
+              efetivamenteColapsado ? 'justify-center px-0' : 'px-4 sm:px-6'
+            } ${
               currentView === 'portal'
                 ? 'font-semibold text-[#2DD4AA] bg-[#0C2640] border-l-4 border-[#2DD4AA]'
                 : 'text-[#94A3B8] hover:text-white hover:bg-[#0C2640]/50 border-l-4 border-transparent'
@@ -135,7 +143,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <span className="w-5 h-5 flex items-center justify-center shrink-0">
               <LayoutGrid className="w-5 h-5" />
             </span>
-            <span className={`whitespace-nowrap overflow-hidden transition-opacity duration-200 ${efetivamenteColapsado ? 'opacity-0 w-0' : 'opacity-100'}`}>
+            <span
+              className={`whitespace-nowrap overflow-hidden transition-all duration-200 ${
+                efetivamenteColapsado ? 'opacity-0 w-0 pointer-events-none' : 'opacity-100'
+              }`}
+            >
               Concursos cadastrados
             </span>
           </button>
@@ -146,7 +158,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
               type="button"
               onClick={() => handleLinkClick('admin')}
               title="Painel administrativo"
-              className={`w-full flex items-center gap-3.5 px-4 sm:px-6 py-3 text-sm font-medium transition-all cursor-pointer text-left ${
+              className={`w-full flex items-center gap-3.5 py-3 text-sm font-medium transition-all cursor-pointer text-left ${
+                efetivamenteColapsado ? 'justify-center px-0' : 'px-4 sm:px-6'
+              } ${
                 currentView === 'admin'
                   ? 'font-semibold text-amber-300 bg-[#0C2640] border-l-4 border-amber-400'
                   : 'text-[#94A3B8] hover:text-amber-300 hover:bg-[#0C2640]/50 border-l-4 border-transparent'
@@ -155,7 +169,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <span className="w-5 h-5 flex items-center justify-center shrink-0">
                 <Settings className="w-5 h-5" />
               </span>
-              <span className={`flex items-center gap-1.5 whitespace-nowrap overflow-hidden transition-opacity duration-200 ${efetivamenteColapsado ? 'opacity-0 w-0' : 'opacity-100'}`}>
+              <span
+                className={`flex items-center gap-1.5 whitespace-nowrap overflow-hidden transition-all duration-200 ${
+                  efetivamenteColapsado ? 'opacity-0 w-0 pointer-events-none' : 'opacity-100'
+                }`}
+              >
                 <span>Painel administrativo</span>
                 <span className="px-1 py-0.5 rounded text-[9px] bg-amber-400/20 text-amber-300 font-mono font-bold">
                   GERÊNCIA
@@ -169,7 +187,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
             type="button"
             onClick={() => handleLinkClick('politica')}
             title="Política de privacidade"
-            className={`w-full flex items-center gap-3.5 px-4 sm:px-6 py-3 text-sm font-medium transition-all cursor-pointer text-left ${
+            className={`w-full flex items-center gap-3.5 py-3 text-sm font-medium transition-all cursor-pointer text-left ${
+              efetivamenteColapsado ? 'justify-center px-0' : 'px-4 sm:px-6'
+            } ${
               currentView === 'politica'
                 ? 'font-semibold text-[#2DD4AA] bg-[#0C2640] border-l-4 border-[#2DD4AA]'
                 : 'text-[#94A3B8] hover:text-white hover:bg-[#0C2640]/50 border-l-4 border-transparent'
@@ -178,7 +198,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <span className="w-5 h-5 flex items-center justify-center shrink-0">
               <ShieldCheck className="w-5 h-5" />
             </span>
-            <span className={`whitespace-nowrap overflow-hidden transition-opacity duration-200 ${efetivamenteColapsado ? 'opacity-0 w-0' : 'opacity-100'}`}>
+            <span
+              className={`whitespace-nowrap overflow-hidden transition-all duration-200 ${
+                efetivamenteColapsado ? 'opacity-0 w-0 pointer-events-none' : 'opacity-100'
+              }`}
+            >
               Política de privacidade
             </span>
           </button>
@@ -300,12 +324,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </nav>
 
         {/* Rodapé da Sidebar */}
-        <div className="p-3 sm:p-4 border-t border-[#0F2942] space-y-2.5">
+        <div className={`border-t border-[#0F2942] space-y-2 ${efetivamenteColapsado ? 'p-2' : 'p-3 sm:p-4'}`}>
           {usuario ? (
-            <div className={`px-3 py-2.5 rounded-xl bg-[#0C2640] border border-teal-500/20 text-xs space-y-1 ${efetivamenteColapsado ? 'text-center px-1' : ''}`}>
+            <div
+              className={`rounded-xl bg-[#0C2640] border border-teal-500/20 text-xs transition-all ${
+                efetivamenteColapsado ? 'p-1.5 flex flex-col items-center justify-center' : 'px-3 py-2.5 space-y-1'
+              }`}
+            >
               <div className="flex items-center justify-center">
-                <span className={`font-bold block text-[11px] ${usuario.is_admin ? 'text-amber-300' : 'text-teal-400'}`}>
-                  {efetivamenteColapsado ? usuario.nome.charAt(0).toUpperCase() : (usuario.is_admin ? 'Administrador' : 'Candidato')}
+                <span
+                  className={`font-bold block text-[11px] ${
+                    usuario.is_admin ? 'text-amber-300' : 'text-teal-400'
+                  }`}
+                >
+                  {efetivamenteColapsado
+                    ? (usuario.nome ? usuario.nome.charAt(0).toUpperCase() : 'U')
+                    : usuario.is_admin
+                    ? 'Administrador'
+                    : 'Candidato'}
                 </span>
               </div>
               {!efetivamenteColapsado && (
@@ -326,7 +362,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
               type="button"
               onClick={logout}
               title="Desconectar conta"
-              className={`w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-xl transition-colors cursor-pointer ${efetivamenteColapsado ? 'justify-center' : ''}`}
+              className={`w-full flex items-center gap-2.5 text-xs font-semibold text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-xl transition-colors cursor-pointer ${
+                efetivamenteColapsado ? 'justify-center py-2 px-0' : 'px-3 py-2'
+              }`}
             >
               <LogOut className="w-3.5 h-3.5 shrink-0" />
               {!efetivamenteColapsado && <span>Desconectar conta</span>}

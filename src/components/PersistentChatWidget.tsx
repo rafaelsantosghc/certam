@@ -71,6 +71,441 @@ interface ResumoNovaMensagemChat {
   dataHora: string;
 }
 
+// Subcomponente memoizado para itens de mensagens públicas do chat de concurso
+interface ChatMessageItemProps {
+  msg: ChatMensagem;
+  isPrimeiraNaoLida: boolean;
+  ehMinhaMsg: boolean;
+  jaCurtiu: boolean;
+  minhaReacao: string | null;
+  totalCurtidas: number;
+  reacoesEntries: [string, string[]][];
+  readStatus: { isReadByOthers: boolean; readersCount: number };
+  termoBusca: string;
+  isAdmin: boolean;
+  isEmojiPickerOpen: boolean;
+  categoriaEmojiAtiva: string;
+  emojisFrequentes: string[];
+  onCurtir: (id: string) => void;
+  onReagir: (id: string, emoji: string) => void;
+  onToggleEmojiPicker: (id: string) => void;
+  onSetCategoriaEmoji: (cat: string) => void;
+  onIniciarDm: (email: string, nome: string) => void;
+  onReenviar: (id: string) => void;
+  onAlternarFixado: (id: string) => void;
+  onApagar: (id: string) => void;
+  formatarDuracaoAudio: (seg?: number) => string;
+  destacarTextoBusca: (txt: string, termo: string) => React.ReactNode;
+}
+
+const ChatMessageItem = React.memo<ChatMessageItemProps>(
+  ({
+    msg,
+    isPrimeiraNaoLida,
+    ehMinhaMsg,
+    jaCurtiu,
+    minhaReacao,
+    totalCurtidas,
+    reacoesEntries,
+    readStatus,
+    termoBusca,
+    isAdmin,
+    isEmojiPickerOpen,
+    categoriaEmojiAtiva,
+    emojisFrequentes,
+    onCurtir,
+    onReagir,
+    onToggleEmojiPicker,
+    onSetCategoriaEmoji,
+    onIniciarDm,
+    onReenviar,
+    onAlternarFixado,
+    onApagar,
+    formatarDuracaoAudio,
+    destacarTextoBusca,
+  }) => {
+    return (
+      <>
+        {isPrimeiraNaoLida && (
+          <div className="flex items-center gap-2 my-1.5">
+            <div className="h-px bg-teal-400/60 flex-1" />
+            <span className="text-[9px] font-extrabold uppercase tracking-wider bg-teal-600 text-white px-2.5 py-0.5 rounded-full shadow-2xs">
+              Mensagens não lidas a partir daqui
+            </span>
+            <div className="h-px bg-teal-400/60 flex-1" />
+          </div>
+        )}
+        <div
+          data-chat-msg-id={msg.id}
+          className={`rounded-xl p-2.5 border text-xs transition-all ${
+            isPrimeiraNaoLida
+              ? 'bg-teal-50/70 border-teal-300 ring-1 ring-teal-400/40'
+              : msg.is_fixado
+              ? 'bg-amber-50/90 border-amber-200'
+              : 'bg-white border-slate-200/80 shadow-2xs'
+          }`}
+        >
+          <div className="flex items-center justify-between gap-1 mb-1">
+            <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
+              <span
+                className="w-5 h-5 rounded-full text-white text-[9px] font-bold flex items-center justify-center shrink-0"
+                style={{
+                  backgroundColor: msg.avatar_cor || '#0D5C75',
+                }}
+              >
+                {msg.autor.substring(0, 2).toUpperCase()}
+              </span>
+              <span className="font-bold text-slate-900 truncate">
+                {msg.autor}
+              </span>
+              {msg.is_admin && (
+                <span className="bg-teal-700 text-white text-[9px] font-bold px-1.5 py-0.2 rounded flex items-center gap-0.5">
+                  <Shield className="w-2.5 h-2.5" /> Admin
+                </span>
+              )}
+              {msg.posicao_candidato && (
+                <span className="bg-slate-100 text-slate-700 border border-slate-200 text-[9px] font-mono font-bold px-1.5 py-0.2 rounded">
+                  {msg.posicao_candidato}º lugar
+                </span>
+              )}
+              {msg.is_fixado && (
+                <Pin className="w-3 h-3 text-amber-600 shrink-0" />
+              )}
+            </div>
+            <div className="flex items-center gap-1 shrink-0">
+              {!ehMinhaMsg &&
+                msg.email &&
+                msg.email !== 'candidato@certam.com.br' && (
+                  <button
+                    type="button"
+                    onClick={() => onIniciarDm(msg.email, msg.autor)}
+                    className="p-1 rounded-md text-slate-400 hover:text-teal-700 hover:bg-teal-50 transition-colors cursor-pointer"
+                    title={`Enviar mensagem privada para ${msg.autor}`}
+                  >
+                    <Mail className="w-3 h-3" />
+                  </button>
+                )}
+              <span className="text-[10px] text-slate-400 font-mono shrink-0">
+                {msg.data_hora}
+              </span>
+            </div>
+          </div>
+
+          <p className="text-slate-700 leading-relaxed whitespace-pre-line break-words mb-2">
+            {destacarTextoBusca(msg.texto, termoBusca)}
+          </p>
+
+          {msg.audio_base64 && (
+            <div className="mb-2 p-2 rounded-xl bg-teal-50/70 border border-teal-200/80 flex flex-col gap-1">
+              <div className="flex items-center justify-between text-[10px] font-bold text-teal-800">
+                <span className="inline-flex items-center gap-1">
+                  <Mic className="w-3 h-3 text-teal-600" />
+                  <span>Mensagem de voz</span>
+                </span>
+                {typeof msg.audio_duracao === 'number' &&
+                  msg.audio_duracao > 0 && (
+                    <span className="font-mono text-[9px] bg-white px-1.5 py-0.5 rounded border border-teal-200">
+                      {formatarDuracaoAudio(msg.audio_duracao)}
+                    </span>
+                  )}
+              </div>
+              <audio
+                controls
+                preload="metadata"
+                src={msg.audio_base64}
+                className="w-full h-8"
+              />
+            </div>
+          )}
+
+          {msg.status_envio === 'enviando' && (
+            <div className="mb-2 flex items-center gap-1.5 text-[10px] font-medium text-slate-500 bg-slate-50 px-2 py-1 rounded-lg border border-slate-200/80">
+              <Loader2 className="w-3 h-3 animate-spin text-teal-600" />
+              <span>Aguardando confirmação do servidor...</span>
+            </div>
+          )}
+
+          {msg.status_envio === 'erro' && (
+            <div className="mb-2 flex items-center justify-between gap-1.5 bg-rose-50 border border-rose-200 rounded-lg px-2.5 py-1.5 text-rose-800">
+              <div className="flex items-center gap-1 text-[11px] font-semibold min-w-0">
+                <AlertCircle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                <span className="truncate">
+                  {msg.erro_envio || 'Falha ao confirmar recebimento.'}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => onReenviar(msg.id)}
+                className="inline-flex items-center gap-1 bg-rose-600 hover:bg-rose-700 text-white text-[10px] font-bold px-2 py-1 rounded-md transition-colors cursor-pointer shrink-0"
+                title="Reenviar mensagem manualmente"
+              >
+                <RotateCcw className="w-2.5 h-2.5" />
+                <span>Reenviar</span>
+              </button>
+            </div>
+          )}
+
+          <div className="flex items-center justify-between gap-1 pt-1.5 border-t border-slate-100 flex-wrap">
+            <div className="flex items-center gap-1 flex-wrap relative">
+              {msg.status_envio !== 'enviando' &&
+                msg.status_envio !== 'erro' && (
+                  <span
+                    className="inline-flex items-center text-emerald-600 px-1"
+                    title="Recebimento confirmado pelo servidor"
+                  >
+                    <CheckCheck className="w-3 h-3" />
+                  </span>
+                )}
+              {readStatus.isReadByOthers && (
+                <span
+                  className="inline-flex items-center gap-0.5 text-[10px] font-bold text-teal-700 bg-teal-50 border border-teal-200/80 px-1.5 py-0.5 rounded-full"
+                  title={
+                    readStatus.readersCount > 1
+                      ? `Mensagem visualizada por ${readStatus.readersCount} participantes`
+                      : 'Mensagem visualizada por outro participante'
+                  }
+                >
+                  <Eye className="w-3 h-3 text-teal-600" />
+                  {readStatus.readersCount > 1 && (
+                    <span className="text-[9px]">
+                      {readStatus.readersCount}
+                    </span>
+                  )}
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={() => onCurtir(msg.id)}
+                title={
+                  jaCurtiu
+                    ? 'Clique para retirar sua curtida'
+                    : 'Curtir mensagem (1 por usuário)'
+                }
+                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold border transition-all cursor-pointer ${
+                  jaCurtiu
+                    ? 'bg-rose-50 text-rose-600 border-rose-300'
+                    : 'bg-slate-50 text-slate-500 border-slate-200 hover:text-rose-600'
+                }`}
+              >
+                <Heart
+                  className={`w-3 h-3 ${
+                    jaCurtiu ? 'fill-rose-500 text-rose-500' : ''
+                  }`}
+                />
+                <span>{totalCurtidas}</span>
+              </button>
+
+              {reacoesEntries.map(([emoji, users]) => {
+                const euReagi = minhaReacao === emoji;
+                return (
+                  <button
+                    key={emoji}
+                    type="button"
+                    onClick={() => onReagir(msg.id, emoji)}
+                    title={
+                      euReagi
+                        ? 'Sua reação (clique para retirar)'
+                        : 'Clique para reagir'
+                    }
+                    className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[11px] border transition-all cursor-pointer ${
+                      euReagi
+                        ? 'bg-teal-50 border-teal-400 text-teal-800 font-bold'
+                        : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    <span>{emoji}</span>
+                    <span className="text-[10px]">{users.length}</span>
+                  </button>
+                );
+              })}
+
+              <button
+                type="button"
+                onClick={() => onToggleEmojiPicker(msg.id)}
+                className="p-1 rounded-full bg-slate-50 hover:bg-slate-100 text-slate-500 border border-slate-200 cursor-pointer"
+                title="Reagir com qualquer emoji"
+              >
+                <Smile className="w-3 h-3" />
+              </button>
+
+              {isEmojiPickerOpen && (
+                <div className="absolute left-0 bottom-7 z-50 bg-white border border-slate-200 rounded-2xl shadow-2xl p-2.5 w-64 sm:w-72">
+                  <div className="mb-2 pb-1.5 border-b border-slate-100">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[9px] font-bold uppercase tracking-wider text-teal-700 flex items-center gap-1">
+                        <Sparkles className="w-2.5 h-2.5" /> Mais usados por você
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => onToggleEmojiPicker(msg.id)}
+                        className="text-[9px] font-bold text-slate-400 hover:text-slate-600 cursor-pointer"
+                      >
+                        Fechar
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-8 gap-1 bg-teal-50/60 p-1 rounded-lg border border-teal-100">
+                      {emojisFrequentes.map((emj) => (
+                        <button
+                          key={`freq-${emj}`}
+                          type="button"
+                          onClick={() => onReagir(msg.id, emj)}
+                          className={`text-sm p-1 rounded hover:bg-white hover:scale-110 transition-transform cursor-pointer ${
+                            minhaReacao === emj
+                              ? 'bg-teal-200/70 ring-1 ring-teal-500'
+                              : ''
+                          }`}
+                        >
+                          {emj}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1 mb-1.5 overflow-x-auto pb-1">
+                    {CATALOGO_EMOJIS_CATEGORIAS.map((cat) => (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        onClick={() => onSetCategoriaEmoji(cat.id)}
+                        className={`text-[9px] font-bold px-1.5 py-0.5 rounded whitespace-nowrap cursor-pointer ${
+                          categoriaEmojiAtiva === cat.id
+                            ? 'bg-slate-900 text-white'
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        }`}
+                      >
+                        {cat.titulo.split(' ')[0]}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="max-h-32 overflow-y-auto grid grid-cols-8 gap-1">
+                    {(
+                      CATALOGO_EMOJIS_CATEGORIAS.find(
+                        (c) => c.id === categoriaEmojiAtiva
+                      )?.emojis || TODOS_EMOJIS_CHAT
+                    ).map((emj, idx) => (
+                      <button
+                        key={`all-${emj}-${idx}`}
+                        type="button"
+                        onClick={() => onReagir(msg.id, emj)}
+                        className={`text-sm p-1 rounded hover:bg-slate-100 hover:scale-110 transition-transform cursor-pointer ${
+                          minhaReacao === emj
+                            ? 'bg-teal-100 ring-1 ring-teal-500'
+                            : ''
+                        }`}
+                      >
+                        {emj}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {isAdmin && (
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => onAlternarFixado(msg.id)}
+                  className="text-[10px] text-amber-700 hover:underline cursor-pointer"
+                >
+                  {msg.is_fixado ? 'Desafixar' : 'Fixar'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onApagar(msg.id)}
+                  className="text-[10px] text-rose-600 hover:underline flex items-center gap-0.5 cursor-pointer"
+                >
+                  <Trash2 className="w-2.5 h-2.5" />
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </>
+    );
+  }
+);
+ChatMessageItem.displayName = 'ChatMessageItem';
+
+// Subcomponente memoizado para mensagens privadas (DMs)
+interface DmMessageItemProps {
+  m: MensagemPrivada;
+  souEu: boolean;
+  isPrimeiraNaoLida: boolean;
+  dmReadStatus: { isReadByOthers: boolean; readersCount: number };
+  termoBusca: string;
+  destacarTextoBusca: (txt: string, termo: string) => React.ReactNode;
+}
+
+const DmMessageItem = React.memo<DmMessageItemProps>(
+  ({ m, souEu, isPrimeiraNaoLida, dmReadStatus, termoBusca, destacarTextoBusca }) => {
+    return (
+      <>
+        {isPrimeiraNaoLida && (
+          <div className="flex items-center gap-2 my-1.5">
+            <div className="h-px bg-teal-400/60 flex-1" />
+            <span className="text-[9px] font-extrabold uppercase tracking-wider bg-teal-600 text-white px-2.5 py-0.5 rounded-full shadow-2xs">
+              Mensagens não lidas a partir daqui
+            </span>
+            <div className="h-px bg-teal-400/60 flex-1" />
+          </div>
+        )}
+        <div
+          data-chat-msg-id={m.id}
+          className={`flex ${souEu ? 'justify-end' : 'justify-start'}`}
+        >
+          <div
+            className={`max-w-[78%] rounded-2xl px-3 py-2 text-xs leading-relaxed ${
+              souEu
+                ? 'bg-[#07192B] text-white rounded-br-xs'
+                : isPrimeiraNaoLida
+                ? 'bg-teal-50 text-slate-900 rounded-bl-xs border border-teal-300 ring-1 ring-teal-400/40'
+                : 'bg-white text-slate-800 rounded-bl-xs border border-slate-200 shadow-2xs'
+            }`}
+          >
+            <p className="whitespace-pre-line break-words">
+              {destacarTextoBusca(m.texto, termoBusca)}
+            </p>
+            {m.audio_base64 && (
+              <div
+                className={`mt-1.5 p-1.5 rounded-xl border ${
+                  souEu
+                    ? 'bg-slate-800/90 border-teal-500/40'
+                    : 'bg-slate-50 border-slate-200'
+                }`}
+              >
+                <audio
+                  controls
+                  preload="metadata"
+                  src={m.audio_base64}
+                  className="w-full h-8 min-w-[180px]"
+                />
+              </div>
+            )}
+            <div
+              className={`flex items-center justify-end gap-1 text-[9px] mt-1 font-mono ${
+                souEu ? 'text-teal-300' : 'text-slate-400'
+              }`}
+            >
+              <span>{m.data_hora}</span>
+              {souEu && dmReadStatus.isReadByOthers && (
+                <span
+                  className="inline-flex items-center gap-0.5 text-teal-300"
+                  title="Mensagem visualizada pelo destinatário"
+                >
+                  <Eye className="w-3 h-3" />
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      </>
+    );
+  }
+);
+DmMessageItem.displayName = 'DmMessageItem';
+
 export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
   concursoInicialId,
   onRequireAuth,
@@ -104,8 +539,6 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
   const [dmBusca, setDmBusca] = useState<string>('');
   const [dmIsBloqueado, setDmIsBloqueado] = useState<boolean>(false);
 
-  // Busca em tempo real no histórico de mensagens da conversa ativa
-  const [termoBuscaHistorico, setTermoBuscaHistorico] = useState<string>('');
 
   // Estados de Emojis
   const [emojiPickerMsgId, setEmojiPickerMsgId] = useState<string | null>(null);
@@ -268,22 +701,33 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
     isOpen && mobileViewMode === 'mensagens'
   );
 
-  // Filtra histórico de mensagens pelo texto buscado em tempo real
+  // Busca em tempo real no histórico de mensagens da conversa ativa com debounce para alta performance
+  const [termoBuscaHistorico, setTermoBuscaHistorico] = useState<string>('');
+  const [termoBuscaDebounced, setTermoBuscaDebounced] = useState<string>('');
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setTermoBuscaDebounced(termoBuscaHistorico);
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [termoBuscaHistorico]);
+
+  // Filtra histórico de mensagens com termo debounced e cache de string normalizada
   const mensagensFiltradasBusca = useMemo(() => {
-    const q = termoBuscaHistorico.trim().toLowerCase();
+    const q = termoBuscaDebounced.trim().toLowerCase();
     if (!q) return mensagens;
-    return mensagens.filter(
-      (m) =>
-        m.texto.toLowerCase().includes(q) ||
-        (m.autor && m.autor.toLowerCase().includes(q))
-    );
-  }, [mensagens, termoBuscaHistorico]);
+    return mensagens.filter((m) => {
+      const matchTexto = m.texto && m.texto.toLowerCase().includes(q);
+      const matchAutor = m.autor && m.autor.toLowerCase().includes(q);
+      return matchTexto || matchAutor;
+    });
+  }, [mensagens, termoBuscaDebounced]);
 
   const dmMensagensFiltradasBusca = useMemo(() => {
-    const q = termoBuscaHistorico.trim().toLowerCase();
+    const q = termoBuscaDebounced.trim().toLowerCase();
     if (!q) return dmMensagens;
-    return dmMensagens.filter((m) => m.texto.toLowerCase().includes(q));
-  }, [dmMensagens, termoBuscaHistorico]);
+    return dmMensagens.filter((m) => m.texto && m.texto.toLowerCase().includes(q));
+  }, [dmMensagens, termoBuscaDebounced]);
 
   const destacarTextoBusca = (textoOriginal: string, termo: string): React.ReactNode => {
     const limpo = termo.trim();
@@ -2507,348 +2951,68 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
                               Math.max(0, mensagensFiltradasBusca.length - limiteMensagensExibidas)
                             );
                             return listaVisivel.map((msg) => {
-                            const jaCurtiu = chatStore.usuarioCurtiuMensagem(msg, usuario);
-                            const minhaReacao = chatStore.obterReacaoDoUsuario(msg, usuario);
-                            const totalCurtidas = Array.isArray(msg.curtido_por)
-                              ? msg.curtido_por.length
-                              : 0;
-                            const reacoesEntries = Object.entries(msg.reacoes || {}).filter(
-                              ([, users]) => Array.isArray(users) && users.length > 0
-                            );
-                            const isPrimeiraNaoLida = primeiraNaoLidaId === msg.id;
-                            const ehMinhaMsg = chatStore.isMensagemDoProprioUsuario(
-                              msg,
-                              usuario
-                            );
-                            const readStatus = getMessageReadStatus(msg.id);
+                              const jaCurtiu = chatStore.usuarioCurtiuMensagem(msg, usuario);
+                              const minhaReacao = chatStore.obterReacaoDoUsuario(msg, usuario);
+                              const totalCurtidas = Array.isArray(msg.curtido_por)
+                                ? msg.curtido_por.length
+                                : 0;
+                              const reacoesEntries = Object.entries(msg.reacoes || {}).filter(
+                                ([, users]) => Array.isArray(users) && users.length > 0
+                              ) as [string, string[]][];
+                              const isPrimeiraNaoLida = primeiraNaoLidaId === msg.id;
+                              const ehMinhaMsg = chatStore.isMensagemDoProprioUsuario(
+                                msg,
+                                usuario
+                              );
+                              const readStatus = getMessageReadStatus(msg.id);
 
-                            return (
-                              <React.Fragment key={msg.id}>
-                                {isPrimeiraNaoLida && (
-                                  <div className="flex items-center gap-2 my-1.5">
-                                    <div className="h-px bg-teal-400/60 flex-1" />
-                                    <span className="text-[9px] font-extrabold uppercase tracking-wider bg-teal-600 text-white px-2.5 py-0.5 rounded-full shadow-2xs">
-                                      Mensagens não lidas a partir daqui
-                                    </span>
-                                    <div className="h-px bg-teal-400/60 flex-1" />
-                                  </div>
-                                )}
-                                <div
-                                  data-chat-msg-id={msg.id}
-                                  className={`rounded-xl p-2.5 border text-xs transition-all ${
-                                    isPrimeiraNaoLida
-                                      ? 'bg-teal-50/70 border-teal-300 ring-1 ring-teal-400/40'
-                                      : msg.is_fixado
-                                      ? 'bg-amber-50/90 border-amber-200'
-                                      : 'bg-white border-slate-200/80 shadow-2xs'
-                                  }`}
-                                >
-                                  <div className="flex items-center justify-between gap-1 mb-1">
-                                    <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
-                                      <span
-                                        className="w-5 h-5 rounded-full text-white text-[9px] font-bold flex items-center justify-center shrink-0"
-                                        style={{
-                                          backgroundColor: msg.avatar_cor || '#0D5C75',
-                                        }}
-                                      >
-                                        {msg.autor.substring(0, 2).toUpperCase()}
-                                      </span>
-                                      <span className="font-bold text-slate-900 truncate">
-                                        {msg.autor}
-                                      </span>
-                                      {msg.is_admin && (
-                                        <span className="bg-teal-700 text-white text-[9px] font-bold px-1.5 py-0.2 rounded flex items-center gap-0.5">
-                                          <Shield className="w-2.5 h-2.5" /> Admin
-                                        </span>
-                                      )}
-                                      {msg.posicao_candidato && (
-                                        <span className="bg-slate-100 text-slate-700 border border-slate-200 text-[9px] font-mono font-bold px-1.5 py-0.2 rounded">
-                                          {msg.posicao_candidato}º lugar
-                                        </span>
-                                      )}
-                                      {msg.is_fixado && (
-                                        <Pin className="w-3 h-3 text-amber-600 shrink-0" />
-                                      )}
-                                    </div>
-                                    <div className="flex items-center gap-1 shrink-0">
-                                      {!ehMinhaMsg &&
-                                        msg.email &&
-                                        msg.email !== 'candidato@certam.com.br' && (
-                                          <button
-                                            type="button"
-                                            onClick={() =>
-                                              handleIniciarConversaPrivada(
-                                                msg.email,
-                                                msg.autor
-                                              )
-                                            }
-                                            className="p-1 rounded-md text-slate-400 hover:text-teal-700 hover:bg-teal-50 transition-colors cursor-pointer"
-                                            title={`Enviar mensagem privada para ${msg.autor}`}
-                                          >
-                                            <Mail className="w-3 h-3" />
-                                          </button>
-                                        )}
-                                      <span className="text-[10px] text-slate-400 font-mono shrink-0">
-                                        {msg.data_hora}
-                                      </span>
-                                    </div>
-                                  </div>
-
-                                  <p className="text-slate-700 leading-relaxed whitespace-pre-line break-words mb-2">
-                                    {destacarTextoBusca(msg.texto, termoBuscaHistorico)}
-                                  </p>
-
-                                  {msg.audio_base64 && (
-                                    <div className="mb-2 p-2 rounded-xl bg-teal-50/70 border border-teal-200/80 flex flex-col gap-1">
-                                      <div className="flex items-center justify-between text-[10px] font-bold text-teal-800">
-                                        <span className="inline-flex items-center gap-1">
-                                          <Mic className="w-3 h-3 text-teal-600" />
-                                          <span>Mensagem de voz</span>
-                                        </span>
-                                        {typeof msg.audio_duracao === 'number' &&
-                                          msg.audio_duracao > 0 && (
-                                            <span className="font-mono text-[9px] bg-white px-1.5 py-0.5 rounded border border-teal-200">
-                                              {formatarDuracaoAudio(msg.audio_duracao)}
-                                            </span>
-                                          )}
-                                      </div>
-                                      <audio
-                                        controls
-                                        preload="metadata"
-                                        src={msg.audio_base64}
-                                        className="w-full h-8"
-                                      />
-                                    </div>
-                                  )}
-
-                                  {msg.status_envio === 'enviando' && (
-                                    <div className="mb-2 flex items-center gap-1.5 text-[10px] font-medium text-slate-500 bg-slate-50 px-2 py-1 rounded-lg border border-slate-200/80">
-                                      <Loader2 className="w-3 h-3 animate-spin text-teal-600" />
-                                      <span>Aguardando confirmação do servidor...</span>
-                                    </div>
-                                  )}
-
-                                  {msg.status_envio === 'erro' && (
-                                    <div className="mb-2 flex items-center justify-between gap-1.5 bg-rose-50 border border-rose-200 rounded-lg px-2.5 py-1.5 text-rose-800">
-                                      <div className="flex items-center gap-1 text-[11px] font-semibold min-w-0">
-                                        <AlertCircle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
-                                        <span className="truncate">
-                                          {msg.erro_envio || 'Falha ao confirmar recebimento.'}
-                                        </span>
-                                      </div>
-                                      <button
-                                        type="button"
-                                        onClick={() => handleReenviar(msg.id)}
-                                        className="inline-flex items-center gap-1 bg-rose-600 hover:bg-rose-700 text-white text-[10px] font-bold px-2 py-1 rounded-md transition-colors cursor-pointer shrink-0"
-                                        title="Reenviar mensagem manualmente"
-                                      >
-                                        <RotateCcw className="w-2.5 h-2.5" />
-                                        <span>Reenviar</span>
-                                      </button>
-                                    </div>
-                                  )}
-
-                                  <div className="flex items-center justify-between gap-1 pt-1.5 border-t border-slate-100 flex-wrap">
-                                    <div className="flex items-center gap-1 flex-wrap relative">
-                                      {msg.status_envio !== 'enviando' &&
-                                        msg.status_envio !== 'erro' && (
-                                          <span
-                                            className="inline-flex items-center text-emerald-600 px-1"
-                                            title="Recebimento confirmado pelo servidor"
-                                          >
-                                            <CheckCheck className="w-3 h-3" />
-                                          </span>
-                                        )}
-                                      {readStatus.isReadByOthers && (
-                                        <span
-                                          className="inline-flex items-center gap-0.5 text-[10px] font-bold text-teal-700 bg-teal-50 border border-teal-200/80 px-1.5 py-0.5 rounded-full"
-                                          title={
-                                            readStatus.readersCount > 1
-                                              ? `Mensagem visualizada por ${readStatus.readersCount} participantes`
-                                              : 'Mensagem visualizada por outro participante'
-                                          }
-                                        >
-                                          <Eye className="w-3 h-3 text-teal-600" />
-                                          {readStatus.readersCount > 1 && (
-                                            <span className="text-[9px]">
-                                              {readStatus.readersCount}
-                                            </span>
-                                          )}
-                                        </span>
-                                      )}
-                                      <button
-                                        type="button"
-                                        onClick={() => handleCurtir(msg.id)}
-                                        title={
-                                          jaCurtiu
-                                            ? 'Clique para retirar sua curtida'
-                                            : 'Curtir mensagem (1 por usuário)'
-                                        }
-                                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold border transition-all cursor-pointer ${
-                                          jaCurtiu
-                                            ? 'bg-rose-50 text-rose-600 border-rose-300'
-                                            : 'bg-slate-50 text-slate-500 border-slate-200 hover:text-rose-600'
-                                        }`}
-                                      >
-                                        <Heart
-                                          className={`w-3 h-3 ${
-                                            jaCurtiu ? 'fill-rose-500 text-rose-500' : ''
-                                          }`}
-                                        />
-                                        <span>{totalCurtidas}</span>
-                                      </button>
-
-                                      {reacoesEntries.map(([emoji, users]) => {
-                                        const euReagi = minhaReacao === emoji;
-                                        return (
-                                          <button
-                                            key={emoji}
-                                            type="button"
-                                            onClick={() => handleReagir(msg.id, emoji)}
-                                            title={
-                                              euReagi
-                                                ? 'Sua reação (clique para retirar)'
-                                                : 'Clique para reagir'
-                                            }
-                                            className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[11px] border transition-all cursor-pointer ${
-                                              euReagi
-                                                ? 'bg-teal-50 border-teal-400 text-teal-800 font-bold'
-                                                : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
-                                            }`}
-                                          >
-                                            <span>{emoji}</span>
-                                            <span className="text-[10px]">{users.length}</span>
-                                          </button>
-                                        );
-                                      })}
-
-                                      <button
-                                        type="button"
-                                        onClick={() =>
-                                          setEmojiPickerMsgId(
-                                            emojiPickerMsgId === msg.id ? null : msg.id
-                                          )
-                                        }
-                                        className="p-1 rounded-full bg-slate-50 hover:bg-slate-100 text-slate-500 border border-slate-200 cursor-pointer"
-                                        title="Reagir com qualquer emoji"
-                                      >
-                                        <Smile className="w-3 h-3" />
-                                      </button>
-
-                                      {emojiPickerMsgId === msg.id && (
-                                        <div className="absolute left-0 bottom-7 z-50 bg-white border border-slate-200 rounded-2xl shadow-2xl p-2.5 w-64 sm:w-72">
-                                          <div className="mb-2 pb-1.5 border-b border-slate-100">
-                                            <div className="flex items-center justify-between mb-1">
-                                              <span className="text-[9px] font-bold uppercase tracking-wider text-teal-700 flex items-center gap-1">
-                                                <Sparkles className="w-2.5 h-2.5" /> Mais usados
-                                                por você
-                                              </span>
-                                              <button
-                                                type="button"
-                                                onClick={() => setEmojiPickerMsgId(null)}
-                                                className="text-[9px] font-bold text-slate-400 hover:text-slate-600 cursor-pointer"
-                                              >
-                                                Fechar
-                                              </button>
-                                            </div>
-                                            <div className="grid grid-cols-8 gap-1 bg-teal-50/60 p-1 rounded-lg border border-teal-100">
-                                              {emojisFrequentes.map((emj) => (
-                                                <button
-                                                  key={`freq-${emj}`}
-                                                  type="button"
-                                                  onClick={() => handleReagir(msg.id, emj)}
-                                                  className={`text-sm p-1 rounded hover:bg-white hover:scale-110 transition-transform cursor-pointer ${
-                                                    minhaReacao === emj
-                                                      ? 'bg-teal-200/70 ring-1 ring-teal-500'
-                                                      : ''
-                                                  }`}
-                                                >
-                                                  {emj}
-                                                </button>
-                                              ))}
-                                            </div>
-                                          </div>
-
-                                          <div className="flex items-center gap-1 mb-1.5 overflow-x-auto pb-1">
-                                            {CATALOGO_EMOJIS_CATEGORIAS.map((cat) => (
-                                              <button
-                                                key={cat.id}
-                                                type="button"
-                                                onClick={() => setCategoriaEmojiAtiva(cat.id)}
-                                                className={`text-[9px] font-bold px-1.5 py-0.5 rounded whitespace-nowrap cursor-pointer ${
-                                                  categoriaEmojiAtiva === cat.id
-                                                    ? 'bg-slate-900 text-white'
-                                                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                                                }`}
-                                              >
-                                                {cat.titulo.split(' ')[0]}
-                                              </button>
-                                            ))}
-                                          </div>
-
-                                          <div className="max-h-32 overflow-y-auto grid grid-cols-8 gap-1">
-                                            {(
-                                              CATALOGO_EMOJIS_CATEGORIAS.find(
-                                                (c) => c.id === categoriaEmojiAtiva
-                                              )?.emojis || TODOS_EMOJIS_CHAT
-                                            ).map((emj, idx) => (
-                                              <button
-                                                key={`all-${emj}-${idx}`}
-                                                type="button"
-                                                onClick={() => handleReagir(msg.id, emj)}
-                                                className={`text-sm p-1 rounded hover:bg-slate-100 hover:scale-110 transition-transform cursor-pointer ${
-                                                  minhaReacao === emj
-                                                    ? 'bg-teal-100 ring-1 ring-teal-500'
-                                                    : ''
-                                                }`}
-                                              >
-                                                {emj}
-                                              </button>
-                                            ))}
-                                          </div>
-                                        </div>
-                                      )}
-                                    </div>
-
-                                    {isAdmin && (
-                                      <div className="flex items-center gap-1.5">
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            chatStore.alternarFixado(
-                                              concursoAtivoId,
-                                              salaAtiva.cargoScope,
-                                              'geral',
-                                              msg.id
-                                            );
-                                            carregarMensagensAtivas();
-                                          }}
-                                          className="text-[10px] text-amber-700 hover:underline cursor-pointer"
-                                        >
-                                          {msg.is_fixado ? 'Desafixar' : 'Fixar'}
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            chatStore.apagarMensagem(
-                                              concursoAtivoId,
-                                              salaAtiva.cargoScope,
-                                              'geral',
-                                              msg.id
-                                            );
-                                            carregarMensagensAtivas();
-                                          }}
-                                          className="text-[10px] text-rose-600 hover:underline flex items-center gap-0.5 cursor-pointer"
-                                        >
-                                          <Trash2 className="w-2.5 h-2.5" />
-                                        </button>
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-                              </React.Fragment>
-                            );
-                          });
+                              return (
+                                <ChatMessageItem
+                                  key={msg.id}
+                                  msg={msg}
+                                  isPrimeiraNaoLida={isPrimeiraNaoLida}
+                                  ehMinhaMsg={ehMinhaMsg}
+                                  jaCurtiu={jaCurtiu}
+                                  minhaReacao={minhaReacao}
+                                  totalCurtidas={totalCurtidas}
+                                  reacoesEntries={reacoesEntries}
+                                  readStatus={readStatus}
+                                  termoBusca={termoBuscaHistorico}
+                                  isAdmin={Boolean(isAdmin)}
+                                  isEmojiPickerOpen={emojiPickerMsgId === msg.id}
+                                  categoriaEmojiAtiva={categoriaEmojiAtiva}
+                                  emojisFrequentes={emojisFrequentes}
+                                  onCurtir={handleCurtir}
+                                  onReagir={handleReagir}
+                                  onToggleEmojiPicker={(id) =>
+                                    setEmojiPickerMsgId((prev) => (prev === id ? null : id))
+                                  }
+                                  onSetCategoriaEmoji={setCategoriaEmojiAtiva}
+                                  onIniciarDm={handleIniciarConversaPrivada}
+                                  onReenviar={handleReenviar}
+                                  onAlternarFixado={(id) => {
+                                    chatStore.alternarFixado(
+                                      concursoAtivoId,
+                                      salaAtiva.cargoScope,
+                                      'geral',
+                                      id
+                                    );
+                                    carregarMensagensAtivas();
+                                  }}
+                                  onApagar={(id) => {
+                                    chatStore.apagarMensagem(
+                                      concursoAtivoId,
+                                      salaAtiva.cargoScope,
+                                      'geral',
+                                      id
+                                    );
+                                    carregarMensagensAtivas();
+                                  }}
+                                  formatarDuracaoAudio={formatarDuracaoAudio}
+                                  destacarTextoBusca={destacarTextoBusca}
+                                />
+                              );
+                            });
                           })()
                         )}
                         <div ref={messagesEndRef} />
@@ -3021,73 +3185,22 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
                               Math.max(0, dmMensagensFiltradasBusca.length - limiteMensagensExibidas)
                             );
                             return listaVisivelDm.map((m) => {
-                            const souEu =
-                              m.remetente_email.trim().toLowerCase() === meuEmail;
-                            const isPrimeiraNaoLida = primeiraNaoLidaId === m.id;
-                            const dmReadStatus = getMessageReadStatus(m.id);
-                            return (
-                              <React.Fragment key={m.id}>
-                                {isPrimeiraNaoLida && (
-                                  <div className="flex items-center gap-2 my-1.5">
-                                    <div className="h-px bg-teal-400/60 flex-1" />
-                                    <span className="text-[9px] font-extrabold uppercase tracking-wider bg-teal-600 text-white px-2.5 py-0.5 rounded-full shadow-2xs">
-                                      Mensagens não lidas a partir daqui
-                                    </span>
-                                    <div className="h-px bg-teal-400/60 flex-1" />
-                                  </div>
-                                )}
-                                <div
-                                  data-chat-msg-id={m.id}
-                                  className={`flex ${souEu ? 'justify-end' : 'justify-start'}`}
-                                >
-                                  <div
-                                    className={`max-w-[78%] rounded-2xl px-3 py-2 text-xs leading-relaxed ${
-                                      souEu
-                                        ? 'bg-[#07192B] text-white rounded-br-xs'
-                                        : isPrimeiraNaoLida
-                                        ? 'bg-teal-50 text-slate-900 rounded-bl-xs border border-teal-300 ring-1 ring-teal-400/40'
-                                        : 'bg-white text-slate-800 rounded-bl-xs border border-slate-200 shadow-2xs'
-                                    }`}
-                                  >
-                                    <p className="whitespace-pre-line break-words">
-                                      {destacarTextoBusca(m.texto, termoBuscaHistorico)}
-                                    </p>
-                                    {m.audio_base64 && (
-                                      <div
-                                        className={`mt-1.5 p-1.5 rounded-xl border ${
-                                          souEu
-                                            ? 'bg-slate-800/90 border-teal-500/40'
-                                            : 'bg-slate-50 border-slate-200'
-                                        }`}
-                                      >
-                                        <audio
-                                          controls
-                                          preload="metadata"
-                                          src={m.audio_base64}
-                                          className="w-full h-8 min-w-[180px]"
-                                        />
-                                      </div>
-                                    )}
-                                    <div
-                                      className={`flex items-center justify-end gap-1 text-[9px] mt-1 font-mono ${
-                                        souEu ? 'text-teal-300' : 'text-slate-400'
-                                      }`}
-                                    >
-                                      <span>{m.data_hora}</span>
-                                      {souEu && dmReadStatus.isReadByOthers && (
-                                        <span
-                                          className="inline-flex items-center gap-0.5 text-teal-300"
-                                          title="Mensagem visualizada pelo destinatário"
-                                        >
-                                          <Eye className="w-3 h-3" />
-                                        </span>
-                                      )}
-                                    </div>
-                                  </div>
-                                </div>
-                              </React.Fragment>
-                            );
-                          });
+                              const souEu =
+                                m.remetente_email.trim().toLowerCase() === meuEmail;
+                              const isPrimeiraNaoLida = primeiraNaoLidaId === m.id;
+                              const dmReadStatus = getMessageReadStatus(m.id);
+                              return (
+                                <DmMessageItem
+                                  key={m.id}
+                                  m={m}
+                                  souEu={souEu}
+                                  isPrimeiraNaoLida={isPrimeiraNaoLida}
+                                  dmReadStatus={dmReadStatus}
+                                  termoBusca={termoBuscaHistorico}
+                                  destacarTextoBusca={destacarTextoBusca}
+                                />
+                              );
+                            });
                           })()
                         )}
                         <div ref={messagesEndRef} />
