@@ -997,6 +997,46 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
         </div>
       )}
 
+      {usuario && paineisCandidato.aprovacoes.length > 0 && (
+        <div className="bg-gradient-to-r from-teal-900 via-[#07192B] to-[#0A2540] text-white p-5 sm:p-6 rounded-3xl shadow-xl border border-teal-400/40 mb-8 flex flex-col md:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-teal-500/20 text-teal-300 flex items-center justify-center shrink-0 border border-teal-400/30">
+              <Building2 className="w-6 h-6" />
+            </div>
+            <div>
+              <span className="px-2 py-0.5 rounded bg-teal-400/20 text-teal-200 font-mono text-[10px] font-bold uppercase tracking-wide">
+                Ação Necessária • Concurso Homologado
+              </span>
+              <h3 className="text-base sm:text-lg font-bold font-serif text-white mt-1">
+                Preencha suas Lotações de Preferência
+              </h3>
+              <p className="text-xs text-teal-100/90 mt-0.5">
+                Você possui aprovação/convocação em concurso(s) homologado(s). Informe suas comarcas e lotações preferidas para simulação e chamamento.
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            {paineisCandidato.aprovacoes.map((ap) => (
+              <button
+                key={ap.concurso.id}
+                type="button"
+                onClick={() =>
+                  onNavigate('concurso', {
+                    concursoId: ap.concurso.id,
+                    cargoId: ap.cargo.id,
+                    tab: 'lotes',
+                  })
+                }
+                className="px-4 py-2.5 bg-[#2DD4AA] hover:bg-[#20BE96] text-slate-950 font-bold text-xs rounded-xl shadow-lg transition-all cursor-pointer flex items-center gap-2"
+              >
+                <span>Definir Lotações ({ap.concurso.orgao})</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* SEÇÃO 3: DIRETÓRIO DE CONCURSOS CADASTRADOS (COM FILTROS COMPLETOS) */}
       <div className="space-y-4">
         <div>

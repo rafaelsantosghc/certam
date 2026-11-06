@@ -19,6 +19,7 @@ import { ThemeProvider } from './store/themeContext';
 import { errorLogStore } from './store/errorLogStore';
 import { userRegistryStore } from './store/userRegistryStore';
 import { PersistentChatWidget } from './components/PersistentChatWidget';
+import { ArrowUp } from 'lucide-react';
 
 interface ErrorBoundaryState {
   hasError: boolean;
@@ -358,6 +359,15 @@ export const AppContent: React.FC = () => {
   }, [currentView, concursoId, cargoId]);
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mostrarVoltarAoTopo, setMostrarVoltarAoTopo] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setMostrarVoltarAoTopo(window.scrollY > 300);
+    };
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   return (
     <div className="min-h-screen flex flex-col bg-[var(--certam-light-bg)] text-[var(--certam-text-primary)] transition-colors duration-200">
@@ -493,6 +503,19 @@ export const AppContent: React.FC = () => {
 
         {/* Widget de Chat Persistente Flutuante com Abas por Concurso, Mute e Emojis */}
         <PersistentChatWidget />
+
+        {/* Botão Voltar ao Topo */}
+        {mostrarVoltarAoTopo && (
+          <button
+            type="button"
+            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+            className="fixed bottom-24 right-6 z-40 p-3 rounded-2xl bg-[#07192B] hover:bg-[#0C2640] text-teal-300 shadow-2xl border border-teal-500/30 transition-all hover:scale-110 cursor-pointer flex items-center justify-center no-print group"
+            title="Voltar ao topo da página"
+            aria-label="Voltar ao topo"
+          >
+            <ArrowUp className="w-5 h-5 group-hover:-translate-y-0.5 transition-transform" />
+          </button>
+        )}
       </div>
     </div>
   );

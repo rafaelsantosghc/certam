@@ -1681,6 +1681,7 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
       {!isOpen ? (
         <button
           type="button"
+          onMouseDown={handleMouseDownHeader}
           onClick={() => {
             if (browserNotificationPermission === 'default') {
               void solicitarPermissaoNotificacaoNavegador();
@@ -1688,7 +1689,7 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
             setIsOpen(true);
             setResumoBanner(null);
           }}
-          className="floating-bubble animate-floating-bubble group flex items-center gap-3 bg-gradient-to-r from-[#07192B] via-[#0B2D48] to-[#0F766E] hover:from-[#0A2540] hover:to-[#0D9488] text-white px-4 py-3 rounded-2xl shadow-2xl border border-teal-400/40 transition-all hover:scale-[1.02] cursor-pointer ring-4 ring-teal-500/15"
+          className="floating-bubble animate-floating-bubble group flex items-center gap-3 bg-gradient-to-r from-[#07192B] via-[#0B2D48] to-[#0F766E] hover:from-[#0A2540] hover:to-[#0D9488] text-white px-4 py-3 rounded-2xl shadow-2xl border border-teal-400/40 transition-all hover:scale-[1.02] cursor-pointer ring-4 ring-teal-500/15 select-none"
         >
           <div className="relative flex items-center justify-center w-9 h-9 rounded-xl bg-teal-500/20 border border-teal-300/30">
             <MessageSquare className="w-5 h-5 text-teal-300" />
