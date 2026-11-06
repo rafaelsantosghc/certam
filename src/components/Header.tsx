@@ -4,7 +4,6 @@ import { certamStore } from '../store/certamStore';
 import { NotificationBell } from './NotificationBell';
 import { PerfilCandidatoModal } from './PerfilCandidatoModal';
 import { ContatoAdminModal } from './ContatoAdminModal';
-import { MensagensPrivadasDrawer } from './MensagensPrivadasDrawer';
 import { GoogleAuthModal } from './GoogleAuthModal';
 import { matchFonético } from '../utils/phoneticSearch';
 import { isDebugMode } from '../utils/environment';
@@ -52,7 +51,6 @@ export const Header: React.FC<HeaderProps> = ({
   // Modais do Cabeçalho
   const [modalPerfilAberto, setModalPerfilAberto] = useState(false);
   const [modalContatoAberto, setModalContatoAberto] = useState(false);
-  const [modalDmAberto, setModalDmAberto] = useState(false);
   const [modalGoogleAberto, setModalGoogleAberto] = useState(false);
   const [motivoContatoInicial, setMotivoContatoInicial] = useState<any>('duvida');
 
@@ -257,18 +255,6 @@ export const Header: React.FC<HeaderProps> = ({
           {/* Central de Notificações Internas */}
           <NotificationBell onNavigate={onNavigate} concursoAtualId={concursoAtualId} />
 
-          {/* Mensagens Privadas (1 a 1) para candidatos autenticados */}
-          {usuario && (
-            <button
-              type="button"
-              onClick={() => setModalDmAberto(true)}
-              className="p-2 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors cursor-pointer relative"
-              title="Mensagens Privadas entre candidatos"
-            >
-              <MessageCircle className="w-5 h-5 text-[#135A7A]" />
-            </button>
-          )}
-
           {/* Modo Administrador no Preview e Botão de Teste de Notificação (Exclusivo para isDebugMode com is_admin === true) */}
           {isDebugMode() && isAdmin && usuario?.is_admin && (
             <div className="flex items-center gap-1.5 bg-amber-50/80 border border-amber-300 rounded-xl px-2 py-1 shadow-2xs">
@@ -416,11 +402,6 @@ export const Header: React.FC<HeaderProps> = ({
         aberto={modalContatoAberto}
         onClose={() => setModalContatoAberto(false)}
         motivoInicial={motivoContatoInicial}
-      />
-
-      <MensagensPrivadasDrawer
-        aberto={modalDmAberto}
-        onClose={() => setModalDmAberto(false)}
       />
     </>
   );

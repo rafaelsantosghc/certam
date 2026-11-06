@@ -1,22 +1,29 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { certamStore } from '../store/certamStore';
 import {
   chatStore,
+  SalaChatConcurso,
   CATALOGO_EMOJIS_CATEGORIAS,
   TODOS_EMOJIS_CHAT,
 } from '../store/chatStore';
+import { dmStore, ContatoConversa, SugestaoContatoDm } from '../store/dmStore';
 import { useAuth } from '../store/authContext';
-import { Concurso, ChatMensagem, CanalChatId } from '../types';
+import { Concurso, ChatMensagem, MensagemPrivada } from '../types';
+import { sanitizeInput } from '../utils/security';
 import {
   MessageSquare,
+  MessageCircle,
   ChevronDown,
   ChevronLeft,
+  ArrowDown,
   Send,
   Heart,
   Smile,
   Bell,
   BellOff,
   Shield,
+  ShieldAlert,
+  ShieldCheck,
   Pin,
   Trash2,
   Maximize2,
@@ -30,6 +37,13 @@ import {
   CheckCheck,
   Loader2,
   ListFilter,
+  Lock,
+  Search,
+  Mail,
+  Users,
+  Briefcase,
+  Award,
+  Layers,
 } from 'lucide-react';
 
 interface PersistentChatWidgetProps {
@@ -37,18 +51,14 @@ interface PersistentChatWidgetProps {
   onRequireAuth?: () => void;
 }
 
-const CANAIS_RAPIDOS: { id: CanalChatId; nome: string }[] = [
-  { id: 'geral', nome: 'Geral' },
-  { id: 'lotacao', nome: 'Lotação' },
-  { id: 'posse', nome: 'Posse' },
-  { id: 'recursos', nome: 'Recursos' },
-];
-
 interface ResumoNovaMensagemChat {
   id: string;
-  concursoId: string;
+  modo: 'concursos' | 'privadas';
+  concursoId?: string;
   concursoSigla: string;
-  canalId: CanalChatId;
+  salaId?: string;
+  salaTitulo: string;
+  dmEmail?: string;
   autor: string;
   resumoTexto: string;
   dataHora: string;
@@ -62,7 +72,7 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
 
   const [isOpen, setIsOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
-  // Em telas muito pequenas (< sm), alterna entre a lista lateral de conversas e o painel de mensagens para evitar estouro do layout
+  const [abaModo, setAbaModo] = useState<'concursos' | 'privadas'>('concursos');
   const [mobileViewMode, setMobileViewMode] = useState<'mensagens' | 'conversas'>('mensagens');
 
   const [concursos, setConcursos] = useState<Concurso[]>(() => certamStore.getConcursos());
@@ -70,31 +80,64 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
     const list = certamStore.getConcursos();
     return concursoInicialId || list[0]?.id || 'tjrs_2025';
   });
-  const [canalAtivo, setCanalAtivo] = useState<CanalChatId>('geral');
+  const [salaAtivaId, setSalaAtivaId] = useState<string>('geral');
   const [mensagens, setMensagens] = useState<ChatMensagem[]>([]);
   const [texto, setTexto] = useState('');
+
+  // Estados de Mensagens Privadas (DMs) integradas no widget
+  const [dmConversas, setDmConversas] = useState<ContatoConversa[]>([]);
+  const [dmContatoEmail, setDmContatoEmail] = useState<string | null>(null);
+  const [dmContatoNome, setDmContatoNome] = useState<string>('');
+  const [dmMensagens, setDmMensagens] = useState<MensagemPrivada[]>([]);
+  const [dmBusca, setDmBusca] = useState<string>('');
+  const [dmIsBloqueado, setDmIsBloqueado] = useState<boolean>(false);
+
+  // Estados de Emojis
   const [emojiPickerMsgId, setEmojiPickerMsgId] = useState<string | null>(null);
   const [showInputEmojiPicker, setShowInputEmojiPicker] = useState(false);
   const [categoriaEmojiAtiva, setCategoriaEmojiAtiva] = useState<string>('reacoes');
   const [emojisFrequentes, setEmojisFrequentes] = useState<string[]>(() =>
     chatStore.getEmojisFrequentes(8)
   );
+
+  // Estados de Contadores de Não Lidas e Resumos
   const [unreadByConcurso, setUnreadByConcurso] = useState<Record<string, number>>({});
-  const [unreadByCanal, setUnreadByCanal] = useState<Record<string, number>>({});
+  const [unreadBySala, setUnreadBySala] = useState<Record<string, number>>({});
   const [ultimaMsgPorConcurso, setUltimaMsgPorConcurso] = useState<
-    Record<string, { autor: string; texto: string; canalId: CanalChatId; dataHora: string } | null>
+    Record<string, { autor: string; texto: string; salaTitulo: string; dataHora: string } | null>
   >({});
   const [resumoBanner, setResumoBanner] = useState<ResumoNovaMensagemChat | null>(null);
   const [, setMuteVersion] = useState(0);
+  const [dadosVersion, setDadosVersion] = useState(0);
+
+  // Controle de Posicionamento na Mensagem Mais Antiga Não Lida + Botão Descer até o Fim
+  const [primeiraNaoLidaId, setPrimeiraNaoLidaId] = useState<string | null>(null);
+  const [mostrarBotaoDescer, setMostrarBotaoDescer] = useState<boolean>(false);
 
   const knownMsgIdsRef = useRef<Set<string>>(new Set());
+  const knownDmIdsRef = useRef<Set<string>>(new Set());
   const initializedKnownIdsRef = useRef(false);
   const selfSentMsgIdsRef = useRef<Set<string>>(new Set());
   const bannerTimeoutRef = useRef<number | null>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const lastRoomSignatureRef = useRef<string>('');
 
   const READ_MSG_STORAGE_KEY = 'certam_chat_read_msg_ids_v1';
+
+  const meuEmail = useMemo(() => {
+    const isUserAdmin = Boolean(
+      isAdmin ||
+        usuario?.is_admin ||
+        usuario?.role === 'admin' ||
+        usuario?.tipo_usuario === 'admin' ||
+        usuario?.email?.toLowerCase() === 'rafasms0@hotmail.com'
+    );
+    return (
+      usuario?.email?.trim().toLowerCase() ||
+      (isUserAdmin ? 'rafasms0@hotmail.com' : '')
+    );
+  }, [usuario, isAdmin]);
 
   const getReadIdsMap = (): Record<string, string[]> => {
     if (typeof window === 'undefined') return {};
@@ -117,10 +160,71 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
     }
   };
 
-  const marcarSalaComoLida = (concId: string, cnId: CanalChatId) => {
-    if (!concId) return;
-    const roomKey = `${concId}_${cnId}`;
-    const msgs = chatStore.getMensagens(concId, 'geral', cnId);
+  const concursoAtivo = useMemo(
+    () => concursos.find((c) => c.id === concursoAtivoId) || concursos[0],
+    [concursos, concursoAtivoId]
+  );
+
+  // Salas dinâmicas do concurso ativo: Geral, Cargo (antes da homologação/lista), Aprovados e Lotes
+  const salasDoConcursoAtivo = useMemo<SalaChatConcurso[]>(() => {
+    void dadosVersion;
+    return chatStore.getSalasDoConcurso(concursoAtivo, usuario, isAdmin);
+  }, [concursoAtivo, usuario, isAdmin, dadosVersion]);
+
+  const salaAtiva = useMemo<SalaChatConcurso>(() => {
+    return (
+      salasDoConcursoAtivo.find((s) => s.id === salaAtivaId) ||
+      salasDoConcursoAtivo[0] || {
+        id: 'geral',
+        tipo: 'geral',
+        concursoId: concursoAtivo?.id || 'tjrs_2025',
+        cargoId: 'geral',
+        cargoNome: 'Geral',
+        cargoScope: 'geral',
+        titulo: 'Chat Geral',
+        tituloCurto: 'Chat Geral',
+        descricao: 'Aberto a todos que acompanham as novidades do concurso',
+        restrito: false,
+        temAcesso: true,
+      }
+    );
+  }, [salasDoConcursoAtivo, salaAtivaId, concursoAtivo]);
+
+  // Se a sala ativa deixou de existir (ex: Cargo virou Aprovados após homologação), ajusta automaticamente
+  useEffect(() => {
+    if (
+      salasDoConcursoAtivo.length > 0 &&
+      !salasDoConcursoAtivo.some((s) => s.id === salaAtivaId)
+    ) {
+      setSalaAtivaId(salasDoConcursoAtivo[0].id);
+    }
+  }, [salasDoConcursoAtivo, salaAtivaId]);
+
+  /**
+   * Identifica o ID da mensagem mais antiga não lida em uma sala de concurso ANTES de marcá-la como lida.
+   */
+  const obterPrimeiraNaoLidaSala = (concId: string, sala: SalaChatConcurso): string | null => {
+    if (!concId || !sala || (sala.restrito && !sala.temAcesso)) return null;
+    const roomKey = `${concId}_${sala.id}`;
+    const msgs = chatStore.getMensagens(concId, sala.cargoScope, 'geral');
+    if (msgs.length === 0) return null;
+    const map = getReadIdsMap();
+    const readIds = map[roomKey];
+    if (!Array.isArray(readIds)) return null;
+    const readSet = new Set<string>(readIds);
+    const primeiraNaoLida = msgs.find(
+      (m) =>
+        !readSet.has(m.id) &&
+        !selfSentMsgIdsRef.current.has(m.id) &&
+        !chatStore.isMensagemDoProprioUsuario(m, usuario)
+    );
+    return primeiraNaoLida ? primeiraNaoLida.id : null;
+  };
+
+  const marcarSalaComoLida = (concId: string, sala: SalaChatConcurso) => {
+    if (!concId || !sala || (sala.restrito && !sala.temAcesso)) return;
+    const roomKey = `${concId}_${sala.id}`;
+    const msgs = chatStore.getMensagens(concId, sala.cargoScope, 'geral');
     const map = getReadIdsMap();
     const set = new Set<string>(map[roomKey] || []);
     let changed = false;
@@ -139,16 +243,17 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
   const sincronizarResumosEContadores = (
     listaConcursos: Concurso[],
     abertoAtual: boolean,
-    concAtivo: string,
-    cnAtivo: CanalChatId
+    modoAtual: 'concursos' | 'privadas',
+    concAtivoId: string,
+    sAtiva: SalaChatConcurso
   ) => {
     const readMap = getReadIdsMap();
     const isFirstInit = Object.keys(readMap).length === 0;
     let readMapModified = false;
 
-    if (abertoAtual && concAtivo) {
-      const activeKey = `${concAtivo}_${cnAtivo}`;
-      const activeMsgs = chatStore.getMensagens(concAtivo, 'geral', cnAtivo);
+    if (abertoAtual && modoAtual === 'concursos' && concAtivoId && sAtiva && sAtiva.temAcesso) {
+      const activeKey = `${concAtivoId}_${sAtiva.id}`;
+      const activeMsgs = chatStore.getMensagens(concAtivoId, sAtiva.cargoScope, 'geral');
       const set = new Set<string>(readMap[activeKey] || []);
       activeMsgs.forEach((m) => {
         if (!set.has(m.id)) {
@@ -160,23 +265,31 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
     }
 
     const nextUnreadConcurso: Record<string, number> = {};
-    const nextUnreadCanal: Record<string, number> = {};
+    const nextUnreadSala: Record<string, number> = {};
     const nextUltimaMsg: Record<
       string,
-      { autor: string; texto: string; canalId: CanalChatId; dataHora: string } | null
+      { autor: string; texto: string; salaTitulo: string; dataHora: string } | null
     > = {};
 
     listaConcursos.forEach((c) => {
       let totalNaoLidasConcurso = 0;
       let msgMaisRecente: {
         msg: ChatMensagem;
-        canalId: CanalChatId;
+        salaTitulo: string;
         ordem: number;
       } | null = null;
 
-      CANAIS_RAPIDOS.forEach((cn, cnIdx) => {
-        const roomKey = `${c.id}_${cn.id}`;
-        const msgs = chatStore.getMensagens(c.id, 'geral', cn.id);
+      const salas = chatStore.getSalasDoConcurso(c, usuario, isAdmin);
+
+      salas.forEach((sala, sIdx) => {
+        const roomKey = `${c.id}_${sala.id}`;
+        // Proteção estrita: salas restritas sem permissão não expõem contagem nem fragmento de mensagens
+        if (sala.restrito && !sala.temAcesso) {
+          nextUnreadSala[roomKey] = 0;
+          return;
+        }
+
+        const msgs = chatStore.getMensagens(c.id, sala.cargoScope, 'geral');
 
         if (isFirstInit) {
           readMap[roomKey] = msgs.map((m) => m.id);
@@ -184,9 +297,13 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
         }
 
         const readSet = new Set<string>(readMap[roomKey] || []);
-        const isCurrentOpenRoom = abertoAtual && concAtivo === c.id && cnAtivo === cn.id;
+        const isCurrentOpenRoom =
+          abertoAtual &&
+          modoAtual === 'concursos' &&
+          concAtivoId === c.id &&
+          sAtiva.id === sala.id;
 
-        let naoLidasCanal = 0;
+        let naoLidasSala = 0;
         msgs.forEach((m, idx) => {
           const enviadaPorMim =
             selfSentMsgIdsRef.current.has(m.id) ||
@@ -199,30 +316,30 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
               readMapModified = true;
             }
           } else if (!readSet.has(m.id)) {
-            naoLidasCanal++;
+            naoLidasSala++;
           }
 
-          const ts = Number(m.created_at || m.updated_at || 0) || (idx + 1) * 10 + cnIdx;
+          const ts = Number(m.created_at || m.updated_at || 0) || (idx + 1) * 10 + sIdx;
           if (!msgMaisRecente || ts >= msgMaisRecente.ordem) {
-            msgMaisRecente = { msg: m, canalId: cn.id, ordem: ts };
+            msgMaisRecente = { msg: m, salaTitulo: sala.tituloCurto, ordem: ts };
           }
         });
 
-        nextUnreadCanal[roomKey] = naoLidasCanal;
-        totalNaoLidasConcurso += naoLidasCanal;
+        nextUnreadSala[roomKey] = naoLidasSala;
+        totalNaoLidasConcurso += naoLidasSala;
       });
 
       nextUnreadConcurso[c.id] = totalNaoLidasConcurso;
       if (msgMaisRecente) {
-        const { msg, canalId } = msgMaisRecente as {
+        const { msg, salaTitulo } = msgMaisRecente as {
           msg: ChatMensagem;
-          canalId: CanalChatId;
+          salaTitulo: string;
           ordem: number;
         };
         nextUltimaMsg[c.id] = {
           autor: msg.autor,
           texto: msg.texto,
-          canalId,
+          salaTitulo,
           dataHora: msg.data_hora,
         };
       } else {
@@ -235,8 +352,23 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
     }
 
     setUnreadByConcurso(nextUnreadConcurso);
-    setUnreadByCanal(nextUnreadCanal);
+    setUnreadBySala(nextUnreadSala);
     setUltimaMsgPorConcurso(nextUltimaMsg);
+  };
+
+  const recarregarDadosDm = () => {
+    if (!meuEmail) {
+      setDmConversas([]);
+      setDmMensagens([]);
+      return;
+    }
+    const lista = dmStore.getContatosConversas(meuEmail);
+    setDmConversas(lista);
+    if (dmContatoEmail) {
+      const msgs = dmStore.getMensagensEntre(meuEmail, dmContatoEmail);
+      setDmMensagens([...msgs]);
+      setDmIsBloqueado(dmStore.isUsuarioBloqueado(meuEmail, dmContatoEmail));
+    }
   };
 
   useEffect(() => {
@@ -245,13 +377,95 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
     }
   }, [concursoInicialId, concursos]);
 
-  const salaAtualSilenciada = chatStore.isSalaSilenciada(concursoAtivoId, canalAtivo);
+  // Escuta evento global 'certam_abrir_dm_chat' disparado de qualquer lugar do portal para abrir uma conversa privada
+  useEffect(() => {
+    const handleAbrirDmGlobal = (e: Event) => {
+      const detail = (e as CustomEvent)?.detail || {};
+      setIsOpen(true);
+      setAbaModo('privadas');
+      setResumoBanner(null);
+      if (detail.email) {
+        setDmContatoEmail(detail.email);
+        setDmContatoNome(detail.nome || detail.email);
+        setMobileViewMode('mensagens');
+      } else {
+        const convs = meuEmail ? dmStore.getContatosConversas(meuEmail) : [];
+        if (convs.length > 0 && !dmContatoEmail) {
+          setDmContatoEmail(convs[0].email);
+          setDmContatoNome(convs[0].nome);
+        }
+        setMobileViewMode(detail.email ? 'mensagens' : 'conversas');
+      }
+    };
+
+    window.addEventListener('certam_abrir_dm_chat', handleAbrirDmGlobal);
+    return () => window.removeEventListener('certam_abrir_dm_chat', handleAbrirDmGlobal);
+  }, [meuEmail, dmContatoEmail]);
+
+  const salaAtualSilenciada =
+    abaModo === 'privadas'
+      ? dmContatoEmail
+        ? chatStore.isDmSilenciada(dmContatoEmail)
+        : false
+      : chatStore.isSalaSilenciada(concursoAtivoId, salaAtiva.id);
+
   const concursoAtualSilenciado = chatStore.isConcursoSilenciado(concursoAtivoId);
 
   const carregarMensagensAtivas = () => {
     if (!concursoAtivoId) return;
-    const msgs = chatStore.getMensagens(concursoAtivoId, 'geral', canalAtivo);
+    if (salaAtiva.restrito && !salaAtiva.temAcesso) {
+      setMensagens([]);
+      return;
+    }
+    const msgs = chatStore.getMensagens(concursoAtivoId, salaAtiva.cargoScope, 'geral');
     setMensagens([...msgs]);
+  };
+
+  // Posiciona automaticamente na mensagem mais antiga não lida ao abrir a conversa (ou no final se todas já foram lidas)
+  const posicionarScrollConversa = (targetUnreadId: string | null) => {
+    window.setTimeout(() => {
+      const container = messagesContainerRef.current;
+      if (!container) return;
+
+      if (targetUnreadId) {
+        const unreadEl = container.querySelector(
+          `[data-chat-msg-id="${targetUnreadId}"]`
+        ) as HTMLElement | null;
+        if (unreadEl) {
+          const offsetTopWithinContainer = unreadEl.offsetTop - container.offsetTop;
+          container.scrollTop = Math.max(0, offsetTopWithinContainer - 28);
+          const dist = container.scrollHeight - container.scrollTop - container.clientHeight;
+          setMostrarBotaoDescer(dist > 36);
+          return;
+        }
+      }
+
+      // Se não há mensagens não lidas, posiciona diretamente no fim (mensagem mais recente)
+      container.scrollTop = container.scrollHeight;
+      setMostrarBotaoDescer(false);
+    }, 45);
+  };
+
+  const rolarAteOFim = () => {
+    const container = messagesContainerRef.current;
+    if (container) {
+      container.scrollTo({
+        top: container.scrollHeight,
+        behavior: 'smooth',
+      });
+    } else {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+    setPrimeiraNaoLidaId(null);
+    setMostrarBotaoDescer(false);
+  };
+
+  const handleContainerScroll = () => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+    const distanceFromBottom =
+      container.scrollHeight - container.scrollTop - container.clientHeight;
+    setMostrarBotaoDescer(distanceFromBottom > 48);
   };
 
   // Inicializa IDs de mensagens já existentes para só notificar mensagens novas que chegarem a partir de agora
@@ -259,40 +473,89 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
     if (initializedKnownIdsRef.current) return;
     const allConcursos = certamStore.getConcursos();
     allConcursos.forEach((c) => {
-      CANAIS_RAPIDOS.forEach((cn) => {
-        const msgs = chatStore.getMensagens(c.id, 'geral', cn.id);
+      const salas = chatStore.getSalasDoConcurso(c, usuario, isAdmin);
+      salas.forEach((sala) => {
+        if (sala.restrito && !sala.temAcesso) return;
+        const msgs = chatStore.getMensagens(c.id, sala.cargoScope, 'geral');
         msgs.forEach((m) => knownMsgIdsRef.current.add(m.id));
       });
     });
-    sincronizarResumosEContadores(allConcursos, isOpen, concursoAtivoId, canalAtivo);
-    initializedKnownIdsRef.current = true;
-  }, []);
 
-  useEffect(() => {
-    if (isOpen) {
-      marcarSalaComoLida(concursoAtivoId, canalAtivo);
+    if (meuEmail) {
+      dmStore.getMensagens().forEach((dm) => knownDmIdsRef.current.add(dm.id));
     }
-    carregarMensagensAtivas();
-    sincronizarResumosEContadores(
-      certamStore.getConcursos(),
-      isOpen,
-      concursoAtivoId,
-      canalAtivo
-    );
-  }, [concursoAtivoId, canalAtivo, isOpen, usuario]);
+
+    sincronizarResumosEContadores(allConcursos, isOpen, abaModo, concursoAtivoId, salaAtiva);
+    recarregarDadosDm();
+    initializedKnownIdsRef.current = true;
+  }, [meuEmail]);
+
+  // Quando o usuário abre o chat ou troca de conversa/sala/DM:
+  // 1. Captura o ID da mensagem mais antiga não lida ANTES de marcar como lida
+  // 2. Marca como lida
+  // 3. Posiciona o scroll na mensagem mais antiga não lida (ou no fim se não houver não lidas)
+  useEffect(() => {
+    const signature = isOpen
+      ? `${abaModo}:${concursoAtivoId}:${salaAtiva.id}:${dmContatoEmail || ''}`
+      : '';
+
+    if (isOpen && signature !== lastRoomSignatureRef.current) {
+      lastRoomSignatureRef.current = signature;
+
+      if (abaModo === 'concursos') {
+        const unreadId = obterPrimeiraNaoLidaSala(concursoAtivoId, salaAtiva);
+        setPrimeiraNaoLidaId(unreadId);
+        marcarSalaComoLida(concursoAtivoId, salaAtiva);
+        carregarMensagensAtivas();
+        sincronizarResumosEContadores(
+          certamStore.getConcursos(),
+          isOpen,
+          abaModo,
+          concursoAtivoId,
+          salaAtiva
+        );
+        posicionarScrollConversa(unreadId);
+      } else if (abaModo === 'privadas') {
+        const unreadDmId =
+          meuEmail && dmContatoEmail
+            ? dmStore.getPrimeiraMensagemNaoLidaId(meuEmail, dmContatoEmail)
+            : null;
+        setPrimeiraNaoLidaId(unreadDmId);
+        if (meuEmail && dmContatoEmail) {
+          dmStore.marcarComoLidas(meuEmail, dmContatoEmail);
+        }
+        recarregarDadosDm();
+        posicionarScrollConversa(unreadDmId);
+      }
+    } else {
+      if (!isOpen) {
+        lastRoomSignatureRef.current = '';
+      }
+      carregarMensagensAtivas();
+      recarregarDadosDm();
+      sincronizarResumosEContadores(
+        certamStore.getConcursos(),
+        isOpen,
+        abaModo,
+        concursoAtivoId,
+        salaAtiva
+      );
+    }
+  }, [concursoAtivoId, salaAtiva.id, dmContatoEmail, abaModo, isOpen, usuario, dadosVersion]);
 
   const playIncomingChatSound = () => {
     if (typeof window === 'undefined') return;
     try {
       const AudioCtx =
-        window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       if (!AudioCtx) return;
       const ctx = new AudioCtx();
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.type = 'sine';
-      osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
-      osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.09); // A5
+      osc.frequency.setValueAtTime(587.33, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.09);
       gain.gain.setValueAtTime(0.0001, ctx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.045, ctx.currentTime + 0.02);
       gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.18);
@@ -304,29 +567,29 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
         void ctx.close().catch(() => {});
       }, 250);
     } catch {
-      // Ignora caso o navegador bloqueie autoplay de áudio sem interação prévia
+      // ignore
     }
   };
 
-  // Monitoramento em tempo real de todas as conversas de todos os concursos
+  // Monitoramento em tempo real de todas as conversas (Concursos e Mensagens Privadas)
   useEffect(() => {
     const verificarNovasMensagensGlobal = () => {
       const listaConcursos = certamStore.getConcursos();
       setConcursos(listaConcursos);
+      setDadosVersion((v) => v + 1);
 
       const currentSenderId = chatStore.obterIdentificadorUsuario(usuario).trim().toLowerCase();
       const currentSenderIds = chatStore.obterConjuntoSenderIdsUsuarioAtual(usuario);
 
-      let ultimaNovaParaNotificar: {
-        msg: ChatMensagem;
-        conc: Concurso;
-        canal: CanalChatId;
-      } | null = null;
+      let ultimaNovaParaNotificar: ResumoNovaMensagemChat | null = null;
 
       listaConcursos.forEach((conc) => {
-        CANAIS_RAPIDOS.forEach((cn) => {
-          const msgs = chatStore.getMensagens(conc.id, 'geral', cn.id);
-          // Filtra explicitamente mensagens cujo sender_id pertence ao próprio usuário atual
+        const salas = chatStore.getSalasDoConcurso(conc, usuario, isAdmin);
+        salas.forEach((sala) => {
+          // Segurança estrita: nunca notifica sobre salas restritas (Aprovados/Lote) às quais o usuário não tem acesso
+          if (sala.restrito && !sala.temAcesso) return;
+
+          const msgs = chatStore.getMensagens(conc.id, sala.cargoScope, 'geral');
           const incomingFromOtherParticipants = msgs.filter((m) => {
             const msgSenderId = String(m.sender_id || m.email || '').trim().toLowerCase();
             const isOwnSenderId =
@@ -351,46 +614,85 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
 
               const estaVisualizandoEstaSalaAberta =
                 isOpen &&
+                abaModo === 'concursos' &&
                 mobileViewMode === 'mensagens' &&
                 concursoAtivoId === conc.id &&
-                canalAtivo === cn.id;
+                salaAtiva.id === sala.id;
 
               const conversaSilenciada =
-                chatStore.isSalaSilenciada(conc.id, cn.id) ||
+                chatStore.isSalaSilenciada(conc.id, sala.id) ||
                 chatStore.isConcursoSilenciado(conc.id);
 
-              // Toasts/balões e notificações sonoras são acionados APENAS para mensagens recebidas de outros participantes
               if (!conversaSilenciada && !estaVisualizandoEstaSalaAberta) {
-                ultimaNovaParaNotificar = { msg: m, conc, canal: cn.id };
+                const sigla = conc.orgao || conc.nome;
+                const resumoCurto =
+                  m.texto.length > 68 ? `${m.texto.substring(0, 68)}...` : m.texto;
+                ultimaNovaParaNotificar = {
+                  id: m.id,
+                  modo: 'concursos',
+                  concursoId: conc.id,
+                  concursoSigla: sigla,
+                  salaId: sala.id,
+                  salaTitulo: sala.tituloCurto,
+                  autor: m.autor,
+                  resumoTexto: resumoCurto,
+                  dataHora: m.data_hora || 'Agora',
+                };
               }
             }
           });
         });
       });
 
-      sincronizarResumosEContadores(listaConcursos, isOpen, concursoAtivoId, canalAtivo);
+      // Verifica também novas Mensagens Privadas (DMs) recebidas de outros usuários
+      if (meuEmail) {
+        const todasDms = dmStore.getMensagens();
+        todasDms.forEach((dm) => {
+          if (knownDmIdsRef.current.has(dm.id)) return;
+          knownDmIdsRef.current.add(dm.id);
+
+          const remEmail = dm.remetente_email.trim().toLowerCase();
+          const destEmail = dm.destinatario_email.trim().toLowerCase();
+          if (remEmail === meuEmail || destEmail !== meuEmail) return;
+          if (dmStore.isUsuarioBloqueado(meuEmail, remEmail)) return;
+
+          const estaVisualizandoEstaDm =
+            isOpen &&
+            abaModo === 'privadas' &&
+            mobileViewMode === 'mensagens' &&
+            dmContatoEmail?.trim().toLowerCase() === remEmail;
+
+          if (estaVisualizandoEstaDm) {
+            dmStore.marcarComoLidas(meuEmail, remEmail);
+          } else if (!chatStore.isDmSilenciada(remEmail)) {
+            const resumoCurto =
+              dm.texto.length > 68 ? `${dm.texto.substring(0, 68)}...` : dm.texto;
+            ultimaNovaParaNotificar = {
+              id: dm.id,
+              modo: 'privadas',
+              concursoSigla: 'Mensagem Privada',
+              salaTitulo: dm.remetente_nome || remEmail,
+              dmEmail: dm.remetente_email,
+              autor: dm.remetente_nome || remEmail,
+              resumoTexto: resumoCurto,
+              dataHora: dm.data_hora || 'Agora',
+            };
+          }
+        });
+      }
+
+      sincronizarResumosEContadores(
+        listaConcursos,
+        isOpen,
+        abaModo,
+        concursoAtivoId,
+        salaAtiva
+      );
+      recarregarDadosDm();
 
       if (ultimaNovaParaNotificar) {
-        const { msg, conc, canal } = ultimaNovaParaNotificar as {
-          msg: ChatMensagem;
-          conc: Concurso;
-          canal: CanalChatId;
-        };
-        const sigla = conc.orgao || conc.nome;
-        const resumoCurto =
-          msg.texto.length > 68 ? `${msg.texto.substring(0, 68)}...` : msg.texto;
-
         playIncomingChatSound();
-
-        setResumoBanner({
-          id: msg.id,
-          concursoId: conc.id,
-          concursoSigla: sigla,
-          canalId: canal,
-          autor: msg.autor,
-          resumoTexto: resumoCurto,
-          dataHora: msg.data_hora || 'Agora',
-        });
+        setResumoBanner(ultimaNovaParaNotificar);
 
         if (bannerTimeoutRef.current) {
           window.clearTimeout(bannerTimeoutRef.current);
@@ -405,12 +707,21 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
 
     const handleMuteChanged = () => {
       setMuteVersion((v) => v + 1);
-      if (
-        resumoBanner &&
-        (chatStore.isSalaSilenciada(resumoBanner.concursoId, resumoBanner.canalId) ||
-          chatStore.isConcursoSilenciado(resumoBanner.concursoId))
-      ) {
-        setResumoBanner(null);
+      if (resumoBanner) {
+        if (
+          resumoBanner.modo === 'concursos' &&
+          resumoBanner.concursoId &&
+          (chatStore.isSalaSilenciada(resumoBanner.concursoId, resumoBanner.salaId) ||
+            chatStore.isConcursoSilenciado(resumoBanner.concursoId))
+        ) {
+          setResumoBanner(null);
+        } else if (
+          resumoBanner.modo === 'privadas' &&
+          resumoBanner.dmEmail &&
+          chatStore.isDmSilenciada(resumoBanner.dmEmail)
+        ) {
+          setResumoBanner(null);
+        }
       }
     };
 
@@ -421,28 +732,77 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
     chatStore.initRealtime();
 
     window.addEventListener('certam_chat_updated', verificarNovasMensagensGlobal);
+    window.addEventListener('certam_dm_updated', verificarNovasMensagensGlobal);
+    window.addEventListener('certam_blocked_updated', verificarNovasMensagensGlobal);
     window.addEventListener('certam_concursos_updated', verificarNovasMensagensGlobal);
+    window.addEventListener('certam_lotes_updated', verificarNovasMensagensGlobal);
+    window.addEventListener('certam_candidatos_updated', verificarNovasMensagensGlobal);
     window.addEventListener('certam_chat_mute_updated', handleMuteChanged);
     window.addEventListener('certam_emojis_updated', handleEmojisChanged);
     window.addEventListener('storage', verificarNovasMensagensGlobal);
 
     return () => {
       window.removeEventListener('certam_chat_updated', verificarNovasMensagensGlobal);
+      window.removeEventListener('certam_dm_updated', verificarNovasMensagensGlobal);
+      window.removeEventListener('certam_blocked_updated', verificarNovasMensagensGlobal);
       window.removeEventListener('certam_concursos_updated', verificarNovasMensagensGlobal);
+      window.removeEventListener('certam_lotes_updated', verificarNovasMensagensGlobal);
+      window.removeEventListener('certam_candidatos_updated', verificarNovasMensagensGlobal);
       window.removeEventListener('certam_chat_mute_updated', handleMuteChanged);
       window.removeEventListener('certam_emojis_updated', handleEmojisChanged);
       window.removeEventListener('storage', verificarNovasMensagensGlobal);
     };
-  }, [concursoAtivoId, canalAtivo, isOpen, mobileViewMode, usuario, resumoBanner]);
+  }, [
+    concursoAtivoId,
+    salaAtiva,
+    abaModo,
+    dmContatoEmail,
+    meuEmail,
+    isOpen,
+    mobileViewMode,
+    usuario,
+    isAdmin,
+    resumoBanner,
+  ]);
 
   const handleToggleMuteSalaAtual = () => {
-    chatStore.alternarSilenciarSala(concursoAtivoId, canalAtivo);
+    if (abaModo === 'privadas') {
+      if (dmContatoEmail) {
+        chatStore.alternarSilenciarDm(dmContatoEmail);
+        setMuteVersion((v) => v + 1);
+      }
+      return;
+    }
+    chatStore.alternarSilenciarSala(concursoAtivoId, salaAtiva.id);
     setMuteVersion((v) => v + 1);
   };
 
   const handleToggleMuteConcursoAtual = () => {
     chatStore.alternarSilenciarConcurso(concursoAtivoId);
     setMuteVersion((v) => v + 1);
+  };
+
+  const handleToggleBloqueioDm = () => {
+    if (!meuEmail || !dmContatoEmail) return;
+    if (dmIsBloqueado) {
+      dmStore.desbloquearUsuario(meuEmail, dmContatoEmail);
+      setDmIsBloqueado(false);
+    } else {
+      dmStore.bloquearUsuario(meuEmail, dmContatoEmail);
+      setDmIsBloqueado(true);
+    }
+  };
+
+  const handleIniciarConversaPrivada = (emailAlvo: string, nomeAlvo: string) => {
+    if (!usuario && !isAdmin) {
+      onRequireAuth?.();
+      return;
+    }
+    if (!emailAlvo || emailAlvo.trim().toLowerCase() === meuEmail) return;
+    setAbaModo('privadas');
+    setDmContatoEmail(emailAlvo.trim());
+    setDmContatoNome(nomeAlvo || emailAlvo.trim());
+    setMobileViewMode('mensagens');
   };
 
   const handleEnviar = (e: React.FormEvent) => {
@@ -467,6 +827,30 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
       usuario?.email?.trim().toLowerCase() ||
       (isUserAdmin ? 'rafasms0@hotmail.com' : 'candidato@certam.com.br');
 
+    // Modo Mensagens Privadas (DM)
+    if (abaModo === 'privadas') {
+      if (!dmContatoEmail || dmIsBloqueado) return;
+      const novaDm = dmStore.enviarMensagem({
+        remetente_email: emailAutor,
+        remetente_nome: nomeAutor,
+        destinatario_email: dmContatoEmail,
+        destinatario_nome: dmContatoNome || dmContatoEmail,
+        texto: sanitizeInput(texto.trim(), 1000),
+      });
+      knownDmIdsRef.current.add(novaDm.id);
+      setTexto('');
+      setShowInputEmojiPicker(false);
+      setPrimeiraNaoLidaId(null);
+      recarregarDadosDm();
+      rolarAteOFim();
+      return;
+    }
+
+    // Modo Chat de Concurso: bloqueia estritamente envio caso a sala seja restrita (Aprovados ou Lote) e o usuário não tenha acesso
+    if (salaAtiva.restrito && !salaAtiva.temAcesso) {
+      return;
+    }
+
     const cores = ['#0D5C75', '#0F766E', '#1D4ED8', '#6366F1', '#475569'];
     const corHash =
       cores[
@@ -480,7 +864,7 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
       }
     );
 
-    const nova = chatStore.enviarMensagem(concursoAtivoId, 'geral', canalAtivo, {
+    const nova = chatStore.enviarMensagem(concursoAtivoId, salaAtiva.cargoScope, 'geral', {
       sender_id: currentSenderId,
       autor: nomeAutor,
       email: emailAutor,
@@ -488,6 +872,7 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
       texto: texto.trim(),
       is_admin: isUserAdmin,
       is_fixado: false,
+      posicao_candidato: salaAtiva.posicaoUsuarioNoCargo,
       curtidas: 0,
       curtido_por: [],
       reacoes: {},
@@ -498,30 +883,25 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
 
     setTexto('');
     setShowInputEmojiPicker(false);
+    setPrimeiraNaoLidaId(null);
     carregarMensagensAtivas();
-    setTimeout(() => {
-      if (messagesContainerRef.current) {
-        messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
-      } else {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-      }
-    }, 60);
+    rolarAteOFim();
   };
 
   const handleCurtir = (msgId: string) => {
-    chatStore.curtirMensagem(concursoAtivoId, 'geral', canalAtivo, msgId, usuario);
+    chatStore.curtirMensagem(concursoAtivoId, salaAtiva.cargoScope, 'geral', msgId, usuario);
     carregarMensagensAtivas();
   };
 
   const handleReagir = (msgId: string, emoji: string) => {
-    chatStore.reagirEmoji(concursoAtivoId, 'geral', canalAtivo, msgId, emoji, usuario);
+    chatStore.reagirEmoji(concursoAtivoId, salaAtiva.cargoScope, 'geral', msgId, emoji, usuario);
     setEmojisFrequentes(chatStore.getEmojisFrequentes(8));
     setEmojiPickerMsgId(null);
     carregarMensagensAtivas();
   };
 
   const handleReenviar = async (msgId: string) => {
-    await chatStore.reenviarMensagem(concursoAtivoId, 'geral', canalAtivo, msgId);
+    await chatStore.reenviarMensagem(concursoAtivoId, salaAtiva.cargoScope, 'geral', msgId);
     carregarMensagensAtivas();
   };
 
@@ -531,11 +911,46 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
     setEmojisFrequentes(chatStore.getEmojisFrequentes(8));
   };
 
-  const totalUnread = (Object.values(unreadByConcurso) as number[]).reduce(
+  const totalUnreadConcursos = (Object.values(unreadByConcurso) as number[]).reduce(
     (acc, n) => acc + n,
     0
   );
-  const concursoAtivo = concursos.find((c) => c.id === concursoAtivoId) || concursos[0];
+  const totalUnreadDms = useMemo(
+    () => dmConversas.reduce((acc, c) => acc + (c.naoLidas || 0), 0),
+    [dmConversas]
+  );
+  const totalUnread = totalUnreadConcursos + totalUnreadDms;
+
+  const dmConversasFiltradas = useMemo(() => {
+    const q = dmBusca.trim().toLowerCase();
+    if (!q) return dmConversas;
+    return dmConversas.filter(
+      (c) => c.nome.toLowerCase().includes(q) || c.email.toLowerCase().includes(q)
+    );
+  }, [dmConversas, dmBusca]);
+
+  const sugestoesNovosContatosDm = useMemo<SugestaoContatoDm[]>(() => {
+    if (!meuEmail) return [];
+    const todos = dmStore.getSugestoesContatos(meuEmail, dmBusca);
+    const emailsComConversa = new Set(dmConversas.map((c) => c.email.trim().toLowerCase()));
+    return todos.filter((s) => !emailsComConversa.has(s.email.trim().toLowerCase()));
+  }, [meuEmail, dmBusca, dmConversas, dadosVersion]);
+
+  const renderIconeSala = (sala: SalaChatConcurso) => {
+    if (sala.restrito && !sala.temAcesso) {
+      return <Lock className="w-3 h-3 text-amber-600 shrink-0" />;
+    }
+    switch (sala.tipo) {
+      case 'geral':
+        return <Users className="w-3 h-3 text-teal-600 shrink-0" />;
+      case 'cargo':
+        return <Briefcase className="w-3 h-3 text-sky-600 shrink-0" />;
+      case 'aprovados':
+        return <Award className="w-3 h-3 text-emerald-600 shrink-0" />;
+      case 'lote':
+        return <Layers className="w-3 h-3 text-indigo-600 shrink-0" />;
+    }
+  };
 
   return (
     <div className="fixed bottom-4 right-4 z-[9990] flex flex-col items-end max-w-[calc(100vw-1rem)]">
@@ -549,8 +964,15 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
           <button
             type="button"
             onClick={() => {
-              setConcursoAtivoId(resumoBanner.concursoId);
-              setCanalAtivo(resumoBanner.canalId);
+              if (resumoBanner.modo === 'privadas' && resumoBanner.dmEmail) {
+                setAbaModo('privadas');
+                setDmContatoEmail(resumoBanner.dmEmail);
+                setDmContatoNome(resumoBanner.autor);
+              } else {
+                setAbaModo('concursos');
+                if (resumoBanner.concursoId) setConcursoAtivoId(resumoBanner.concursoId);
+                if (resumoBanner.salaId) setSalaAtivaId(resumoBanner.salaId);
+              }
               setMobileViewMode('mensagens');
               setIsOpen(true);
               setResumoBanner(null);
@@ -558,7 +980,11 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
             className="flex items-center gap-2.5 flex-1 min-w-0 text-left cursor-pointer"
           >
             <div className="relative flex items-center justify-center w-8 h-8 rounded-xl bg-teal-500/20 border border-teal-300/30 shrink-0">
-              <MessageSquare className="w-4 h-4 text-teal-300" />
+              {resumoBanner.modo === 'privadas' ? (
+                <MessageCircle className="w-4 h-4 text-teal-300" />
+              ) : (
+                <MessageSquare className="w-4 h-4 text-teal-300" />
+              )}
               <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-emerald-400 ring-2 ring-[#07192B]" />
             </div>
             <div className="min-w-0 flex-1">
@@ -566,8 +992,8 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
                 <span className="text-[10px] font-extrabold uppercase tracking-wide bg-teal-400/20 text-teal-200 px-1.5 py-0.2 rounded border border-teal-400/30 truncate max-w-[110px]">
                   {resumoBanner.concursoSigla}
                 </span>
-                <span className="text-[10px] font-bold text-teal-200/90">
-                  #{resumoBanner.canalId}
+                <span className="text-[10px] font-bold text-teal-200/90 truncate max-w-[100px]">
+                  {resumoBanner.salaTitulo}
                 </span>
                 <span className="text-[9px] text-teal-200/70 ml-auto shrink-0">
                   {resumoBanner.dataHora}
@@ -584,7 +1010,14 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
             <button
               type="button"
               onClick={() => {
-                chatStore.alternarSilenciarSala(resumoBanner.concursoId, resumoBanner.canalId);
+                if (resumoBanner.modo === 'privadas' && resumoBanner.dmEmail) {
+                  chatStore.alternarSilenciarDm(resumoBanner.dmEmail);
+                } else if (resumoBanner.concursoId) {
+                  chatStore.alternarSilenciarSala(
+                    resumoBanner.concursoId,
+                    resumoBanner.salaId || 'geral'
+                  );
+                }
                 setResumoBanner(null);
                 setMuteVersion((v) => v + 1);
               }}
@@ -626,13 +1059,14 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
           </div>
           <div className="text-left pr-1">
             <div className="text-xs font-extrabold tracking-wide flex items-center gap-1.5">
-              <span>Chat dos Concursos</span>
+              <span>Chat & Mensagens</span>
               <span className="text-[10px] font-bold bg-teal-400/20 text-teal-200 px-1.5 py-0.5 rounded border border-teal-400/30">
                 Ao Vivo
               </span>
             </div>
             <div className="text-[11px] text-teal-100/90 font-medium">
-              {concursoAtivo?.orgao || 'Comunidade'} • {mensagens.length} msg(s)
+              {concursoAtivo?.orgao || 'Comunidade'} • {salasDoConcursoAtivo.length} chat(s)
+              {totalUnreadDms > 0 ? ` • ${totalUnreadDms} DM(s)` : ''}
             </div>
           </div>
         </button>
@@ -641,14 +1075,13 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
         <div
           className={`bg-white rounded-2xl shadow-2xl border border-slate-300 flex flex-col overflow-hidden transition-all duration-200 ${
             isExpanded
-              ? 'w-[96vw] sm:w-[680px] md:w-[740px]'
-              : 'w-[94vw] sm:w-[540px] md:w-[580px]'
+              ? 'w-[96vw] sm:w-[720px] md:w-[800px]'
+              : 'w-[94vw] sm:w-[580px] md:w-[640px]'
           }`}
         >
           {/* Cabeçalho Principal */}
           <div className="bg-gradient-to-r from-[#07192B] via-[#0A2540] to-[#0D3B56] px-3.5 py-2.5 text-white flex items-center justify-between gap-2 shrink-0">
             <div className="flex items-center gap-2 min-w-0">
-              {/* Botão em telas muito pequenas (< sm) para alternar entre lista de conversas e painel de mensagens */}
               <button
                 type="button"
                 onClick={() =>
@@ -682,12 +1115,20 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
               </button>
 
               <div className="relative hidden sm:block">
-                <MessageSquare className="w-4 h-4 text-teal-300 shrink-0" />
+                {abaModo === 'privadas' ? (
+                  <MessageCircle className="w-4 h-4 text-teal-300 shrink-0" />
+                ) : (
+                  <MessageSquare className="w-4 h-4 text-teal-300 shrink-0" />
+                )}
                 <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-400" />
               </div>
               <div className="min-w-0">
                 <h4 className="text-xs font-extrabold tracking-wide truncate flex items-center gap-1.5">
-                  <span>Chat dos Concursos</span>
+                  <span>
+                    {abaModo === 'privadas'
+                      ? 'Mensagens Privadas'
+                      : 'Chat dos Concursos'}
+                  </span>
                   {salaAtualSilenciada && (
                     <span className="text-[9px] bg-amber-500/30 text-amber-200 border border-amber-400/40 px-1.5 py-0.2 rounded">
                       Silenciado
@@ -695,13 +1136,17 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
                   )}
                 </h4>
                 <p className="text-[10px] text-teal-200 truncate">
-                  {concursoAtivo?.orgao || concursoAtivo?.nome} • #{canalAtivo}
+                  {abaModo === 'privadas'
+                    ? dmContatoNome
+                      ? `Conversa direta com ${dmContatoNome}`
+                      : 'Comunicação direta 1 a 1 entre candidatos'
+                    : `${concursoAtivo?.orgao || concursoAtivo?.nome} • ${salaAtiva.tituloCurto}`}
                 </p>
               </div>
             </div>
 
             <div className="flex items-center gap-1 shrink-0">
-              {/* Silenciar Canal Atual */}
+              {/* Silenciar Conversa Atual */}
               <button
                 type="button"
                 onClick={handleToggleMuteSalaAtual}
@@ -724,26 +1169,28 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
               </button>
 
               {/* Silenciar Concurso Inteiro */}
-              <button
-                type="button"
-                onClick={handleToggleMuteConcursoAtual}
-                title={
-                  concursoAtualSilenciado
-                    ? 'Reativar notificações de todo este concurso'
-                    : 'Silenciar todas as abas deste concurso'
-                }
-                className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
-                  concursoAtualSilenciado
-                    ? 'bg-rose-500/25 text-rose-300 border border-rose-400/40'
-                    : 'hover:bg-white/10 text-slate-300'
-                }`}
-              >
-                {concursoAtualSilenciado ? (
-                  <VolumeX className="w-3.5 h-3.5" />
-                ) : (
-                  <Volume2 className="w-3.5 h-3.5" />
-                )}
-              </button>
+              {abaModo === 'concursos' && (
+                <button
+                  type="button"
+                  onClick={handleToggleMuteConcursoAtual}
+                  title={
+                    concursoAtualSilenciado
+                      ? 'Reativar notificações de todo este concurso'
+                      : 'Silenciar todos os chats deste concurso'
+                  }
+                  className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                    concursoAtualSilenciado
+                      ? 'bg-rose-500/25 text-rose-300 border border-rose-400/40'
+                      : 'hover:bg-white/10 text-slate-300'
+                  }`}
+                >
+                  {concursoAtualSilenciado ? (
+                    <VolumeX className="w-3.5 h-3.5" />
+                  ) : (
+                    <Volume2 className="w-3.5 h-3.5" />
+                  )}
+                </button>
+              )}
 
               <button
                 type="button"
@@ -769,506 +1216,980 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
             </div>
           </div>
 
-          {/* Corpo com Lista Lateral Responsiva de Abas de Conversa + Painel de Mensagens */}
+          {/* Corpo com Lista Lateral Responsiva + Painel de Mensagens */}
           <div className="flex flex-1 min-h-0 overflow-hidden">
-            {/* Lista Lateral Responsiva de Conversas por Concurso */}
+            {/* Lista Lateral Responsiva: Alterna entre Concursos e Mensagens Privadas */}
             <aside
               className={`${
                 mobileViewMode === 'conversas' ? 'flex w-full' : 'hidden sm:flex'
-              } sm:w-44 md:w-48 bg-slate-900 border-r border-slate-800 flex-col shrink-0`}
+              } sm:w-48 md:w-56 bg-slate-900 border-r border-slate-800 flex-col shrink-0`}
             >
-              <div className="px-3 py-2 border-b border-slate-800 flex items-center justify-between">
-                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
-                  Concursos ({concursos.length})
-                </span>
-                {totalUnread > 0 && (
-                  <span className="bg-rose-500 text-white text-[9px] font-extrabold px-1.5 py-0.5 rounded-full leading-none">
-                    {totalUnread} nova(s)
-                  </span>
-                )}
-              </div>
-
-              <div
-                className={`overflow-y-auto p-1.5 space-y-1 ${
-                  isExpanded ? 'h-[470px]' : 'h-[370px]'
-                }`}
-              >
-                {concursos.map((c) => {
-                  const ativo = c.id === concursoAtivoId;
-                  const unread = unreadByConcurso[c.id] || 0;
-                  const concSilenciado = chatStore.isConcursoSilenciado(c.id);
-                  const ultimaMsg = ultimaMsgPorConcurso[c.id];
-                  const fragmentoTexto = ultimaMsg
-                    ? `${ultimaMsg.autor.split(' ')[0]}: ${
-                        ultimaMsg.texto.length > 26
-                          ? `${ultimaMsg.texto.substring(0, 26)}...`
-                          : ultimaMsg.texto
-                      }`
-                    : 'Sem mensagens recentes';
-
-                  return (
-                    <button
-                      key={c.id}
-                      type="button"
-                      onClick={() => {
-                        setConcursoAtivoId(c.id);
-                        setMobileViewMode('mensagens');
-                      }}
-                      className={`w-full px-2.5 py-2 rounded-xl text-left flex flex-col justify-between transition-all cursor-pointer border ${
-                        ativo
-                          ? 'bg-teal-600 text-white border-teal-400/50 shadow-sm'
-                          : unread > 0
-                          ? 'bg-slate-800/95 text-white border-teal-500/50 hover:bg-slate-800'
-                          : 'bg-slate-800/60 text-slate-300 border-slate-800 hover:bg-slate-800 hover:text-white'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-1.5 w-full">
-                        <span className="text-[11px] font-extrabold truncate">
-                          {c.orgao || c.nome.substring(0, 16)}
-                        </span>
-                        <div className="flex items-center gap-1 shrink-0">
-                          {concSilenciado && (
-                            <span title="Notificações silenciadas para este concurso">
-                              <BellOff className="w-2.5 h-2.5 text-amber-300 shrink-0" />
-                            </span>
-                          )}
-                          {unread > 0 && (
-                            <span
-                              className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded-full min-w-[18px] text-center leading-none shadow-xs ${
-                                concSilenciado
-                                  ? 'bg-amber-400 text-slate-950 ring-1 ring-amber-200'
-                                  : 'bg-rose-500 text-white ring-1 ring-rose-300'
-                              }`}
-                              title={`${unread} nova(s) mensagem(ns) não lida(s)${
-                                concSilenciado ? ' (conversa silenciada)' : ''
-                              }`}
-                            >
-                              {unread}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <span
-                        className={`text-[10px] truncate w-full mt-1 leading-tight ${
-                          ativo
-                            ? 'text-teal-100'
-                            : unread > 0
-                            ? 'text-teal-300 font-semibold'
-                            : 'text-slate-400'
-                        }`}
-                        title={
-                          ultimaMsg ? `${ultimaMsg.autor}: ${ultimaMsg.texto}` : 'Sem mensagens'
-                        }
-                      >
-                        {fragmentoTexto}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </aside>
-
-            {/* Painel Principal de Mensagens (oculto automaticamente em telas pequenas quando a lista de conversas está ativa) */}
-            <div
-              className={`${
-                mobileViewMode === 'conversas' ? 'hidden sm:flex' : 'flex'
-              } flex-1 flex-col min-w-0 bg-white`}
-            >
-              {/* Sub-abas de Canais do Concurso + Botão Rápido de Silenciar Conversa */}
-              <div className="bg-slate-100 px-2.5 py-1.5 flex items-center justify-between gap-1 border-b border-slate-200 shrink-0">
-                <div className="flex items-center gap-1 overflow-x-auto">
-                  {CANAIS_RAPIDOS.map((cn) => {
-                    const ativo = canalAtivo === cn.id;
-                    const silenciado = chatStore.isSalaSilenciada(concursoAtivoId, cn.id);
-                    const unreadCn = unreadByCanal[`${concursoAtivoId}_${cn.id}`] || 0;
-                    return (
-                      <button
-                        key={cn.id}
-                        type="button"
-                        onClick={() => setCanalAtivo(cn.id)}
-                        className={`px-2 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1 shrink-0 ${
-                          ativo
-                            ? 'bg-white text-teal-800 shadow-2xs border border-slate-200/80'
-                            : 'text-slate-600 hover:text-slate-900'
-                        }`}
-                      >
-                        <span>#{cn.nome}</span>
-                        {silenciado && <BellOff className="w-2.5 h-2.5 text-amber-600" />}
-                        {unreadCn > 0 && (
-                          <span
-                            className={`text-[9px] font-extrabold px-1.5 py-0.2 rounded-full ${
-                              silenciado
-                                ? 'bg-amber-500 text-white'
-                                : 'bg-rose-500 text-white'
-                            }`}
-                          >
-                            {unreadCn}
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
+              {/* Seletor Principal: Concursos vs Mensagens Privadas */}
+              <div className="p-1.5 bg-slate-950 border-b border-slate-800 grid grid-cols-2 gap-1">
+                <button
+                  type="button"
+                  onClick={() => setAbaModo('concursos')}
+                  className={`px-2 py-1.5 rounded-lg text-[10px] font-extrabold flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                    abaModo === 'concursos'
+                      ? 'bg-teal-600 text-white shadow-xs'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                  }`}
+                >
+                  <MessageSquare className="w-3 h-3 shrink-0" />
+                  <span>Concursos</span>
+                  {totalUnreadConcursos > 0 && (
+                    <span className="bg-rose-500 text-white text-[9px] font-extrabold px-1.5 py-0.2 rounded-full leading-none">
+                      {totalUnreadConcursos}
+                    </span>
+                  )}
+                </button>
 
                 <button
                   type="button"
-                  onClick={handleToggleMuteSalaAtual}
-                  className={`text-[10px] font-bold px-2 py-0.5 rounded-md border flex items-center gap-1 shrink-0 cursor-pointer transition-colors ${
-                    salaAtualSilenciada
-                      ? 'bg-amber-50 border-amber-300 text-amber-800'
-                      : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                  onClick={() => {
+                    if (!usuario && !isAdmin) {
+                      onRequireAuth?.();
+                      return;
+                    }
+                    setAbaModo('privadas');
+                    if (!dmContatoEmail && dmConversas.length > 0) {
+                      setDmContatoEmail(dmConversas[0].email);
+                      setDmContatoNome(dmConversas[0].nome);
+                    }
+                  }}
+                  className={`px-2 py-1.5 rounded-lg text-[10px] font-extrabold flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                    abaModo === 'privadas'
+                      ? 'bg-teal-600 text-white shadow-xs'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-800'
                   }`}
-                  title="Alternar silenciamento de notificações desta conversa"
                 >
-                  {salaAtualSilenciada ? (
-                    <>
-                      <BellOff className="w-2.5 h-2.5 text-amber-600" /> Silenciado
-                    </>
-                  ) : (
-                    <>
-                      <Bell className="w-2.5 h-2.5 text-teal-600" /> Notificar
-                    </>
+                  <MessageCircle className="w-3 h-3 shrink-0" />
+                  <span>Privadas</span>
+                  {totalUnreadDms > 0 && (
+                    <span className="bg-rose-500 text-white text-[9px] font-extrabold px-1.5 py-0.2 rounded-full leading-none">
+                      {totalUnreadDms}
+                    </span>
                   )}
                 </button>
               </div>
 
-              {/* Container de tamanho fixo com overflow-y-auto para garantir rolagem independente da quantidade de mensagens */}
-              <div
-                ref={messagesContainerRef}
-                className={`overflow-y-auto overscroll-contain p-3 space-y-2.5 bg-slate-50/60 shrink-0 ${
-                  isExpanded ? 'h-[420px]' : 'h-[320px]'
-                }`}
-              >
-                {mensagens.length === 0 ? (
-                  <div className="text-center py-12 px-4 text-slate-400 text-xs">
-                    Nenhuma mensagem em #{canalAtivo} de {concursoAtivo?.orgao}. Inicie a conversa!
+              {abaModo === 'concursos' ? (
+                <>
+                  <div className="px-3 py-2 border-b border-slate-800 flex items-center justify-between">
+                    <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
+                      Concursos ({concursos.length})
+                    </span>
+                    {totalUnreadConcursos > 0 && (
+                      <span className="bg-rose-500 text-white text-[9px] font-extrabold px-1.5 py-0.5 rounded-full leading-none">
+                        {totalUnreadConcursos} nova(s)
+                      </span>
+                    )}
                   </div>
-                ) : (
-                  mensagens.map((msg) => {
-                    const jaCurtiu = chatStore.usuarioCurtiuMensagem(msg, usuario);
-                    const minhaReacao = chatStore.obterReacaoDoUsuario(msg, usuario);
-                    const totalCurtidas = Array.isArray(msg.curtido_por)
-                      ? msg.curtido_por.length
-                      : 0;
-                    const reacoesEntries = Object.entries(msg.reacoes || {}).filter(
-                      ([, users]) => Array.isArray(users) && users.length > 0
-                    );
 
-                    return (
-                      <div
-                        key={msg.id}
-                        className={`rounded-xl p-2.5 border text-xs transition-all ${
-                          msg.is_fixado
-                            ? 'bg-amber-50/90 border-amber-200'
-                            : 'bg-white border-slate-200/80 shadow-2xs'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between gap-1 mb-1">
-                          <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
-                            <span
-                              className="w-5 h-5 rounded-full text-white text-[9px] font-bold flex items-center justify-center shrink-0"
-                              style={{ backgroundColor: msg.avatar_cor || '#0D5C75' }}
-                            >
-                              {msg.autor.substring(0, 2).toUpperCase()}
+                  <div
+                    className={`overflow-y-auto p-1.5 space-y-1 ${
+                      isExpanded ? 'h-[450px]' : 'h-[350px]'
+                    }`}
+                  >
+                    {concursos.map((c) => {
+                      const ativo = c.id === concursoAtivoId;
+                      const unread = unreadByConcurso[c.id] || 0;
+                      const concSilenciado = chatStore.isConcursoSilenciado(c.id);
+                      const ultimaMsg = ultimaMsgPorConcurso[c.id];
+                      const fragmentoTexto = ultimaMsg
+                        ? `${ultimaMsg.autor.split(' ')[0]}: ${
+                            ultimaMsg.texto.length > 26
+                              ? `${ultimaMsg.texto.substring(0, 26)}...`
+                              : ultimaMsg.texto
+                          }`
+                        : 'Sem mensagens recentes';
+
+                      return (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => {
+                            setConcursoAtivoId(c.id);
+                            setMobileViewMode('mensagens');
+                          }}
+                          className={`w-full px-2.5 py-2 rounded-xl text-left flex flex-col justify-between transition-all cursor-pointer border ${
+                            ativo
+                              ? 'bg-teal-600 text-white border-teal-400/50 shadow-sm'
+                              : unread > 0
+                              ? 'bg-slate-800/95 text-white border-teal-500/50 hover:bg-slate-800'
+                              : 'bg-slate-800/60 text-slate-300 border-slate-800 hover:bg-slate-800 hover:text-white'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-1.5 w-full">
+                            <span className="text-[11px] font-extrabold truncate">
+                              {c.orgao || c.nome.substring(0, 16)}
                             </span>
-                            <span className="font-bold text-slate-900 truncate">{msg.autor}</span>
-                            {msg.is_admin && (
-                              <span className="bg-teal-700 text-white text-[9px] font-bold px-1.5 py-0.2 rounded flex items-center gap-0.5">
-                                <Shield className="w-2.5 h-2.5" /> Admin
-                              </span>
-                            )}
-                            {msg.is_fixado && <Pin className="w-3 h-3 text-amber-600 shrink-0" />}
-                          </div>
-                          <span className="text-[10px] text-slate-400 font-mono shrink-0">
-                            {msg.data_hora}
-                          </span>
-                        </div>
-
-                        <p className="text-slate-700 leading-relaxed whitespace-pre-line break-words mb-2">
-                          {msg.texto}
-                        </p>
-
-                        {/* Estado de Confirmação (ACK) / Erro de Envio com Botão de Reenvio Manual */}
-                        {msg.status_envio === 'enviando' && (
-                          <div className="mb-2 flex items-center gap-1.5 text-[10px] font-medium text-slate-500 bg-slate-50 px-2 py-1 rounded-lg border border-slate-200/80">
-                            <Loader2 className="w-3 h-3 animate-spin text-teal-600" />
-                            <span>Aguardando confirmação do servidor...</span>
-                          </div>
-                        )}
-
-                        {msg.status_envio === 'erro' && (
-                          <div className="mb-2 flex items-center justify-between gap-1.5 bg-rose-50 border border-rose-200 rounded-lg px-2.5 py-1.5 text-rose-800">
-                            <div className="flex items-center gap-1 text-[11px] font-semibold min-w-0">
-                              <AlertCircle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
-                              <span className="truncate">
-                                {msg.erro_envio || 'Falha ao confirmar recebimento.'}
-                              </span>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => handleReenviar(msg.id)}
-                              className="inline-flex items-center gap-1 bg-rose-600 hover:bg-rose-700 text-white text-[10px] font-bold px-2 py-1 rounded-md transition-colors cursor-pointer shrink-0"
-                              title="Reenviar mensagem manualmente"
-                            >
-                              <RotateCcw className="w-2.5 h-2.5" />
-                              <span>Reenviar</span>
-                            </button>
-                          </div>
-                        )}
-
-                        {/* Barra de Curtida Única (Toggle) + Reações de Emojis */}
-                        <div className="flex items-center justify-between gap-1 pt-1.5 border-t border-slate-100 flex-wrap">
-                          <div className="flex items-center gap-1 flex-wrap relative">
-                            {msg.status_envio !== 'enviando' && msg.status_envio !== 'erro' && (
-                              <span
-                                className="inline-flex items-center text-emerald-600 px-1"
-                                title="Recebimento confirmado pelo servidor"
-                              >
-                                <CheckCheck className="w-3 h-3" />
-                              </span>
-                            )}
-                            <button
-                              type="button"
-                              onClick={() => handleCurtir(msg.id)}
-                              title={
-                                jaCurtiu
-                                  ? 'Clique para retirar sua curtida'
-                                  : 'Curtir mensagem (1 por usuário)'
-                              }
-                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold border transition-all cursor-pointer ${
-                                jaCurtiu
-                                  ? 'bg-rose-50 text-rose-600 border-rose-300'
-                                  : 'bg-slate-50 text-slate-500 border-slate-200 hover:text-rose-600'
-                              }`}
-                            >
-                              <Heart
-                                className={`w-3 h-3 ${
-                                  jaCurtiu ? 'fill-rose-500 text-rose-500' : ''
-                                }`}
-                              />
-                              <span>{totalCurtidas}</span>
-                            </button>
-
-                            {/* Emojis já reagidos na mensagem */}
-                            {reacoesEntries.map(([emoji, users]) => {
-                              const euReagi = minhaReacao === emoji;
-                              return (
-                                <button
-                                  key={emoji}
-                                  type="button"
-                                  onClick={() => handleReagir(msg.id, emoji)}
-                                  title={
-                                    euReagi
-                                      ? 'Sua reação (clique para retirar)'
-                                      : 'Clique para reagir'
-                                  }
-                                  className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[11px] border transition-all cursor-pointer ${
-                                    euReagi
-                                      ? 'bg-teal-50 border-teal-400 text-teal-800 font-bold'
-                                      : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                            <div className="flex items-center gap-1 shrink-0">
+                              {concSilenciado && (
+                                <span title="Notificações silenciadas para este concurso">
+                                  <BellOff className="w-2.5 h-2.5 text-amber-300 shrink-0" />
+                                </span>
+                              )}
+                              {unread > 0 && (
+                                <span
+                                  className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded-full min-w-[18px] text-center leading-none shadow-xs ${
+                                    concSilenciado
+                                      ? 'bg-amber-400 text-slate-950 ring-1 ring-amber-200'
+                                      : 'bg-rose-500 text-white ring-1 ring-rose-300'
                                   }`}
+                                  title={`${unread} nova(s) mensagem(ns) não lida(s)`}
                                 >
-                                  <span>{emoji}</span>
-                                  <span className="text-[10px]">{users.length}</span>
-                                </button>
-                              );
-                            })}
-
-                            {/* Botão abrir seletor de todos os emojis */}
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setEmojiPickerMsgId(emojiPickerMsgId === msg.id ? null : msg.id)
-                              }
-                              className="p-1 rounded-full bg-slate-50 hover:bg-slate-100 text-slate-500 border border-slate-200 cursor-pointer"
-                              title="Reagir com qualquer emoji"
-                            >
-                              <Smile className="w-3 h-3" />
-                            </button>
-
-                            {emojiPickerMsgId === msg.id && (
-                              <div className="absolute left-0 bottom-7 z-50 bg-white border border-slate-200 rounded-2xl shadow-2xl p-2.5 w-64 sm:w-72">
-                                <div className="mb-2 pb-1.5 border-b border-slate-100">
-                                  <div className="flex items-center justify-between mb-1">
-                                    <span className="text-[9px] font-bold uppercase tracking-wider text-teal-700 flex items-center gap-1">
-                                      <Sparkles className="w-2.5 h-2.5" /> Mais usados por você
-                                    </span>
-                                    <button
-                                      type="button"
-                                      onClick={() => setEmojiPickerMsgId(null)}
-                                      className="text-[9px] font-bold text-slate-400 hover:text-slate-600 cursor-pointer"
-                                    >
-                                      Fechar
-                                    </button>
-                                  </div>
-                                  <div className="grid grid-cols-8 gap-1 bg-teal-50/60 p-1 rounded-lg border border-teal-100">
-                                    {emojisFrequentes.map((emj) => (
-                                      <button
-                                        key={`freq-${emj}`}
-                                        type="button"
-                                        onClick={() => handleReagir(msg.id, emj)}
-                                        className={`text-sm p-1 rounded hover:bg-white hover:scale-110 transition-transform cursor-pointer ${
-                                          minhaReacao === emj
-                                            ? 'bg-teal-200/70 ring-1 ring-teal-500'
-                                            : ''
-                                        }`}
-                                      >
-                                        {emj}
-                                      </button>
-                                    ))}
-                                  </div>
-                                </div>
-
-                                <div className="flex items-center gap-1 mb-1.5 overflow-x-auto pb-1">
-                                  {CATALOGO_EMOJIS_CATEGORIAS.map((cat) => (
-                                    <button
-                                      key={cat.id}
-                                      type="button"
-                                      onClick={() => setCategoriaEmojiAtiva(cat.id)}
-                                      className={`text-[9px] font-bold px-1.5 py-0.5 rounded whitespace-nowrap cursor-pointer ${
-                                        categoriaEmojiAtiva === cat.id
-                                          ? 'bg-slate-900 text-white'
-                                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                                      }`}
-                                    >
-                                      {cat.titulo.split(' ')[0]}
-                                    </button>
-                                  ))}
-                                </div>
-
-                                <div className="max-h-32 overflow-y-auto grid grid-cols-8 gap-1">
-                                  {(
-                                    CATALOGO_EMOJIS_CATEGORIAS.find(
-                                      (c) => c.id === categoriaEmojiAtiva
-                                    )?.emojis || TODOS_EMOJIS_CHAT
-                                  ).map((emj, idx) => (
-                                    <button
-                                      key={`all-${emj}-${idx}`}
-                                      type="button"
-                                      onClick={() => handleReagir(msg.id, emj)}
-                                      className={`text-sm p-1 rounded hover:bg-slate-100 hover:scale-110 transition-transform cursor-pointer ${
-                                        minhaReacao === emj
-                                          ? 'bg-teal-100 ring-1 ring-teal-500'
-                                          : ''
-                                      }`}
-                                    >
-                                      {emj}
-                                    </button>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-
-                          {isAdmin && (
-                            <div className="flex items-center gap-1.5">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  chatStore.alternarFixado(
-                                    concursoAtivoId,
-                                    'geral',
-                                    canalAtivo,
-                                    msg.id
-                                  );
-                                  carregarMensagensAtivas();
-                                }}
-                                className="text-[10px] text-amber-700 hover:underline cursor-pointer"
-                              >
-                                {msg.is_fixado ? 'Desafixar' : 'Fixar'}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  chatStore.apagarMensagem(
-                                    concursoAtivoId,
-                                    'geral',
-                                    canalAtivo,
-                                    msg.id
-                                  );
-                                  carregarMensagensAtivas();
-                                }}
-                                className="text-[10px] text-rose-600 hover:underline flex items-center gap-0.5 cursor-pointer"
-                              >
-                                <Trash2 className="w-2.5 h-2.5" />
-                              </button>
+                                  {unread}
+                                </span>
+                              )}
                             </div>
-                          )}
+                          </div>
+                          <span
+                            className={`text-[10px] truncate w-full mt-1 leading-tight ${
+                              ativo
+                                ? 'text-teal-100'
+                                : unread > 0
+                                ? 'text-teal-300 font-semibold'
+                                : 'text-slate-400'
+                            }`}
+                            title={
+                              ultimaMsg
+                                ? `[${ultimaMsg.salaTitulo}] ${ultimaMsg.autor}: ${ultimaMsg.texto}`
+                                : 'Sem mensagens'
+                            }
+                          >
+                            {fragmentoTexto}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              ) : (
+                /* Lista Lateral de Mensagens Privadas (DMs) */
+                <>
+                  <div className="p-2 border-b border-slate-800">
+                    <div className="relative">
+                      <Search className="w-3 h-3 text-slate-400 absolute left-2.5 top-2" />
+                      <input
+                        type="text"
+                        value={dmBusca}
+                        onChange={(e) => setDmBusca(e.target.value)}
+                        placeholder="Buscar colega ou iniciar DM..."
+                        className="w-full pl-7 pr-2 py-1 bg-slate-800 border border-slate-700 rounded-lg text-[10px] text-white placeholder-slate-400 focus:border-teal-400 outline-hidden"
+                      />
+                    </div>
+                  </div>
+
+                  <div
+                    className={`overflow-y-auto p-1.5 space-y-1 ${
+                      isExpanded ? 'h-[445px]' : 'h-[345px]'
+                    }`}
+                  >
+                    {dmConversasFiltradas.map((conv) => {
+                      const ativo =
+                        dmContatoEmail?.trim().toLowerCase() ===
+                        conv.email.trim().toLowerCase();
+                      const dmSilenciada = chatStore.isDmSilenciada(conv.email);
+                      return (
+                        <button
+                          key={conv.email}
+                          type="button"
+                          onClick={() => {
+                            setDmContatoEmail(conv.email);
+                            setDmContatoNome(conv.nome);
+                            setMobileViewMode('mensagens');
+                          }}
+                          className={`w-full px-2.5 py-2 rounded-xl text-left flex flex-col justify-between transition-all cursor-pointer border ${
+                            ativo
+                              ? 'bg-teal-600 text-white border-teal-400/50 shadow-sm'
+                              : conv.naoLidas > 0
+                              ? 'bg-slate-800/95 text-white border-teal-500/50 hover:bg-slate-800'
+                              : 'bg-slate-800/60 text-slate-300 border-slate-800 hover:bg-slate-800 hover:text-white'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-1 w-full">
+                            <span className="text-[11px] font-extrabold truncate">
+                              {conv.nome}
+                            </span>
+                            <div className="flex items-center gap-1 shrink-0">
+                              {dmSilenciada && (
+                                <BellOff className="w-2.5 h-2.5 text-amber-300 shrink-0" />
+                              )}
+                              {conv.naoLidas > 0 && (
+                                <span className="bg-rose-500 text-white text-[9px] font-extrabold px-1.5 py-0.5 rounded-full min-w-[18px] text-center leading-none">
+                                  {conv.naoLidas}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <span
+                            className={`text-[10px] truncate w-full mt-1 leading-tight ${
+                              ativo
+                                ? 'text-teal-100'
+                                : conv.naoLidas > 0
+                                ? 'text-teal-300 font-semibold'
+                                : 'text-slate-400'
+                            }`}
+                          >
+                            {conv.ultimaMensagem || 'Conversa iniciada'}
+                          </span>
+                        </button>
+                      );
+                    })}
+
+                    {/* Sugestões para iniciar nova conversa privada */}
+                    {sugestoesNovosContatosDm.length > 0 && (
+                      <div className="pt-2">
+                        <span className="px-2 text-[9px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                          {dmBusca.trim() ? 'Resultados no Portal' : 'Iniciar Nova Conversa'}
+                        </span>
+                        <div className="space-y-1">
+                          {sugestoesNovosContatosDm.slice(0, 8).map((sug) => (
+                            <button
+                              key={sug.email}
+                              type="button"
+                              onClick={() => {
+                                setDmContatoEmail(sug.email);
+                                setDmContatoNome(sug.nome);
+                                setDmBusca('');
+                                setMobileViewMode('mensagens');
+                              }}
+                              className="w-full px-2.5 py-1.5 rounded-lg text-left bg-slate-800/40 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800/80 transition-colors cursor-pointer"
+                            >
+                              <div className="text-[10px] font-bold truncate">{sug.nome}</div>
+                              <div className="text-[9px] text-slate-400 truncate">
+                                {sug.detalhe || sug.email}
+                              </div>
+                            </button>
+                          ))}
                         </div>
                       </div>
-                    );
-                  })
-                )}
-                <div ref={messagesEndRef} />
-              </div>
+                    )}
 
-              {/* Barra de Envio com Seletor de Emojis */}
-              <form
-                onSubmit={handleEnviar}
-                className="p-2.5 bg-white border-t border-slate-200 flex items-center gap-1.5 shrink-0 relative"
-              >
-                <button
-                  type="button"
-                  onClick={() => setShowInputEmojiPicker((v) => !v)}
-                  className="p-2 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-600 cursor-pointer shrink-0"
-                  title="Inserir emoji"
-                >
-                  <Smile className="w-4 h-4" />
-                </button>
+                    {dmConversasFiltradas.length === 0 && sugestoesNovosContatosDm.length === 0 && (
+                      <div className="p-4 text-center text-[10px] text-slate-400">
+                        Nenhuma conversa privada encontrada. Clique no ícone de mensagem em qualquer colega do chat para conversar em privado.
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+            </aside>
 
-                {showInputEmojiPicker && (
-                  <div className="absolute left-2 bottom-14 z-50 bg-white border border-slate-200 rounded-2xl shadow-2xl p-2.5 w-64 sm:w-72">
-                    <div className="mb-1.5 pb-1.5 border-b border-slate-100">
-                      <span className="text-[9px] font-bold uppercase tracking-wider text-teal-700 flex items-center gap-1 mb-1">
-                        <Sparkles className="w-2.5 h-2.5" /> Seus Emojis Mais Usados
-                      </span>
-                      <div className="grid grid-cols-8 gap-1 bg-teal-50/60 p-1 rounded-lg border border-teal-100">
-                        {emojisFrequentes.map((emj) => (
+            {/* Painel Principal de Mensagens */}
+            <div
+              className={`${
+                mobileViewMode === 'conversas' ? 'hidden sm:flex' : 'flex'
+              } flex-1 flex-col min-w-0 bg-white relative`}
+            >
+              {abaModo === 'concursos' ? (
+                <>
+                  {/* Sub-abas dos Chats do Concurso: Geral, Cargo (pré-homologação), Aprovados e Lotes */}
+                  <div className="bg-slate-100 px-2.5 py-1.5 flex flex-col gap-1 border-b border-slate-200 shrink-0">
+                    <div className="flex items-center justify-between gap-1">
+                      <div className="flex items-center gap-1 overflow-x-auto pb-0.5">
+                        {salasDoConcursoAtivo.map((sala) => {
+                          const ativo = salaAtiva.id === sala.id;
+                          const silenciado = chatStore.isSalaSilenciada(
+                            concursoAtivoId,
+                            sala.id
+                          );
+                          const unreadSala =
+                            unreadBySala[`${concursoAtivoId}_${sala.id}`] || 0;
+                          const bloqueada = sala.restrito && !sala.temAcesso;
+
+                          return (
+                            <button
+                              key={sala.id}
+                              type="button"
+                              onClick={() => setSalaAtivaId(sala.id)}
+                              title={sala.descricao}
+                              className={`px-2 py-1 rounded-md text-[10px] font-bold transition-all cursor-pointer flex items-center gap-1 shrink-0 border ${
+                                ativo
+                                  ? 'bg-white text-teal-900 shadow-2xs border-teal-500/50'
+                                  : bloqueada
+                                  ? 'bg-slate-200/70 text-slate-500 border-slate-300/60 hover:text-slate-700'
+                                  : 'bg-white/60 text-slate-700 border-slate-200/70 hover:bg-white hover:text-slate-900'
+                              }`}
+                            >
+                              {renderIconeSala(sala)}
+                              <span>{sala.tituloCurto}</span>
+                              {silenciado && (
+                                <BellOff className="w-2.5 h-2.5 text-amber-600 shrink-0" />
+                              )}
+                              {!bloqueada && unreadSala > 0 && (
+                                <span
+                                  className={`text-[9px] font-extrabold px-1.5 py-0.2 rounded-full ${
+                                    silenciado
+                                      ? 'bg-amber-500 text-white'
+                                      : 'bg-rose-500 text-white'
+                                  }`}
+                                >
+                                  {unreadSala}
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={handleToggleMuteSalaAtual}
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-md border flex items-center gap-1 shrink-0 cursor-pointer transition-colors ${
+                          salaAtualSilenciada
+                            ? 'bg-amber-50 border-amber-300 text-amber-800'
+                            : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                        }`}
+                        title="Alternar silenciamento de notificações desta conversa"
+                      >
+                        {salaAtualSilenciada ? (
+                          <>
+                            <BellOff className="w-2.5 h-2.5 text-amber-600" /> Silenciado
+                          </>
+                        ) : (
+                          <>
+                            <Bell className="w-2.5 h-2.5 text-teal-600" /> Notificar
+                          </>
+                        )}
+                      </button>
+                    </div>
+
+                    {/* Faixa descritiva do escopo da sala atual */}
+                    <div className="flex items-center justify-between gap-2 text-[10px] text-slate-500 px-0.5">
+                      <span className="truncate">{salaAtiva.descricao}</span>
+                      {salaAtiva.restrito && salaAtiva.temAcesso && (
+                        <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 rounded shrink-0">
+                          ✓ Acesso Autorizado
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Caso o usuário tente acessar Chat dos Aprovados ou Chat do Lote sem pertencer à lista/lote */}
+                  {salaAtiva.restrito && !salaAtiva.temAcesso ? (
+                    <div
+                      className={`flex flex-col items-center justify-center text-center p-6 bg-slate-50/80 shrink-0 ${
+                        isExpanded ? 'h-[455px]' : 'h-[355px]'
+                      }`}
+                    >
+                      <div className="w-11 h-11 rounded-2xl bg-amber-100 text-amber-700 border border-amber-300 flex items-center justify-center mb-3 shadow-xs">
+                        <Lock className="w-5 h-5" />
+                      </div>
+                      <h5 className="text-xs font-extrabold text-slate-900 mb-1">
+                        {salaAtiva.tipo === 'aprovados'
+                          ? 'Chat Exclusivo dos Candidatos Aprovados'
+                          : `Chat Exclusivo dos Convocados (${salaAtiva.loteNome})`}
+                      </h5>
+                      <p className="text-[11px] text-slate-600 max-w-xs leading-relaxed mb-4">
+                        {salaAtiva.motivoBloqueio}
+                      </p>
+                      <div className="flex items-center gap-2">
+                        {!usuario && (
                           <button
-                            key={`inpfreq-${emj}`}
+                            type="button"
+                            onClick={() => onRequireAuth?.()}
+                            className="px-3.5 py-2 rounded-xl bg-[#07192B] hover:bg-[#0C2640] text-[#2DD4AA] text-xs font-bold cursor-pointer transition-colors"
+                          >
+                            Entrar na minha conta
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setSalaAtivaId('geral')}
+                          className="px-3 py-2 rounded-xl bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 text-xs font-bold cursor-pointer transition-colors"
+                        >
+                          Ir para o Chat Geral
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Container de tamanho fixo com overflow-y-auto posicionado a partir da mensagem mais antiga não lida */}
+                      <div
+                        ref={messagesContainerRef}
+                        onScroll={handleContainerScroll}
+                        className={`overflow-y-auto overscroll-contain p-3 space-y-2.5 bg-slate-50/60 shrink-0 relative ${
+                          isExpanded ? 'h-[400px]' : 'h-[300px]'
+                        }`}
+                      >
+                        {mensagens.length === 0 ? (
+                          <div className="text-center py-12 px-4 text-slate-400 text-xs">
+                            Nenhuma mensagem em <strong>{salaAtiva.tituloCurto}</strong> de{' '}
+                            {concursoAtivo?.orgao}. Inicie a conversa!
+                          </div>
+                        ) : (
+                          mensagens.map((msg) => {
+                            const jaCurtiu = chatStore.usuarioCurtiuMensagem(msg, usuario);
+                            const minhaReacao = chatStore.obterReacaoDoUsuario(msg, usuario);
+                            const totalCurtidas = Array.isArray(msg.curtido_por)
+                              ? msg.curtido_por.length
+                              : 0;
+                            const reacoesEntries = Object.entries(msg.reacoes || {}).filter(
+                              ([, users]) => Array.isArray(users) && users.length > 0
+                            );
+                            const isPrimeiraNaoLida = primeiraNaoLidaId === msg.id;
+                            const ehMinhaMsg = chatStore.isMensagemDoProprioUsuario(
+                              msg,
+                              usuario
+                            );
+
+                            return (
+                              <React.Fragment key={msg.id}>
+                                {isPrimeiraNaoLida && (
+                                  <div className="flex items-center gap-2 my-1.5">
+                                    <div className="h-px bg-teal-400/60 flex-1" />
+                                    <span className="text-[9px] font-extrabold uppercase tracking-wider bg-teal-600 text-white px-2.5 py-0.5 rounded-full shadow-2xs">
+                                      Mensagens não lidas a partir daqui
+                                    </span>
+                                    <div className="h-px bg-teal-400/60 flex-1" />
+                                  </div>
+                                )}
+                                <div
+                                  data-chat-msg-id={msg.id}
+                                  className={`rounded-xl p-2.5 border text-xs transition-all ${
+                                    isPrimeiraNaoLida
+                                      ? 'bg-teal-50/70 border-teal-300 ring-1 ring-teal-400/40'
+                                      : msg.is_fixado
+                                      ? 'bg-amber-50/90 border-amber-200'
+                                      : 'bg-white border-slate-200/80 shadow-2xs'
+                                  }`}
+                                >
+                                  <div className="flex items-center justify-between gap-1 mb-1">
+                                    <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
+                                      <span
+                                        className="w-5 h-5 rounded-full text-white text-[9px] font-bold flex items-center justify-center shrink-0"
+                                        style={{
+                                          backgroundColor: msg.avatar_cor || '#0D5C75',
+                                        }}
+                                      >
+                                        {msg.autor.substring(0, 2).toUpperCase()}
+                                      </span>
+                                      <span className="font-bold text-slate-900 truncate">
+                                        {msg.autor}
+                                      </span>
+                                      {msg.is_admin && (
+                                        <span className="bg-teal-700 text-white text-[9px] font-bold px-1.5 py-0.2 rounded flex items-center gap-0.5">
+                                          <Shield className="w-2.5 h-2.5" /> Admin
+                                        </span>
+                                      )}
+                                      {msg.posicao_candidato && (
+                                        <span className="bg-slate-100 text-slate-700 border border-slate-200 text-[9px] font-mono font-bold px-1.5 py-0.2 rounded">
+                                          {msg.posicao_candidato}º lugar
+                                        </span>
+                                      )}
+                                      {msg.is_fixado && (
+                                        <Pin className="w-3 h-3 text-amber-600 shrink-0" />
+                                      )}
+                                    </div>
+                                    <div className="flex items-center gap-1 shrink-0">
+                                      {!ehMinhaMsg &&
+                                        msg.email &&
+                                        msg.email !== 'candidato@certam.com.br' && (
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              handleIniciarConversaPrivada(
+                                                msg.email,
+                                                msg.autor
+                                              )
+                                            }
+                                            className="p-1 rounded-md text-slate-400 hover:text-teal-700 hover:bg-teal-50 transition-colors cursor-pointer"
+                                            title={`Enviar mensagem privada para ${msg.autor}`}
+                                          >
+                                            <Mail className="w-3 h-3" />
+                                          </button>
+                                        )}
+                                      <span className="text-[10px] text-slate-400 font-mono shrink-0">
+                                        {msg.data_hora}
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  <p className="text-slate-700 leading-relaxed whitespace-pre-line break-words mb-2">
+                                    {msg.texto}
+                                  </p>
+
+                                  {msg.status_envio === 'enviando' && (
+                                    <div className="mb-2 flex items-center gap-1.5 text-[10px] font-medium text-slate-500 bg-slate-50 px-2 py-1 rounded-lg border border-slate-200/80">
+                                      <Loader2 className="w-3 h-3 animate-spin text-teal-600" />
+                                      <span>Aguardando confirmação do servidor...</span>
+                                    </div>
+                                  )}
+
+                                  {msg.status_envio === 'erro' && (
+                                    <div className="mb-2 flex items-center justify-between gap-1.5 bg-rose-50 border border-rose-200 rounded-lg px-2.5 py-1.5 text-rose-800">
+                                      <div className="flex items-center gap-1 text-[11px] font-semibold min-w-0">
+                                        <AlertCircle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                                        <span className="truncate">
+                                          {msg.erro_envio || 'Falha ao confirmar recebimento.'}
+                                        </span>
+                                      </div>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleReenviar(msg.id)}
+                                        className="inline-flex items-center gap-1 bg-rose-600 hover:bg-rose-700 text-white text-[10px] font-bold px-2 py-1 rounded-md transition-colors cursor-pointer shrink-0"
+                                        title="Reenviar mensagem manualmente"
+                                      >
+                                        <RotateCcw className="w-2.5 h-2.5" />
+                                        <span>Reenviar</span>
+                                      </button>
+                                    </div>
+                                  )}
+
+                                  <div className="flex items-center justify-between gap-1 pt-1.5 border-t border-slate-100 flex-wrap">
+                                    <div className="flex items-center gap-1 flex-wrap relative">
+                                      {msg.status_envio !== 'enviando' &&
+                                        msg.status_envio !== 'erro' && (
+                                          <span
+                                            className="inline-flex items-center text-emerald-600 px-1"
+                                            title="Recebimento confirmado pelo servidor"
+                                          >
+                                            <CheckCheck className="w-3 h-3" />
+                                          </span>
+                                        )}
+                                      <button
+                                        type="button"
+                                        onClick={() => handleCurtir(msg.id)}
+                                        title={
+                                          jaCurtiu
+                                            ? 'Clique para retirar sua curtida'
+                                            : 'Curtir mensagem (1 por usuário)'
+                                        }
+                                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold border transition-all cursor-pointer ${
+                                          jaCurtiu
+                                            ? 'bg-rose-50 text-rose-600 border-rose-300'
+                                            : 'bg-slate-50 text-slate-500 border-slate-200 hover:text-rose-600'
+                                        }`}
+                                      >
+                                        <Heart
+                                          className={`w-3 h-3 ${
+                                            jaCurtiu ? 'fill-rose-500 text-rose-500' : ''
+                                          }`}
+                                        />
+                                        <span>{totalCurtidas}</span>
+                                      </button>
+
+                                      {reacoesEntries.map(([emoji, users]) => {
+                                        const euReagi = minhaReacao === emoji;
+                                        return (
+                                          <button
+                                            key={emoji}
+                                            type="button"
+                                            onClick={() => handleReagir(msg.id, emoji)}
+                                            title={
+                                              euReagi
+                                                ? 'Sua reação (clique para retirar)'
+                                                : 'Clique para reagir'
+                                            }
+                                            className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[11px] border transition-all cursor-pointer ${
+                                              euReagi
+                                                ? 'bg-teal-50 border-teal-400 text-teal-800 font-bold'
+                                                : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                                            }`}
+                                          >
+                                            <span>{emoji}</span>
+                                            <span className="text-[10px]">{users.length}</span>
+                                          </button>
+                                        );
+                                      })}
+
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          setEmojiPickerMsgId(
+                                            emojiPickerMsgId === msg.id ? null : msg.id
+                                          )
+                                        }
+                                        className="p-1 rounded-full bg-slate-50 hover:bg-slate-100 text-slate-500 border border-slate-200 cursor-pointer"
+                                        title="Reagir com qualquer emoji"
+                                      >
+                                        <Smile className="w-3 h-3" />
+                                      </button>
+
+                                      {emojiPickerMsgId === msg.id && (
+                                        <div className="absolute left-0 bottom-7 z-50 bg-white border border-slate-200 rounded-2xl shadow-2xl p-2.5 w-64 sm:w-72">
+                                          <div className="mb-2 pb-1.5 border-b border-slate-100">
+                                            <div className="flex items-center justify-between mb-1">
+                                              <span className="text-[9px] font-bold uppercase tracking-wider text-teal-700 flex items-center gap-1">
+                                                <Sparkles className="w-2.5 h-2.5" /> Mais usados
+                                                por você
+                                              </span>
+                                              <button
+                                                type="button"
+                                                onClick={() => setEmojiPickerMsgId(null)}
+                                                className="text-[9px] font-bold text-slate-400 hover:text-slate-600 cursor-pointer"
+                                              >
+                                                Fechar
+                                              </button>
+                                            </div>
+                                            <div className="grid grid-cols-8 gap-1 bg-teal-50/60 p-1 rounded-lg border border-teal-100">
+                                              {emojisFrequentes.map((emj) => (
+                                                <button
+                                                  key={`freq-${emj}`}
+                                                  type="button"
+                                                  onClick={() => handleReagir(msg.id, emj)}
+                                                  className={`text-sm p-1 rounded hover:bg-white hover:scale-110 transition-transform cursor-pointer ${
+                                                    minhaReacao === emj
+                                                      ? 'bg-teal-200/70 ring-1 ring-teal-500'
+                                                      : ''
+                                                  }`}
+                                                >
+                                                  {emj}
+                                                </button>
+                                              ))}
+                                            </div>
+                                          </div>
+
+                                          <div className="flex items-center gap-1 mb-1.5 overflow-x-auto pb-1">
+                                            {CATALOGO_EMOJIS_CATEGORIAS.map((cat) => (
+                                              <button
+                                                key={cat.id}
+                                                type="button"
+                                                onClick={() => setCategoriaEmojiAtiva(cat.id)}
+                                                className={`text-[9px] font-bold px-1.5 py-0.5 rounded whitespace-nowrap cursor-pointer ${
+                                                  categoriaEmojiAtiva === cat.id
+                                                    ? 'bg-slate-900 text-white'
+                                                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                                }`}
+                                              >
+                                                {cat.titulo.split(' ')[0]}
+                                              </button>
+                                            ))}
+                                          </div>
+
+                                          <div className="max-h-32 overflow-y-auto grid grid-cols-8 gap-1">
+                                            {(
+                                              CATALOGO_EMOJIS_CATEGORIAS.find(
+                                                (c) => c.id === categoriaEmojiAtiva
+                                              )?.emojis || TODOS_EMOJIS_CHAT
+                                            ).map((emj, idx) => (
+                                              <button
+                                                key={`all-${emj}-${idx}`}
+                                                type="button"
+                                                onClick={() => handleReagir(msg.id, emj)}
+                                                className={`text-sm p-1 rounded hover:bg-slate-100 hover:scale-110 transition-transform cursor-pointer ${
+                                                  minhaReacao === emj
+                                                    ? 'bg-teal-100 ring-1 ring-teal-500'
+                                                    : ''
+                                                }`}
+                                              >
+                                                {emj}
+                                              </button>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+
+                                    {isAdmin && (
+                                      <div className="flex items-center gap-1.5">
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            chatStore.alternarFixado(
+                                              concursoAtivoId,
+                                              salaAtiva.cargoScope,
+                                              'geral',
+                                              msg.id
+                                            );
+                                            carregarMensagensAtivas();
+                                          }}
+                                          className="text-[10px] text-amber-700 hover:underline cursor-pointer"
+                                        >
+                                          {msg.is_fixado ? 'Desafixar' : 'Fixar'}
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            chatStore.apagarMensagem(
+                                              concursoAtivoId,
+                                              salaAtiva.cargoScope,
+                                              'geral',
+                                              msg.id
+                                            );
+                                            carregarMensagensAtivas();
+                                          }}
+                                          className="text-[10px] text-rose-600 hover:underline flex items-center gap-0.5 cursor-pointer"
+                                        >
+                                          <Trash2 className="w-2.5 h-2.5" />
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              </React.Fragment>
+                            );
+                          })
+                        )}
+                        <div ref={messagesEndRef} />
+                      </div>
+
+                      {/* Botão Flutuante para Descer até o Fim (Mensagem Mais Recente) */}
+                      {(mostrarBotaoDescer || Boolean(primeiraNaoLidaId)) &&
+                        mensagens.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={rolarAteOFim}
+                            className="absolute right-4 bottom-16 z-30 inline-flex items-center gap-1.5 bg-[#07192B]/95 hover:bg-[#0C2640] text-[#2DD4AA] text-[10px] font-extrabold px-3 py-1.5 rounded-full shadow-lg border border-teal-400/40 cursor-pointer transition-all hover:scale-105"
+                            title="Descer a conversa até o fim para ver a mensagem mais recente"
+                          >
+                            <ArrowDown className="w-3.5 h-3.5 animate-bounce" />
+                            <span>Ver mais recente</span>
+                          </button>
+                        )}
+                    </>
+                  )}
+                </>
+              ) : (
+                /* Painel Principal de Mensagens Privadas (DMs) */
+                <>
+                  {dmContatoEmail ? (
+                    <>
+                      <div className="bg-slate-100 px-3 py-2 flex items-center justify-between gap-2 border-b border-slate-200 shrink-0">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className="w-7 h-7 rounded-full bg-[#135A7A] text-white flex items-center justify-center font-bold text-[10px] shrink-0">
+                            {(dmContatoNome || dmContatoEmail).slice(0, 2).toUpperCase()}
+                          </div>
+                          <div className="min-w-0">
+                            <span className="font-bold text-xs text-slate-900 block truncate leading-tight">
+                              {dmContatoNome || dmContatoEmail}
+                            </span>
+                            <span className="text-[10px] text-slate-500 font-mono truncate block">
+                              {dmContatoEmail}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            type="button"
+                            onClick={handleToggleMuteSalaAtual}
+                            className={`text-[10px] font-bold px-2 py-1 rounded-md border flex items-center gap-1 cursor-pointer transition-colors ${
+                              salaAtualSilenciada
+                                ? 'bg-amber-50 border-amber-300 text-amber-800'
+                                : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                            }`}
+                            title="Alternar silenciamento desta conversa privada"
+                          >
+                            {salaAtualSilenciada ? (
+                              <>
+                                <BellOff className="w-3 h-3 text-amber-600" /> Silenciado
+                              </>
+                            ) : (
+                              <>
+                                <Bell className="w-3 h-3 text-teal-600" /> Notificar
+                              </>
+                            )}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={handleToggleBloqueioDm}
+                            className={`text-[10px] font-bold px-2 py-1 rounded-md border flex items-center gap-1 cursor-pointer transition-colors ${
+                              dmIsBloqueado
+                                ? 'bg-rose-50 border-rose-300 text-rose-700'
+                                : 'bg-white border-slate-200 text-slate-600 hover:text-rose-600'
+                            }`}
+                            title={
+                              dmIsBloqueado
+                                ? 'Desbloquear este usuário'
+                                : 'Bloquear mensagens deste usuário'
+                            }
+                          >
+                            {dmIsBloqueado ? (
+                              <>
+                                <ShieldAlert className="w-3 h-3" /> Bloqueado
+                              </>
+                            ) : (
+                              <>
+                                <ShieldCheck className="w-3 h-3" /> Bloquear
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div
+                        ref={messagesContainerRef}
+                        onScroll={handleContainerScroll}
+                        className={`overflow-y-auto overscroll-contain p-3 space-y-2.5 bg-slate-50/60 shrink-0 relative ${
+                          isExpanded ? 'h-[410px]' : 'h-[310px]'
+                        }`}
+                      >
+                        {dmIsBloqueado && (
+                          <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-[11px] text-center flex items-center justify-center gap-1.5">
+                            <Lock className="w-3.5 h-3.5 shrink-0" />
+                            <span>
+                              Este contato está bloqueado. Clique em "Bloqueado" acima para
+                              desbloquear.
+                            </span>
+                          </div>
+                        )}
+
+                        {dmMensagens.length === 0 ? (
+                          <div className="text-center py-12 px-4 text-slate-400 text-xs">
+                            Envie a primeira mensagem privada para{' '}
+                            <strong>{dmContatoNome || dmContatoEmail}</strong>.
+                          </div>
+                        ) : (
+                          dmMensagens.map((m) => {
+                            const souEu =
+                              m.remetente_email.trim().toLowerCase() === meuEmail;
+                            const isPrimeiraNaoLida = primeiraNaoLidaId === m.id;
+                            return (
+                              <React.Fragment key={m.id}>
+                                {isPrimeiraNaoLida && (
+                                  <div className="flex items-center gap-2 my-1.5">
+                                    <div className="h-px bg-teal-400/60 flex-1" />
+                                    <span className="text-[9px] font-extrabold uppercase tracking-wider bg-teal-600 text-white px-2.5 py-0.5 rounded-full shadow-2xs">
+                                      Mensagens não lidas a partir daqui
+                                    </span>
+                                    <div className="h-px bg-teal-400/60 flex-1" />
+                                  </div>
+                                )}
+                                <div
+                                  data-chat-msg-id={m.id}
+                                  className={`flex ${souEu ? 'justify-end' : 'justify-start'}`}
+                                >
+                                  <div
+                                    className={`max-w-[78%] rounded-2xl px-3 py-2 text-xs leading-relaxed ${
+                                      souEu
+                                        ? 'bg-[#07192B] text-white rounded-br-xs'
+                                        : isPrimeiraNaoLida
+                                        ? 'bg-teal-50 text-slate-900 rounded-bl-xs border border-teal-300 ring-1 ring-teal-400/40'
+                                        : 'bg-white text-slate-800 rounded-bl-xs border border-slate-200 shadow-2xs'
+                                    }`}
+                                  >
+                                    <p className="whitespace-pre-line break-words">{m.texto}</p>
+                                    <span
+                                      className={`block text-[9px] mt-1 text-right font-mono ${
+                                        souEu ? 'text-teal-300' : 'text-slate-400'
+                                      }`}
+                                    >
+                                      {m.data_hora}
+                                    </span>
+                                  </div>
+                                </div>
+                              </React.Fragment>
+                            );
+                          })
+                        )}
+                        <div ref={messagesEndRef} />
+                      </div>
+
+                      {(mostrarBotaoDescer || Boolean(primeiraNaoLidaId)) &&
+                        dmMensagens.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={rolarAteOFim}
+                            className="absolute right-4 bottom-16 z-30 inline-flex items-center gap-1.5 bg-[#07192B]/95 hover:bg-[#0C2640] text-[#2DD4AA] text-[10px] font-extrabold px-3 py-1.5 rounded-full shadow-lg border border-teal-400/40 cursor-pointer transition-all hover:scale-105"
+                            title="Descer a conversa até o fim para ver a mensagem mais recente"
+                          >
+                            <ArrowDown className="w-3.5 h-3.5 animate-bounce" />
+                            <span>Ver mais recente</span>
+                          </button>
+                        )}
+                    </>
+                  ) : (
+                    <div
+                      className={`flex flex-col items-center justify-center text-center p-6 bg-slate-50/70 shrink-0 ${
+                        isExpanded ? 'h-[460px]' : 'h-[360px]'
+                      }`}
+                    >
+                      <MessageCircle className="w-8 h-8 text-teal-600 mb-2" />
+                      <h5 className="text-xs font-extrabold text-slate-800 mb-1">
+                         Suas Mensagens Privadas
+                      </h5>
+                      <p className="text-[11px] text-slate-500 max-w-xs leading-relaxed">
+                        Selecione um colega na barra lateral esquerda ou pesquise pelo nome para
+                        iniciar uma conversa direta 1 a 1.
+                      </p>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* Barra de Envio (exibida apenas quando a conversa está acessível) */}
+              {((abaModo === 'concursos' && (!salaAtiva.restrito || salaAtiva.temAcesso)) ||
+                (abaModo === 'privadas' && Boolean(dmContatoEmail))) && (
+                <form
+                  onSubmit={handleEnviar}
+                  className="p-2.5 bg-white border-t border-slate-200 flex items-center gap-1.5 shrink-0 relative"
+                >
+                  <button
+                    type="button"
+                    onClick={() => setShowInputEmojiPicker((v) => !v)}
+                    className="p-2 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-600 cursor-pointer shrink-0"
+                    title="Inserir emoji"
+                  >
+                    <Smile className="w-4 h-4" />
+                  </button>
+
+                  {showInputEmojiPicker && (
+                    <div className="absolute left-2 bottom-14 z-50 bg-white border border-slate-200 rounded-2xl shadow-2xl p-2.5 w-64 sm:w-72">
+                      <div className="mb-1.5 pb-1.5 border-b border-slate-100">
+                        <span className="text-[9px] font-bold uppercase tracking-wider text-teal-700 flex items-center gap-1 mb-1">
+                          <Sparkles className="w-2.5 h-2.5" /> Seus Emojis Mais Usados
+                        </span>
+                        <div className="grid grid-cols-8 gap-1 bg-teal-50/60 p-1 rounded-lg border border-teal-100">
+                          {emojisFrequentes.map((emj) => (
+                            <button
+                              key={`inpfreq-${emj}`}
+                              type="button"
+                              onClick={() => handleInserirEmojiTexto(emj)}
+                              className="text-sm p-1 rounded hover:bg-white cursor-pointer"
+                            >
+                              {emj}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="max-h-32 overflow-y-auto grid grid-cols-8 gap-1">
+                        {TODOS_EMOJIS_CHAT.map((emj, idx) => (
+                          <button
+                            key={`inpall-${emj}-${idx}`}
                             type="button"
                             onClick={() => handleInserirEmojiTexto(emj)}
-                            className="text-sm p-1 rounded hover:bg-white cursor-pointer"
+                            className="text-sm p-1 rounded hover:bg-slate-100 cursor-pointer"
                           >
                             {emj}
                           </button>
                         ))}
                       </div>
                     </div>
-                    <div className="max-h-32 overflow-y-auto grid grid-cols-8 gap-1">
-                      {TODOS_EMOJIS_CHAT.map((emj, idx) => (
-                        <button
-                          key={`inpall-${emj}-${idx}`}
-                          type="button"
-                          onClick={() => handleInserirEmojiTexto(emj)}
-                          className="text-sm p-1 rounded hover:bg-slate-100 cursor-pointer"
-                        >
-                          {emj}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                  )}
 
-                <input
-                  type="text"
-                  value={texto}
-                  onChange={(e) => setTexto(e.target.value)}
-                  placeholder={
-                    usuario
-                      ? `Mensagem em ${concursoAtivo?.orgao || 'chat'} (#${canalAtivo})...`
-                      : 'Faça login para enviar mensagens...'
-                  }
-                  className="flex-1 min-w-0 text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
-                />
-                <button
-                  type="submit"
-                  className="bg-teal-700 hover:bg-teal-600 text-white p-2 rounded-xl transition-colors cursor-pointer shrink-0"
-                  title="Enviar mensagem"
-                >
-                  <Send className="w-4 h-4" />
-                </button>
-              </form>
+                  <input
+                    type="text"
+                    value={texto}
+                    disabled={abaModo === 'privadas' && dmIsBloqueado}
+                    onChange={(e) => setTexto(e.target.value)}
+                    placeholder={
+                      !usuario && !isAdmin
+                        ? 'Faça login para enviar mensagens...'
+                        : abaModo === 'privadas'
+                        ? dmIsBloqueado
+                          ? 'Contato bloqueado'
+                          : `Mensagem privada para ${dmContatoNome || dmContatoEmail}...`
+                        : `Mensagem em ${concursoAtivo?.orgao || 'chat'} (${salaAtiva.tituloCurto})...`
+                    }
+                    className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:bg-white focus:border-teal-600 outline-hidden disabled:opacity-50"
+                  />
+
+                  <button
+                    type="submit"
+                    disabled={
+                      !texto.trim() || (abaModo === 'privadas' && dmIsBloqueado)
+                    }
+                    className="p-2 rounded-xl bg-teal-700 hover:bg-teal-600 disabled:opacity-40 text-white transition-colors cursor-pointer shrink-0"
+                    title="Enviar mensagem"
+                  >
+                    <Send className="w-4 h-4" />
+                  </button>
+                </form>
+              )}
             </div>
           </div>
         </div>

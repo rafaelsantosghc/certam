@@ -187,7 +187,11 @@ function normalizeAndMigrateDb(db: SyncDbFileFormat): { db: SyncDbFileFormat; mi
   let migrated = false;
 
   for (const k of Object.keys(entries)) {
-    if (!k.startsWith('certam_') || k === 'certam_diag_heartbeat') {
+    if (
+      !k.startsWith('certam_') ||
+      k === 'certam_diag_heartbeat' ||
+      (k.startsWith('certam_chat_') && !k.startsWith('certam_chat_messages_'))
+    ) {
       delete entries[k];
       delete versions[k];
       migrated = true;
@@ -365,15 +369,23 @@ function mergeKeyedObjectItems(existingItem: any, incomingItem: any): any {
   return merged;
 }
 
+function isChatMessagesOrDmKey(keyName?: string): boolean {
+  if (!keyName) return false;
+  return keyName.startsWith('certam_chat_messages_') || keyName.startsWith('certam_dm_');
+}
+
 function logChatEntriesDebug(
   origin: string,
   keyName: string,
   rawStr: string,
   extraMeta?: Record<string, any>
 ): void {
-  if (!keyName.startsWith('certam_chat_') && !keyName.startsWith('certam_dm_')) return;
+  if (!isChatMessagesOrDmKey(keyName)) return;
+  if (typeof rawStr !== 'string') return;
+  const trimmed = rawStr.trim();
+  if (!trimmed.startsWith('[')) return;
   try {
-    const parsed = JSON.parse(rawStr);
+    const parsed = JSON.parse(trimmed);
     if (Array.isArray(parsed)) {
       const lastItem = parsed[parsed.length - 1];
       console.log(`[certamSyncPlugin][${origin}] Key="${keyName}" totalMsgs=${parsed.length}`, {
@@ -396,9 +408,7 @@ function mergeSyncValues(
   forceReplace?: boolean,
   keyName?: string
 ): string {
-  const isChatOrDmKey =
-    Boolean(keyName) &&
-    (keyName!.startsWith('certam_chat_') || keyName!.startsWith('certam_dm_'));
+  const isChatOrDmKey = isChatMessagesOrDmKey(keyName);
 
   if (!existingStr || existingStr === incomingStr) {
     if (isChatOrDmKey && keyName) {
@@ -877,8 +887,11 @@ function certamSyncPlugin(): Plugin {
             for (const [rawKey, v] of Object.entries(incoming)) {
               if (rawKey === '_test_ping') continue;
               const k = LEGACY_KEY_MIGRATIONS[rawKey] || rawKey;
+              if (k.startsWith('certam_chat_') && !k.startsWith('certam_chat_messages_')) {
+                continue;
+              }
               if (typeof v === 'string') {
-                if (k.startsWith('certam_chat_') || k.startsWith('certam_dm_')) {
+                if (isChatMessagesOrDmKey(k)) {
                   logChatEntriesDebug('http:/api/sync:incoming', k, v, { forceReplace });
                 }
                 const sanitizedIncoming = sanitizeSyncEntryValue(k, v);
@@ -898,7 +911,7 @@ function certamSyncPlugin(): Plugin {
                   db.entries[k] = nextVal;
                   db.versions[k] = now;
                   modified = true;
-                  if (k.startsWith('certam_chat_') || k.startsWith('certam_dm_')) {
+                  if (isChatMessagesOrDmKey(k)) {
                     chatChangedEntries[k] = nextVal;
                   }
                 }

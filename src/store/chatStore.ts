@@ -1,6 +1,9 @@
-import { ChatMensagem, CanalChatId, Usuario } from '../types';
+import { ChatMensagem, CanalChatId, Usuario, Concurso, Candidato, Lote } from '../types';
 import { cloudSync } from './cloudSync';
 import { chatRealtimeClient, ChatConnectionState } from './chatRealtimeClient';
+import { lotesStore } from './lotesStore';
+import { normalizarTexto, limparCpf } from '../data/defaultCandidates';
+import { podeEditarCargo, podeEditarLote } from '../utils/permissions';
 
 const CHAT_KEY = 'certam_chat_messages_v5';
 const MUTED_ROOMS_STORAGE_KEY = 'certam_chat_muted_rooms_v1';
@@ -8,6 +11,105 @@ const FREQUENT_EMOJIS_STORAGE_KEY = 'certam_frequent_emojis_v1';
 const CLIENT_ANON_ID_KEY = 'certam_chat_client_id_v1';
 
 export const DEFAULT_FREQUENT_EMOJIS = ['👍', '❤️', '🔥', '🎉', '🚀', '👏', '🙏', '💡'];
+
+export type TipoSalaChatConcurso = 'geral' | 'cargo' | 'aprovados' | 'lote';
+
+export interface SalaChatConcurso {
+  id: string;
+  tipo: TipoSalaChatConcurso;
+  concursoId: string;
+  cargoId: string;
+  cargoNome: string;
+  loteId?: string;
+  loteNome?: string;
+  cargoScope: string;
+  titulo: string;
+  tituloCurto: string;
+  descricao: string;
+  restrito: boolean;
+  temAcesso: boolean;
+  posicaoUsuarioNoCargo?: number;
+  motivoBloqueio?: string;
+}
+
+function abreviarNomeCargoChat(nome: string): string {
+  const limpo = (nome || '').trim();
+  if (!limpo) return 'Cargo';
+  return limpo
+    .replace(/Analista Judiciário\s*-\s*Área\s*/i, 'AJ - ')
+    .replace(/Técnico Judiciário\s*-\s*Área\s*/i, 'TJ - ')
+    .replace(/Analista Judiciário/i, 'AJ')
+    .replace(/Técnico Judiciário/i, 'TJ');
+}
+
+export function localizarCandidatoDoUsuarioNoCargo(
+  usuario: Usuario | null | undefined,
+  candidatos: Candidato[]
+): Candidato | null {
+  if (!usuario || !Array.isArray(candidatos) || candidatos.length === 0) return null;
+  const cpfUsuarioLimpo = limparCpf(usuario.cpf);
+  const cpfValido = cpfUsuarioLimpo.length >= 6 && !/^0+$/.test(cpfUsuarioLimpo);
+  const emailUsuarioLimpo = String(usuario.email || '').trim().toLowerCase();
+  const emailValido =
+    emailUsuarioLimpo.length > 3 && emailUsuarioLimpo !== 'candidato@certam.com.br';
+  const nomeUsuarioNorm =
+    usuario.nome && usuario.nome.trim().length >= 3 ? normalizarTexto(usuario.nome) : '';
+
+  return (
+    candidatos.find((c) => {
+      if (usuario.candidato_id && c.id && c.id === usuario.candidato_id) return true;
+      if (cpfValido && c.cpf) {
+        const cpfCandLimpo = limparCpf(c.cpf);
+        if (cpfCandLimpo.length >= 6 && cpfCandLimpo === cpfUsuarioLimpo) return true;
+      }
+      if (emailValido && c.email && c.email.trim().toLowerCase() === emailUsuarioLimpo) {
+        return true;
+      }
+      if (nomeUsuarioNorm && c.nome && normalizarTexto(c.nome) === nomeUsuarioNorm) {
+        return true;
+      }
+      return false;
+    }) || null
+  );
+}
+
+export function verificarUsuarioConvocadoNoLote(
+  usuario: Usuario | null | undefined,
+  isAdmin: boolean,
+  concursoId: string,
+  cargoId: string,
+  lote: Lote,
+  meuCandidato: Candidato | null
+): boolean {
+  if (isAdmin || podeEditarLote(usuario || null, concursoId, cargoId)) return true;
+  if (!usuario || !meuCandidato || !lote) return false;
+
+  if (Array.isArray(lote.convocados) && lote.convocados.length > 0) {
+    const achouConvocados = lote.convocados.some(
+      (cv) =>
+        (cv.candidato_id && cv.candidato_id === meuCandidato.id) ||
+        (cv.nome && normalizarTexto(cv.nome) === normalizarTexto(meuCandidato.nome))
+    );
+    if (achouConvocados) return true;
+  }
+
+  if (Array.isArray(lote.candidatos_ids) && lote.candidatos_ids.length > 0) {
+    const achouIds =
+      lote.candidatos_ids.includes(meuCandidato.id) ||
+      lote.candidatos_ids.some(
+        (idOuNome) => normalizarTexto(idOuNome) === normalizarTexto(meuCandidato.nome)
+      );
+    if (achouIds) return true;
+  }
+
+  const loteCandNum = String(meuCandidato.numero_lote_convocado ?? '').replace(/\D/g, '');
+  const loteAlvoNum = String(lote.numero_lote ?? lote.nome ?? '').replace(/\D/g, '');
+  if (loteCandNum && loteAlvoNum && loteCandNum === loteAlvoNum) {
+    return true;
+  }
+
+  return false;
+}
 
 export interface CategoriaEmojiChat {
   id: string;
@@ -332,62 +434,228 @@ export const chatStore = {
   },
 
   /**
-   * Obtém todas as mensagens do concurso + canal de forma unificada,
-   * mesclando automaticamente mensagens enviadas no widget global ('geral')
-   * e nas abas de cargos específicos do mesmo concurso para que todos os usuários
-   * recebam as mensagens em tempo real.
+   * Constrói dinamicamente todas as salas de chat de um concurso seguindo as regras de negócio:
+   * 1. Chat Geral: aberto a todos que acompanham as novidades do concurso.
+   * 2. Chat do Cargo: existe para cada cargo SOMENTE até o concurso ser homologado e a lista de classificação daquele cargo ser preenchida.
+   * 3. Chat dos Aprovados: existe para cada cargo com lista de classificação preenchida em concurso homologado; restrito estritamente aos aprovados na lista daquele cargo.
+   * 4. Chat do Lote: existe 1 para cada lote de cada cargo do concurso; restrito estritamente aos convocados naquele lote específico.
+   */
+  getSalasDoConcurso(
+    concurso: Concurso | null | undefined,
+    usuario?: Usuario | null,
+    isAdmin: boolean = false
+  ): SalaChatConcurso[] {
+    if (!concurso) return [];
+    const userIsAdmin = Boolean(
+      isAdmin ||
+        usuario?.is_admin ||
+        usuario?.role === 'admin' ||
+        usuario?.tipo_usuario === 'admin' ||
+        usuario?.email?.toLowerCase() === 'rafasms0@hotmail.com'
+    );
+
+    const salas: SalaChatConcurso[] = [
+      {
+        id: 'geral',
+        tipo: 'geral',
+        concursoId: concurso.id,
+        cargoId: 'geral',
+        cargoNome: 'Geral',
+        cargoScope: 'geral',
+        titulo: 'Chat Geral',
+        tituloCurto: 'Chat Geral',
+        descricao: 'Aberto a todos que acompanham as novidades do concurso',
+        restrito: false,
+        temAcesso: true,
+      },
+    ];
+
+    const todosLotes = lotesStore.getLotes();
+    const isConcursoHomologado = Boolean(
+      concurso.homologado ||
+        concurso.status === 'Homologado' ||
+        concurso.status === 'Convocando'
+    );
+
+    const cargos = Array.isArray(concurso.cargos) ? concurso.cargos : [];
+
+    cargos.forEach((cg) => {
+      const candidatosCargo = lotesStore.getCandidatos(concurso.id, cg.id);
+      const listaPreenchida = candidatosCargo.length > 0;
+      const usarChatAprovados = isConcursoHomologado && listaPreenchida;
+      const cargoCurto = abreviarNomeCargoChat(cg.nome);
+      const meuCandidato = localizarCandidatoDoUsuarioNoCargo(usuario, candidatosCargo);
+
+      if (!usarChatAprovados) {
+        // O Chat do Cargo só existe até o concurso ser homologado e a lista de classificação ser preenchida
+        salas.push({
+          id: `cargo__${cg.id}`,
+          tipo: 'cargo',
+          concursoId: concurso.id,
+          cargoId: cg.id,
+          cargoNome: cg.nome,
+          cargoScope: `cargo__${cg.id}`,
+          titulo: `Chat do Cargo • ${cg.nome}`,
+          tituloCurto: `Cargo: ${cargoCurto}`,
+          descricao: `Para todos que desejam tratar do cargo ${cg.nome} antes da homologação/lista final`,
+          restrito: false,
+          temAcesso: true,
+        });
+      } else {
+        // Concurso homologado e lista de classificação preenchida: substitui pelo Chat dos Aprovados
+        const temAcessoAprovados = Boolean(
+          userIsAdmin ||
+            podeEditarCargo(usuario || null, concurso.id, cg.id) ||
+            meuCandidato
+        );
+        salas.push({
+          id: `aprovados__${cg.id}`,
+          tipo: 'aprovados',
+          concursoId: concurso.id,
+          cargoId: cg.id,
+          cargoNome: cg.nome,
+          cargoScope: `aprovados__${cg.id}`,
+          titulo: `Chat dos Aprovados • ${cg.nome}`,
+          tituloCurto: `Aprovados: ${cargoCurto}`,
+          descricao: `Exclusivo para candidatos que figuram na lista de classificação de ${cg.nome}`,
+          restrito: true,
+          temAcesso: temAcessoAprovados,
+          posicaoUsuarioNoCargo: meuCandidato?.posicao,
+          motivoBloqueio: !usuario
+            ? `Faça login com sua conta vinculada ao CPF aprovado para acessar o Chat dos Aprovados de ${cg.nome}.`
+            : `Acesso restrito: apenas candidatos que figuram na lista de classificação homologada do cargo "${cg.nome}" podem visualizar e participar deste chat.`,
+        });
+      }
+
+      // Lotes deste cargo e concurso
+      const lotesDoCargo = todosLotes
+        .filter(
+          (l) =>
+            l.id !== 'simulacao' &&
+            l.concurso_id === concurso.id &&
+            (!l.cargo_id || l.cargo_id === cg.id)
+        )
+        .sort((a, b) => {
+          const numA = String(a.numero_lote || a.nome || '').replace(/[^\d.]/g, '');
+          const numB = String(b.numero_lote || b.nome || '').replace(/[^\d.]/g, '');
+          return numA.localeCompare(numB, undefined, { numeric: true, sensitivity: 'base' });
+        });
+
+      // Também detecta lotes informados diretamente nos candidatos (numero_lote_convocado) caso ainda não haja objeto Lote correspondente
+      const lotesVirtuaisMap = new Map<string, Lote>();
+      candidatosCargo.forEach((cand) => {
+        const numLoteRaw = String(cand.numero_lote_convocado ?? '').trim();
+        if (!numLoteRaw) return;
+        const numDigits = numLoteRaw.replace(/\D/g, '') || numLoteRaw;
+        const jaExiste = lotesDoCargo.some((l) => {
+          const lNum = String(l.numero_lote || l.nome || '').replace(/\D/g, '');
+          return lNum === numDigits || l.id === numLoteRaw;
+        });
+        if (!jaExiste) {
+          const vId = `lote_num_${numDigits}`;
+          const existente = lotesVirtuaisMap.get(vId);
+          if (existente) {
+            existente.candidatos_ids.push(cand.id);
+          } else {
+            lotesVirtuaisMap.set(vId, {
+              id: vId,
+              concurso_id: concurso.id,
+              cargo_id: cg.id,
+              nome: `${numDigits}º Lote`,
+              numero_lote: numDigits,
+              ativo: true,
+              is_ranking_visible: true,
+              is_printing_enabled: true,
+              travado: false,
+              comarcas: [],
+              candidatos_ids: [cand.id],
+            });
+          }
+        }
+      });
+
+      const todosLotesCargoCombinados = [
+        ...lotesDoCargo,
+        ...Array.from(lotesVirtuaisMap.values()),
+      ];
+
+      todosLotesCargoCombinados.forEach((lote) => {
+        const temAcessoLote = verificarUsuarioConvocadoNoLote(
+          usuario,
+          userIsAdmin,
+          concurso.id,
+          cg.id,
+          lote,
+          meuCandidato
+        );
+
+        salas.push({
+          id: `lote__${cg.id}__${lote.id}`,
+          tipo: 'lote',
+          concursoId: concurso.id,
+          cargoId: cg.id,
+          cargoNome: cg.nome,
+          loteId: lote.id,
+          loteNome: lote.nome,
+          cargoScope: `lote__${cg.id}__${lote.id}`,
+          titulo: `Chat do Lote • ${lote.nome} (${cg.nome})`,
+          tituloCurto: `${lote.nome} (${cargoCurto})`,
+          descricao: `Exclusivo para candidatos convocados no ${lote.nome} do cargo ${cg.nome}`,
+          restrito: true,
+          temAcesso: temAcessoLote,
+          posicaoUsuarioNoCargo: meuCandidato?.posicao,
+          motivoBloqueio: !usuario
+            ? `Faça login para verificar se você foi convocado no ${lote.nome} (${cg.nome}).`
+            : meuCandidato
+            ? `Acesso restrito: você está aprovado em ${meuCandidato.posicao}º lugar em ${cg.nome}, porém este chat é exclusivo para os candidatos convocados no ${lote.nome}.`
+            : `Acesso restrito: apenas candidatos convocados no ${lote.nome} do cargo "${cg.nome}" podem visualizar e participar deste chat.`,
+        });
+      });
+    });
+
+    return salas;
+  },
+
+  /**
+   * Obtém as mensagens da sala específica (Chat Geral, Chat do Cargo, Chat dos Aprovados ou Chat do Lote)
+   * mantendo isolamento estrito entre as diferentes salas.
    */
   getMensagens(concursoId: string, cargoId: string = 'geral', canalId: CanalChatId = 'geral'): ChatMensagem[] {
     if (!concursoId) return [];
-    const prefix = `${CHAT_KEY}_${concursoId}_`;
-    const suffix = `_${canalId}`;
-    const canonicalKey = `${CHAT_KEY}_${concursoId}_geral_${canalId}`;
-    const specificKey = `${CHAT_KEY}_${concursoId}_${cargoId || 'geral'}_${canalId}`;
-
-    const keysToRead = new Set<string>([canonicalKey, specificKey]);
-    try {
-      const allKeys = cloudSync.getAllKeys();
-      for (const k of allKeys) {
-        if (k.startsWith(prefix) && k.endsWith(suffix)) {
-          keysToRead.add(k);
-        }
-      }
-    } catch {
-      // ignore
-    }
+    const scope = cargoId || 'geral';
+    const targetKey = `${CHAT_KEY}_${concursoId}_${scope}_${canalId}`;
 
     const msgMap = new Map<string, { msg: ChatMensagem; order: number }>();
     let runningIdx = 0;
 
-    for (const key of keysToRead) {
-      try {
-        const raw = cloudSync.getItem(key);
-        if (!raw) continue;
+    try {
+      const raw = cloudSync.getItem(targetKey);
+      if (raw) {
         const parsed = JSON.parse(raw);
-        if (!Array.isArray(parsed)) continue;
+        if (Array.isArray(parsed)) {
+          for (const item of parsed) {
+            if (!item || typeof item !== 'object' || !item.id) continue;
+            const norm = normalizarMensagem(item as ChatMensagem);
+            const existing = msgMap.get(norm.id);
+            const order = extrairTimestampOrdenacao(norm, runningIdx++);
 
-        for (const item of parsed) {
-          if (!item || typeof item !== 'object' || !item.id) continue;
-          const norm = normalizarMensagem(item as ChatMensagem);
-          const existing = msgMap.get(norm.id);
-          const order = extrairTimestampOrdenacao(norm, runningIdx++);
-
-          if (!existing) {
-            msgMap.set(norm.id, { msg: norm, order });
-          } else {
-            const existingTs = Number(existing.msg.updated_at || existing.msg.created_at || 0);
-            const incomingTs = Number(norm.updated_at || norm.created_at || 0);
-            if (incomingTs >= existingTs) {
-              msgMap.set(norm.id, {
-                msg: norm,
-                order: Math.min(existing.order, order),
-              });
+            if (!existing) {
+              msgMap.set(norm.id, { msg: norm, order });
+            } else {
+              const existingTs = Number(existing.msg.updated_at || existing.msg.created_at || 0);
+              const incomingTs = Number(norm.updated_at || norm.created_at || 0);
+              if (incomingTs >= existingTs) {
+                msgMap.set(norm.id, {
+                  msg: norm,
+                  order: Math.min(existing.order, order),
+                });
+              }
             }
           }
         }
-      } catch {
-        // ignore
       }
+    } catch {
+      // ignore
     }
 
     return Array.from(msgMap.values())
@@ -403,35 +671,18 @@ export const chatStore = {
   ): Record<string, string> {
     const normalizedMsgs = msgs.map((m) => normalizarMensagem(m));
     const serialized = JSON.stringify(normalizedMsgs);
-    const canonicalKey = `${CHAT_KEY}_${concursoId}_geral_${canalId}`;
-    const specificKey = `${CHAT_KEY}_${concursoId}_${cargoId || 'geral'}_${canalId}`;
+    const scope = cargoId || 'geral';
+    const targetKey = `${CHAT_KEY}_${concursoId}_${scope}_${canalId}`;
     const entries: Record<string, string> = {
-      [canonicalKey]: serialized,
+      [targetKey]: serialized,
     };
 
-    cloudSync.setItemLocalOnly(canonicalKey, normalizedMsgs);
-    if (specificKey !== canonicalKey) {
-      cloudSync.setItemLocalOnly(specificKey, normalizedMsgs);
-      entries[specificKey] = serialized;
-    }
-
-    try {
-      const prefix = `${CHAT_KEY}_${concursoId}_`;
-      const suffix = `_${canalId}`;
-      for (const k of cloudSync.getAllKeys()) {
-        if (k.startsWith(prefix) && k.endsWith(suffix) && k !== canonicalKey && k !== specificKey) {
-          cloudSync.setItemLocalOnly(k, normalizedMsgs);
-          entries[k] = serialized;
-        }
-      }
-    } catch {
-      // ignore
-    }
+    cloudSync.setItemLocalOnly(targetKey, normalizedMsgs);
 
     if (typeof window !== 'undefined') {
       window.dispatchEvent(
         new CustomEvent('certam_chat_updated', {
-          detail: { concursoId, cargoId, canalId, msgs: normalizedMsgs },
+          detail: { concursoId, cargoId: scope, canalId, msgs: normalizedMsgs },
         })
       );
     }
@@ -447,33 +698,15 @@ export const chatStore = {
     forceReplace = false
   ) {
     const normalizedMsgs = msgs.map((m) => normalizarMensagem(m));
-    const canonicalKey = `${CHAT_KEY}_${concursoId}_geral_${canalId}`;
-    const specificKey = `${CHAT_KEY}_${concursoId}_${cargoId || 'geral'}_${canalId}`;
+    const scope = cargoId || 'geral';
+    const targetKey = `${CHAT_KEY}_${concursoId}_${scope}_${canalId}`;
 
-    // Salva na chave canônica unificada do concurso+canal
-    cloudSync.setItem(canonicalKey, normalizedMsgs, forceReplace);
-
-    // Sincroniza também na chave específica do cargo (e outras chaves já existentes do mesmo concurso+canal)
-    if (specificKey !== canonicalKey) {
-      cloudSync.setItem(specificKey, normalizedMsgs, forceReplace);
-    }
-
-    try {
-      const prefix = `${CHAT_KEY}_${concursoId}_`;
-      const suffix = `_${canalId}`;
-      for (const k of cloudSync.getAllKeys()) {
-        if (k.startsWith(prefix) && k.endsWith(suffix) && k !== canonicalKey && k !== specificKey) {
-          cloudSync.setItem(k, normalizedMsgs, forceReplace);
-        }
-      }
-    } catch {
-      // ignore
-    }
+    cloudSync.setItem(targetKey, normalizedMsgs, forceReplace);
 
     if (typeof window !== 'undefined') {
       window.dispatchEvent(
         new CustomEvent('certam_chat_updated', {
-          detail: { concursoId, cargoId, canalId, msgs: normalizedMsgs },
+          detail: { concursoId, cargoId: scope, canalId, msgs: normalizedMsgs },
         })
       );
     }
@@ -490,7 +723,8 @@ export const chatStore = {
     canalId: CanalChatId,
     msgId: string
   ): Promise<boolean> {
-    const msgsAtuais = this.getMensagens(concursoId, cargoId, canalId);
+    const scope = cargoId || 'geral';
+    const msgsAtuais = this.getMensagens(concursoId, scope, canalId);
     const alvo = msgsAtuais.find((m) => m.id === msgId);
     if (!alvo) return false;
 
@@ -506,19 +740,15 @@ export const chatStore = {
         : m
     );
 
-    const canonicalKey = `${CHAT_KEY}_${concursoId}_geral_${canalId}`;
-    const specificKey = `${CHAT_KEY}_${concursoId}_${cargoId || 'geral'}_${canalId}`;
+    const targetKey = `${CHAT_KEY}_${concursoId}_${scope}_${canalId}`;
     const serialized = JSON.stringify(msgsParaServidor);
     const entries: Record<string, string> = {
-      [canonicalKey]: serialized,
+      [targetKey]: serialized,
     };
-    if (specificKey !== canonicalKey) {
-      entries[specificKey] = serialized;
-    }
 
     const ackResult = await chatRealtimeClient.sendEntriesWithAck(msgId, entries);
 
-    const msgsPosAck = this.getMensagens(concursoId, cargoId, canalId);
+    const msgsPosAck = this.getMensagens(concursoId, scope, canalId);
     const item = msgsPosAck.find((m) => m.id === msgId);
     if (!item) return ackResult.ok;
 
@@ -527,7 +757,7 @@ export const chatStore = {
       item.ack_at = ackResult.serverTimestamp || Date.now();
       item.erro_envio = undefined;
       item.updated_at = Date.now();
-      this.salvarMensagensLocalmente(concursoId, cargoId, canalId, msgsPosAck);
+      this.salvarMensagensLocalmente(concursoId, scope, canalId, msgsPosAck);
       return true;
     } else {
       item.status_envio = 'erro';
@@ -535,7 +765,7 @@ export const chatStore = {
         ackResult.error ||
         'Não foi possível confirmar o recebimento pelo servidor. Clique para reenviar.';
       item.updated_at = Date.now();
-      this.salvarMensagensLocalmente(concursoId, cargoId, canalId, msgsPosAck);
+      this.salvarMensagensLocalmente(concursoId, scope, canalId, msgsPosAck);
       return false;
     }
   },
@@ -867,18 +1097,16 @@ export const chatStore = {
       const isCurrentlyMuted = Boolean(muted[concursoId] || muted[`${concursoId}_all`]);
       const nextState = !isCurrentlyMuted;
 
-      const canais: CanalChatId[] = ['geral', 'lotacao', 'posse', 'recursos'];
       if (nextState) {
         muted[concursoId] = true;
         muted[`${concursoId}_all`] = true;
-        canais.forEach((c) => {
-          muted[`${concursoId}_${c}`] = true;
-        });
       } else {
         delete muted[concursoId];
         delete muted[`${concursoId}_all`];
-        canais.forEach((c) => {
-          delete muted[`${concursoId}_${c}`];
+        Object.keys(muted).forEach((k) => {
+          if (k.startsWith(`${concursoId}_`)) {
+            delete muted[k];
+          }
         });
       }
 

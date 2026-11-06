@@ -369,8 +369,24 @@ function isRicherConcursosJson(localStr: string | null | undefined, serverStr: s
   }
 }
 
+const LOCAL_ONLY_KEYS = new Set([
+  'certam_chat_client_id_v1',
+  'certam_chat_muted_rooms_v1',
+  'certam_chat_read_msg_ids_v1',
+  'certam_chat_sound_enabled_v1',
+  'certam_frequent_emojis_v1',
+]);
+
 function shouldSyncKey(key: string): boolean {
-  if (key in LEGACY_KEY_MIGRATIONS || key === '_test_ping' || key === 'certam_diag_heartbeat') {
+  if (
+    key in LEGACY_KEY_MIGRATIONS ||
+    key === '_test_ping' ||
+    key === 'certam_diag_heartbeat' ||
+    LOCAL_ONLY_KEYS.has(key)
+  ) {
+    return false;
+  }
+  if (key.startsWith('certam_chat_') && !key.startsWith('certam_chat_messages_')) {
     return false;
   }
   if (/^certam_candidatos_data_v[1-5]_/.test(key)) {
