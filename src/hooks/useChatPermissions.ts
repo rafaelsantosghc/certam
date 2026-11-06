@@ -17,6 +17,20 @@ export interface ValidacaoCargoAprovado {
   lotesPermitidosIds: Set<string>;
 }
 
+export interface CategoriaChatLateral {
+  id: 'geral' | 'cargo' | 'aprovados' | 'lote';
+  titulo: string;
+  descricaoCurta: string;
+  salas: SalaChatConcurso[];
+}
+
+export interface SalasPorCategoriaChat {
+  geral: SalaChatConcurso[];
+  cargo: SalaChatConcurso[];
+  aprovados: SalaChatConcurso[];
+  lote: SalaChatConcurso[];
+}
+
 export interface UseChatPermissionsResult {
   isUserAdmin: boolean;
   isAprovadoNoConcurso: boolean;
@@ -25,6 +39,8 @@ export interface UseChatPermissionsResult {
   isConvocadoNoLote: (cargoId: string, loteId?: string) => boolean;
   podeRenderizarSala: (sala: SalaChatConcurso) => boolean;
   salasPermitidas: SalaChatConcurso[];
+  salasPorCategoria: SalasPorCategoriaChat;
+  categoriasVisiveis: CategoriaChatLateral[];
   todasSalas: SalaChatConcurso[];
 }
 
@@ -72,7 +88,8 @@ export function validarUsuarioNaListaDeAprovados(
 /**
  * Hook `useChatPermissions`:
  * Valida se `usuario.id` ou `usuario.cpf` está presente na lista de aprovados
- * do concurso específico antes de permitir/renderizar o Chat dos Aprovados e o Chat do Lote.
+ * do concurso específico antes de permitir/renderizar o Chat dos Aprovados e o Chat do Lote,
+ * e agrupa dinamicamente os chats visíveis por categoria (Geral, Cargo, Aprovados, Lotes).
  */
 export function useChatPermissions(
   concurso: Concurso | null | undefined,
@@ -212,7 +229,12 @@ export function useChatPermissions(
   const podeRenderizarSala = useCallback(
     (sala: SalaChatConcurso): boolean => {
       if (!sala) return false;
-      if (sala.tipo === 'geral' || sala.tipo === 'cargo') return true;
+      if (sala.tipo === 'geral') return true;
+      if (sala.tipo === 'cargo') {
+        if (isUserAdmin || !usuario) return true;
+        // Se o usuário especificou cargos inscritos no concurso e não é aprovado em outro, prioriza ou permite todos os cargos públicos pré-homologação
+        return true;
+      }
       if (sala.tipo === 'aprovados') {
         return isAprovadoNoCargo(sala.cargoId);
       }
@@ -221,12 +243,51 @@ export function useChatPermissions(
       }
       return Boolean(sala.temAcesso);
     },
-    [isAprovadoNoCargo, isConvocadoNoLote]
+    [isUserAdmin, usuario, isAprovadoNoCargo, isConvocadoNoLote]
   );
 
   const salasPermitidas = useMemo<SalaChatConcurso[]>(() => {
     return todasSalas.filter((sala) => podeRenderizarSala(sala));
   }, [todasSalas, podeRenderizarSala]);
+
+  const salasPorCategoria = useMemo<SalasPorCategoriaChat>(() => {
+    return {
+      geral: salasPermitidas.filter((s) => s.tipo === 'geral'),
+      cargo: salasPermitidas.filter((s) => s.tipo === 'cargo'),
+      aprovados: salasPermitidas.filter((s) => s.tipo === 'aprovados'),
+      lote: salasPermitidas.filter((s) => s.tipo === 'lote'),
+    };
+  }, [salasPermitidas]);
+
+  const categoriasVisiveis = useMemo<CategoriaChatLateral[]>(() => {
+    const categorias: CategoriaChatLateral[] = [
+      {
+        id: 'geral',
+        titulo: 'Geral',
+        descricaoCurta: 'Comunidade aberta do certame',
+        salas: salasPorCategoria.geral,
+      },
+      {
+        id: 'cargo',
+        titulo: 'Cargo',
+        descricaoCurta: 'Salas por cargo (pré-homologação)',
+        salas: salasPorCategoria.cargo,
+      },
+      {
+        id: 'aprovados',
+        titulo: 'Aprovados',
+        descricaoCurta: 'Exclusivo para aprovados na lista',
+        salas: salasPorCategoria.aprovados,
+      },
+      {
+        id: 'lote',
+        titulo: 'Lotes',
+        descricaoCurta: 'Exclusivo por lote de convocação',
+        salas: salasPorCategoria.lote,
+      },
+    ];
+    return categorias.filter((cat) => cat.salas.length > 0);
+  }, [salasPorCategoria]);
 
   return {
     isUserAdmin,
@@ -236,6 +297,8 @@ export function useChatPermissions(
     isConvocadoNoLote,
     podeRenderizarSala,
     salasPermitidas,
+    salasPorCategoria,
+    categoriasVisiveis,
     todasSalas,
   };
 }

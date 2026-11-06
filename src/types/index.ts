@@ -303,6 +303,9 @@ export interface ChatMensagem {
   status_envio?: 'enviando' | 'entregue' | 'erro';
   ack_at?: number;
   erro_envio?: string;
+  audio_base64?: string;
+  audio_duracao?: number;
+  audio_mime_type?: string;
 }
 
 export interface OutroConcursoAprovado {
@@ -469,6 +472,9 @@ export interface MensagemPrivada {
   lida: boolean;
   created_at?: number;
   updated_at?: number;
+  audio_base64?: string;
+  audio_duracao?: number;
+  audio_mime_type?: string;
 }
 
 export interface BloqueioUsuario {

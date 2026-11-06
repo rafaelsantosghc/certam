@@ -948,6 +948,9 @@ export const chatStore = {
       isFixado?: boolean;
       posicao?: number;
       comarcaPreferida?: string;
+      audioBase64?: string;
+      audioDuracao?: number;
+      audioMimeType?: string;
     }
   ): ChatMensagem {
     chatRealtimeClient.init();
@@ -971,6 +974,11 @@ export const chatStore = {
       const avatarCor = cores[Math.floor(Math.random() * cores.length)];
       const resolvedEmail = email || obterIdentificadorUsuarioChat();
       const resolvedSenderId = obterIdentificadorUsuarioChat(resolvedEmail);
+      const textoFinal =
+        (texto || '').trim() ||
+        (extra?.audioBase64
+          ? `🎤 Mensagem de voz (${Math.max(1, Math.round(extra.audioDuracao || 1))}s)`
+          : '');
 
       nova = {
         id: `msg-${nowMs.toString(36)}-${Math.random().toString(36).substring(2, 6)}`,
@@ -981,7 +989,7 @@ export const chatStore = {
         autor: autorOrDados,
         email: resolvedEmail,
         avatar_cor: avatarCor,
-        texto: (texto || '').trim(),
+        texto: textoFinal,
         data_hora: dataHoraStr,
         curtidas: 0,
         curtido_por: [],
@@ -990,6 +998,9 @@ export const chatStore = {
         is_fixado: extra?.isFixado || false,
         posicao_candidato: extra?.posicao,
         comarca_preferida: extra?.comarcaPreferida,
+        audio_base64: extra?.audioBase64,
+        audio_duracao: extra?.audioDuracao,
+        audio_mime_type: extra?.audioMimeType,
         created_at: nowMs,
         updated_at: nowMs,
         status_envio: 'enviando',
