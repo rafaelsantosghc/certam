@@ -1380,15 +1380,16 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
         }, 6000);
       }
 
-       const estavaNoFinal = verificarSeUsuarioEstaNoFinal();
        carregarMensagensAtivas();
 
-       if (isOpen) {
+       // Não rola para o fim caso o usuário esteja navegando no histórico ou quando não houver nova mensagem real
+       if (isOpen && ultimaNovaParaNotificar) {
+         const estavaNoFinal = verificarSeUsuarioEstaNoFinal();
          if (estavaNoFinal) {
            window.setTimeout(() => {
              rolarAteOFim();
            }, 50);
-         } else if (ultimaNovaParaNotificar) {
+         } else {
            setNovasMensagensNaoLidasCount((prev) => prev + 1);
          }
        }
@@ -1994,16 +1995,37 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
     }
   };
 
-  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
-  const [dragging, setDragging] = useState(false);
+  // Estados de posicionamento independente para a Janela do Chat e para o Balão Flutuante (fechado)
+  const [windowPos, setWindowPos] = useState<{ x: number; y: number } | null>(null);
+  const [bubblePos, setBubblePos] = useState<{ x: number; y: number } | null>(null);
+
+  const [draggingWindow, setDraggingWindow] = useState(false);
+  const [draggingBubble, setDraggingBubble] = useState(false);
+
   const [sidebarRetraido, setSidebarRetraido] = useState(false);
   const dragRelRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const hasMovedRef = useRef(false);
 
-  const handleMouseDownHeader = (e: React.MouseEvent) => {
-    setDragging(true);
+  // Iniciar arraste do cabeçalho da JANELA do chat
+  const handleMouseDownWindowHeader = (e: React.MouseEvent) => {
+    setDraggingWindow(true);
     hasMovedRef.current = false;
-    const box = (e.currentTarget as HTMLElement).closest('.chat-widget-box')?.getBoundingClientRect() || { left: window.innerWidth - 600, top: window.innerHeight - 600 };
+    const box = (e.currentTarget as HTMLElement).closest('.chat-window-box')?.getBoundingClientRect() || {
+      left: window.innerWidth - 600,
+      top: window.innerHeight - 600,
+    };
+    dragRelRef.current = {
+      x: e.clientX - box.left,
+      y: e.clientY - box.top,
+    };
+    e.stopPropagation();
+  };
+
+  // Iniciar arraste do BALÃO do chat (quando minimizado)
+  const handleMouseDownBubble = (e: React.MouseEvent) => {
+    setDraggingBubble(true);
+    hasMovedRef.current = false;
+    const box = (e.currentTarget as HTMLElement).getBoundingClientRect();
     dragRelRef.current = {
       x: e.clientX - box.left,
       y: e.clientY - box.top,
@@ -2013,15 +2035,25 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
-      if (!dragging) return;
-      hasMovedRef.current = true;
-      const newX = Math.max(10, Math.min(window.innerWidth - 120, e.clientX - dragRelRef.current.x));
-      const newY = Math.max(10, Math.min(window.innerHeight - 100, e.clientY - dragRelRef.current.y));
-      setPos({ x: newX, y: newY });
+      if (draggingWindow) {
+        hasMovedRef.current = true;
+        const newX = Math.max(10, Math.min(window.innerWidth - 120, e.clientX - dragRelRef.current.x));
+        const newY = Math.max(10, Math.min(window.innerHeight - 100, e.clientY - dragRelRef.current.y));
+        setWindowPos({ x: newX, y: newY });
+      } else if (draggingBubble) {
+        hasMovedRef.current = true;
+        const newX = Math.max(10, Math.min(window.innerWidth - 160, e.clientX - dragRelRef.current.x));
+        const newY = Math.max(10, Math.min(window.innerHeight - 70, e.clientY - dragRelRef.current.y));
+        setBubblePos({ x: newX, y: newY });
+      }
     };
-    const handleMouseUp = () => setDragging(false);
 
-    if (dragging) {
+    const handleMouseUp = () => {
+      setDraggingWindow(false);
+      setDraggingBubble(false);
+    };
+
+    if (draggingWindow || draggingBubble) {
       window.addEventListener('mousemove', handleMouseMove);
       window.addEventListener('mouseup', handleMouseUp);
     }
@@ -2029,7 +2061,7 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [dragging]);
+  }, [draggingWindow, draggingBubble]);
 
   const chatContainerRef = useRef<HTMLDivElement>(null);
 
@@ -2056,15 +2088,21 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
     reportBounds();
     const frameId = requestAnimationFrame(reportBounds);
     return () => cancelAnimationFrame(frameId);
-  }, [pos, isOpen, isExpanded, dragging]);
+  }, [windowPos, bubblePos, isOpen, isExpanded, draggingWindow, draggingBubble]);
 
   return (
     <div
       ref={chatContainerRef}
-      className="fixed z-[45] flex flex-col items-end max-w-[calc(100vw-1rem)] chat-widget-box"
+      className={`fixed z-[45] flex flex-col items-end max-w-[calc(100vw-1rem)] chat-widget-box ${
+        isOpen ? 'chat-window-box' : ''
+      }`}
       style={
-        pos
-          ? { left: `${pos.x}px`, top: `${pos.y}px`, bottom: 'auto', right: 'auto' }
+        isOpen
+          ? windowPos
+            ? { left: `${windowPos.x}px`, top: `${windowPos.y}px`, bottom: 'auto', right: 'auto' }
+            : { bottom: '24px', right: '24px' }
+          : bubblePos
+          ? { left: `${bubblePos.x}px`, top: `${bubblePos.y}px`, bottom: 'auto', right: 'auto' }
           : { bottom: '24px', right: '24px' }
       }
     >
@@ -2156,7 +2194,7 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
       {!isOpen ? (
         <button
           type="button"
-          onMouseDown={handleMouseDownHeader}
+          onMouseDown={handleMouseDownBubble}
           onClick={() => {
             if (hasMovedRef.current) return;
             if (browserNotificationPermission === 'default') {
@@ -2201,7 +2239,7 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
         >
           {/* Cabeçalho Principal (Movível / Draggable) */}
           <div
-            onMouseDown={handleMouseDownHeader}
+            onMouseDown={handleMouseDownWindowHeader}
             className="bg-gradient-to-r from-[#07192B] via-[#0A2540] to-[#0D3B56] px-3.5 py-2.5 text-white flex items-center justify-between gap-2 shrink-0 cursor-move select-none"
             title="Arraste para mover a janela do chat"
           >

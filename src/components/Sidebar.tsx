@@ -78,7 +78,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       )}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-50 bg-[#07192B] text-white flex flex-col transition-all duration-300 shrink-0 border-r border-[#0F2942] shadow-2xl ${
+        className={`fixed inset-y-0 left-0 z-50 bg-[#07192B] text-white flex flex-col transition-[width,transform] duration-300 ease-in-out shrink-0 border-r border-[#0F2942] shadow-2xl ${
           efetivamenteColapsado ? 'w-16' : 'w-64'
         } ${
           isOpenMobile ? 'translate-x-0 w-64' : '-translate-x-full lg:translate-x-0'

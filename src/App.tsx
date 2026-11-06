@@ -503,8 +503,8 @@ export const AppContent: React.FC = () => {
         onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
       />
 
-      {/* Conteúdo Principal com compensação de largura da sidebar dinâmica */}
-      <div className={`flex-1 flex flex-col min-w-0 transition-all duration-300 ${sidebarCollapsed ? 'lg:pl-16' : 'lg:pl-64'}`}>
+      {/* Conteúdo Principal com compensação de largura da sidebar dinâmica rigorosamente sincronizada */}
+      <div className={`flex-1 flex flex-col min-w-0 transition-[padding] duration-300 ease-in-out ${sidebarCollapsed ? 'lg:pl-16' : 'lg:pl-64'}`}>
         <OfflineIndicator />
         {/* Top Header */}
         <Header
