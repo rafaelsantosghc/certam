@@ -357,6 +357,8 @@ export const AppContent: React.FC = () => {
     return list;
   }, [currentView, concursoId, cargoId]);
 
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
   return (
     <div className="min-h-screen flex flex-col bg-[var(--certam-light-bg)] text-[var(--certam-text-primary)] transition-colors duration-200">
       {/* Sidebar Lateral (#07192B) */}
@@ -366,14 +368,18 @@ export const AppContent: React.FC = () => {
         isOpenMobile={sidebarMobileOpen}
         onCloseMobile={() => setSidebarMobileOpen(false)}
         concursoAtualId={concursoId}
+        isCollapsed={sidebarCollapsed}
+        onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
       />
 
-      {/* Conteúdo Principal com compensação de largura da sidebar (lg:pl-64) */}
-      <div className="flex-1 flex flex-col min-w-0 lg:pl-64">
+      {/* Conteúdo Principal com compensação de largura da sidebar dinâmica */}
+      <div className={`flex-1 flex flex-col min-w-0 transition-all duration-300 ${sidebarCollapsed ? 'lg:pl-16' : 'lg:pl-64'}`}>
         <OfflineIndicator />
         {/* Top Header */}
         <Header
           onOpenMobileSidebar={() => setSidebarMobileOpen(true)}
+          onToggleSidebar={() => setSidebarCollapsed(!sidebarCollapsed)}
+          isSidebarCollapsed={sidebarCollapsed}
           breadcrumbs={breadcrumbs}
           onNavigateAdmin={() => handleNavigate('admin')}
           showAdminShortcut={currentView !== 'admin'}

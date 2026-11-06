@@ -29,6 +29,8 @@ import {
 
 interface HeaderProps {
   onOpenMobileSidebar: () => void;
+  onToggleSidebar?: () => void;
+  isSidebarCollapsed?: boolean;
   breadcrumbs: { label: string; onClick?: () => void }[];
   onNavigateAdmin?: () => void;
   showAdminShortcut?: boolean;
@@ -38,6 +40,8 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({
   onOpenMobileSidebar,
+  onToggleSidebar,
+  isSidebarCollapsed,
   breadcrumbs,
   onNavigateAdmin,
   showAdminShortcut = true,
@@ -132,6 +136,16 @@ export const Header: React.FC<HeaderProps> = ({
             onClick={onOpenMobileSidebar}
             className="lg:hidden p-2 text-slate-600 hover:text-slate-900 rounded-lg hover:bg-slate-100 cursor-pointer shrink-0"
             aria-label="Abrir menu"
+          >
+            <Menu className="w-5 h-5" />
+          </button>
+
+          <button
+            type="button"
+            onClick={onToggleSidebar}
+            className="hidden lg:flex p-2 text-slate-600 hover:text-slate-900 rounded-lg hover:bg-slate-100 cursor-pointer shrink-0"
+            title={isSidebarCollapsed ? 'Expandir menu lateral' : 'Esconder menu lateral'}
+            aria-label="Alternar menu lateral"
           >
             <Menu className="w-5 h-5" />
           </button>

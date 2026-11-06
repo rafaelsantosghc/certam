@@ -19,6 +19,8 @@ interface SidebarProps {
   isOpenMobile: boolean;
   onCloseMobile: () => void;
   concursoAtualId?: string;
+  isCollapsed?: boolean;
+  onToggleCollapse?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -27,6 +29,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isOpenMobile,
   onCloseMobile,
   concursoAtualId,
+  isCollapsed = false,
+  onToggleCollapse,
 }) => {
   const { usuario, logout } = useAuth();
   const [concursos, setConcursos] = React.useState<Concurso[]>(() => certamStore.getConcursos());
@@ -35,6 +39,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
     tjrs_2025: true,
     mprs_2025: true,
   });
+  const [hoverExpanded, setHoverExpanded] = React.useState(false);
+
+  const efetivamenteColapsado = isCollapsed && !hoverExpanded;
 
   const toggleConcurso = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -71,9 +78,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
         />
       )}
 
+      {/* Trigger invisível na borda esquerda para abrir ao passar o mouse quando colapsado */}
+      {isCollapsed && (
+        <div
+          onMouseEnter={() => setHoverExpanded(true)}
+          className="fixed left-0 top-0 w-3 h-full z-40 hidden lg:block"
+        />
+      )}
+
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-64 bg-[#07192B] text-white flex flex-col transition-transform duration-300 shrink-0 border-r border-[#0F2942] ${
-          isOpenMobile ? 'translate-x-0 shadow-2xl' : '-translate-x-full lg:translate-x-0'
+        onMouseEnter={() => isCollapsed && setHoverExpanded(true)}
+        onMouseLeave={() => isCollapsed && setHoverExpanded(false)}
+        className={`fixed inset-y-0 left-0 z-50 bg-[#07192B] text-white flex flex-col transition-all duration-300 shrink-0 border-r border-[#0F2942] ${
+          efetivamenteColapsado ? 'w-16' : 'w-64'
+        } ${
+          isOpenMobile ? 'translate-x-0 shadow-2xl w-64' : '-translate-x-full lg:translate-x-0'
         }`}
       >
         {/* Logo e Marca CERTAM */}
