@@ -147,16 +147,20 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
   const topScrollRef2 = useRef<HTMLDivElement>(null);
   const bottomScrollRef2 = useRef<HTMLDivElement>(null);
 
-  const podeEditarEsteConcurso = podeEditarConcurso(usuario, concurso.id);
-  const podeEditarEsteCargo = podeEditarCargo(usuario, concurso.id, cargo.id);
-  const podeEditarEsteLote = podeEditarLote(usuario, concurso.id, cargo.id);
+  const podeEditarEsteConcurso = concurso ? podeEditarConcurso(usuario, concurso.id) : false;
+  const podeEditarEsteCargo = concurso && cargo ? podeEditarCargo(usuario, concurso.id, cargo.id) : false;
+  const podeEditarEsteLote = concurso && cargo ? podeEditarLote(usuario, concurso.id, cargo.id) : false;
 
   const reloadData = () => {
     const c = certamStore.getConcurso(concursoId) || certamStore.getConcursos()[0];
+    if (!c) return;
+    const cg = certamStore.getCargo(c.id, cargoId) || c.cargos?.[0];
     setConcurso(c);
-    setCargo(certamStore.getCargo(c.id, cargoId) || c.cargos[0]);
+    if (cg) {
+      setCargo(cg);
+      setCandidatos(lotesStore.getCandidatos(c.id, cg.id));
+    }
     setLotes(lotesStore.getLotes());
-    setCandidatos(lotesStore.getCandidatos(c.id, cargo.id));
   };
 
   const handleExcluirLote = (loteId: string, nome: string) => {
@@ -198,13 +202,15 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
   }, []);
 
   // Candidatos deste cargo
-  const [candidatos, setCandidatos] = useState<Candidato[]>(() =>
-    lotesStore.getCandidatos(concurso.id, cargo.id)
-  );
+  const [candidatos, setCandidatos] = useState<Candidato[]>(() => {
+    if (!concurso?.id || !cargo?.id) return [];
+    return lotesStore.getCandidatos(concurso.id, cargo.id);
+  });
 
   useEffect(() => {
     let isMounted = true;
     async function loadCachedCandidates() {
+      if (!concurso?.id || !cargo?.id) return;
       const cached = await classificationCache.get(concurso.id, cargo.id);
       if (cached && cached.length > 0 && isMounted) {
         setCandidatos(cached);
@@ -219,13 +225,13 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [concurso.id, cargo.id]);
+  }, [concurso?.id, cargo?.id]);
 
   useEffect(() => {
-    if (candidatos && candidatos.length > 0) {
+    if (candidatos && candidatos.length > 0 && concurso?.id && cargo?.id) {
       void classificationCache.set(concurso.id, cargo.id, candidatos);
     }
-  }, [candidatos, concurso.id, cargo.id]);
+  }, [candidatos, concurso?.id, cargo?.id]);
 
   // Publica automaticamente o concurso e a lista de classificação para todos os usuários sempre que o Admin visualizar o cargo
   useEffect(() => {

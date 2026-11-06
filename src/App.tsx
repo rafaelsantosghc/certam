@@ -117,12 +117,64 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, Error
 export const AppContent: React.FC = () => {
   const { usuario } = useAuth();
 
-  // Navigation routing state
-  const [currentView, setCurrentView] = useState<'portal' | 'concurso_geral' | 'concurso' | 'lote' | 'admin' | 'politica'>('portal');
-  const [concursoId, setConcursoId] = useState<string>(() => certamStore.getConcursos()[0]?.id || '');
-  const [cargoId, setCargoId] = useState<string>(() => certamStore.getConcursos()[0]?.cargos?.[0]?.id || '');
-  const [initialTab, setInitialTab] = useState<string>('dashboard');
-  const [loteId, setLoteId] = useState<string>('');
+  // Navigation routing state with synchronous URL resolution to prevent reload flashes or errors
+  const initialUrlParams = React.useMemo(() => {
+    try {
+      const pathname = typeof window !== 'undefined' ? window.location.pathname.toLowerCase() : '';
+      const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams();
+      const urlId = params.get('id');
+      const urlCargo = params.get('cargo');
+      const urlTab = params.get('tab');
+      const urlAdmin = params.get('admin');
+      const urlLote = params.get('lote');
+
+      const concursosDisponiveis = certamStore.getConcursos();
+      const concursoValido = urlId ? concursosDisponiveis.find((c) => c.id === urlId) : null;
+      const cId = concursoValido ? urlId! : concursosDisponiveis[0]?.id || 'tjrs_2025';
+      const concRef = concursoValido || concursosDisponiveis[0];
+
+      const cgId =
+        (urlCargo && concRef?.cargos?.some((cg) => cg.id === urlCargo) ? urlCargo : null) ||
+        concRef?.cargos?.[0]?.id ||
+        '';
+
+      let view: 'portal' | 'concurso_geral' | 'concurso' | 'lote' | 'admin' | 'politica' | 'chat' = 'portal';
+      let tab = urlTab || 'dashboard';
+
+      if (urlTab === 'chat' || pathname.includes('chat')) {
+        view = 'chat';
+      } else if (urlAdmin === '1' || pathname.includes('admin')) {
+        view = 'admin';
+        tab = urlTab || 'concursos';
+      } else if (urlTab === 'lote' || pathname.includes('lote')) {
+        view = 'lote';
+      } else if (urlTab === 'politica' || pathname.includes('politica')) {
+        view = 'politica';
+      } else if (urlId || pathname.includes('concurso') || concursoValido) {
+        if (urlCargo || (urlTab && urlTab !== 'geral')) {
+          view = 'concurso';
+        } else {
+          view = 'concurso_geral';
+        }
+      }
+
+      return { view, cId, cgId, tab, loteId: urlLote || '' };
+    } catch {
+      return {
+        view: 'portal' as const,
+        cId: certamStore.getConcursos()[0]?.id || 'tjrs_2025',
+        cgId: certamStore.getConcursos()[0]?.cargos?.[0]?.id || '',
+        tab: 'dashboard',
+        loteId: '',
+      };
+    }
+  }, []);
+
+  const [currentView, setCurrentView] = useState<'portal' | 'concurso_geral' | 'concurso' | 'lote' | 'admin' | 'politica' | 'chat'>(initialUrlParams.view);
+  const [concursoId, setConcursoId] = useState<string>(initialUrlParams.cId);
+  const [cargoId, setCargoId] = useState<string>(initialUrlParams.cgId);
+  const [initialTab, setInitialTab] = useState<string>(initialUrlParams.tab);
+  const [loteId, setLoteId] = useState<string>(initialUrlParams.loteId);
   const [sidebarMobileOpen, setSidebarMobileOpen] = useState(false);
   const [historyStack, setHistoryStack] = useState<{ view: string; params?: any }[]>([]);
 
@@ -180,55 +232,6 @@ export const AppContent: React.FC = () => {
     };
   }, [concursoId]);
 
-  // Read URL query params and path on initial mount
-  useEffect(() => {
-    try {
-      const pathname = window.location.pathname.toLowerCase();
-      const params = new URLSearchParams(window.location.search);
-      const urlId = params.get('id');
-      const urlCargo = params.get('cargo');
-      const urlTab = params.get('tab');
-      const urlAdmin = params.get('admin');
-      const urlLote = params.get('lote');
-
-      const concursosDisponiveis = certamStore.getConcursos();
-      const concursoValido = urlId ? concursosDisponiveis.find((c) => c.id === urlId) : null;
-      const concursoIdFinal = concursoValido ? urlId : concursosDisponiveis[0]?.id || 'tjrs_2025';
-
-      if (concursoIdFinal) {
-        setConcursoId(concursoIdFinal);
-      }
-
-      if (urlAdmin === '1' || pathname.includes('admin')) {
-        if (urlTab) setInitialTab(urlTab);
-        setCurrentView('admin');
-      } else if (urlTab === 'lote' || pathname.includes('lote')) {
-        if (concursoIdFinal) setConcursoId(concursoIdFinal);
-        if (urlCargo) setCargoId(urlCargo);
-        if (urlLote) setLoteId(urlLote);
-        setCurrentView('lote');
-      } else if (urlTab === 'politica' || pathname.includes('politica')) {
-        setCurrentView('politica');
-      } else if (urlId || pathname.includes('concurso') || concursoValido) {
-        const concRef = concursoValido || concursosDisponiveis[0];
-        if (urlCargo || urlTab) {
-          const resolvedCargo =
-            (urlCargo && concRef?.cargos?.some((cg) => cg.id === urlCargo) ? urlCargo : null) ||
-            concRef?.cargos?.[0]?.id ||
-            cargoId;
-          if (resolvedCargo) setCargoId(resolvedCargo);
-          if (urlTab) setInitialTab(urlTab);
-          setCurrentView('concurso');
-        } else {
-          setCurrentView('concurso_geral');
-        }
-      }
-    } catch {
-      // Fallback seguro caso ocorra qualquer exceção ao analisar a URL
-      setCurrentView('portal');
-    }
-  }, []);
-
   const handleNavigate = (
     view: string,
     params?: { concursoId?: string; cargoId?: string; tab?: string; loteId?: string }
@@ -264,7 +267,7 @@ export const AppContent: React.FC = () => {
     if (params?.loteId !== undefined) setLoteId(params.loteId);
     setInitialTab(t);
 
-    setCurrentView(view as 'portal' | 'concurso_geral' | 'concurso' | 'lote' | 'admin' | 'politica');
+    setCurrentView(view as 'portal' | 'concurso_geral' | 'concurso' | 'lote' | 'admin' | 'politica' | 'chat');
 
     // Sincronizar Permalinks na barra de navegação do browser
     try {
@@ -275,7 +278,9 @@ export const AppContent: React.FC = () => {
       url.searchParams.delete('admin');
       url.searchParams.delete('lote');
 
-      if (view === 'concurso_geral') {
+      if (view === 'chat') {
+        url.searchParams.set('tab', 'chat');
+      } else if (view === 'concurso_geral') {
         url.searchParams.set('id', cId);
       } else if (view === 'concurso') {
         url.searchParams.set('id', cId);
@@ -308,12 +313,30 @@ export const AppContent: React.FC = () => {
       if (previous.params?.cargoId) setCargoId(previous.params.cargoId);
       if (previous.params?.tab) setInitialTab(previous.params.tab);
       setCurrentView(previous.view as any);
+      try {
+        const url = new URL(window.location.href);
+        url.searchParams.delete('tab');
+        if (previous.view === 'concurso') {
+          if (previous.params?.concursoId) url.searchParams.set('id', previous.params.concursoId);
+          if (previous.params?.cargoId) url.searchParams.set('cargo', previous.params.cargoId);
+          if (previous.params?.tab) url.searchParams.set('tab', previous.params.tab);
+        } else if (previous.view === 'concurso_geral') {
+          if (previous.params?.concursoId) url.searchParams.set('id', previous.params.concursoId);
+        } else if (previous.view === 'admin') {
+          url.searchParams.set('admin', '1');
+        }
+        window.history.pushState({}, '', url.toString());
+      } catch {
+        // ignore
+      }
       window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
 
     // Navegação padrão inteligente de fallback
-    if (currentView === 'concurso') {
+    if (currentView === 'chat') {
+      setCurrentView('portal');
+    } else if (currentView === 'concurso') {
       setCurrentView('concurso_geral');
     } else if (
       currentView === 'concurso_geral' ||
@@ -332,7 +355,9 @@ export const AppContent: React.FC = () => {
       { label: 'Portal CERTAM', onClick: () => handleNavigate('portal') },
     ];
 
-    if (currentView === 'concurso_geral') {
+    if (currentView === 'chat') {
+      list.push({ label: 'Conversas & Chat dos Concursos' });
+    } else if (currentView === 'concurso_geral') {
       const conc = certamStore.getConcurso(concursoId);
       if (conc) {
         list.push({ label: conc.orgao, onClick: () => handleNavigate('concurso_geral', { concursoId }) });
@@ -491,7 +516,7 @@ export const AppContent: React.FC = () => {
   }, [chatBounds, sidebarCollapsed]);
 
   return (
-    <div className="min-h-screen flex flex-col bg-[var(--certam-light-bg)] text-[var(--certam-text-primary)] transition-colors duration-200">
+    <div className="min-h-screen flex flex-col w-full overflow-x-hidden bg-[var(--certam-light-bg)] text-[var(--certam-text-primary)] transition-colors duration-200">
       {/* Sidebar Lateral (#07192B) */}
       <Sidebar
         currentView={currentView}
@@ -504,7 +529,7 @@ export const AppContent: React.FC = () => {
       />
 
       {/* Conteúdo Principal com compensação de largura da sidebar dinâmica rigorosamente sincronizada */}
-      <div className={`flex-1 flex flex-col min-w-0 transition-[padding] duration-300 ease-in-out ${sidebarCollapsed ? 'lg:pl-16' : 'lg:pl-64'}`}>
+      <div className={`w-full min-w-0 flex-1 flex flex-col transition-[padding-left] duration-300 ease-in-out ${sidebarCollapsed ? 'lg:pl-16' : 'lg:pl-64'}`}>
         <OfflineIndicator />
         {/* Top Header */}
         <Header
@@ -513,7 +538,7 @@ export const AppContent: React.FC = () => {
           isSidebarCollapsed={sidebarCollapsed}
           breadcrumbs={breadcrumbs}
           onNavigateAdmin={() => handleNavigate('admin')}
-          showAdminShortcut={currentView !== 'admin'}
+          showAdminShortcut={currentView !== 'admin' && currentView !== 'chat'}
           onNavigate={handleNavigate}
           concursoAtualId={concursoId}
         />
@@ -521,6 +546,16 @@ export const AppContent: React.FC = () => {
         {/* Área Central Renderizada */}
         <main className="flex-1 p-4 sm:p-6 lg:p-8">
           {currentView === 'portal' && <PortalHome onNavigate={handleNavigate} />}
+
+          {currentView === 'chat' && (
+            <PersistentChatWidget
+              isFullPage={true}
+              onToggleFullPage={(expand) => {
+                if (!expand) handleVoltar();
+              }}
+              onVoltar={handleVoltar}
+            />
+          )}
 
           {currentView === 'concurso_geral' && (
             <ConcursoGeralView
@@ -622,8 +657,14 @@ export const AppContent: React.FC = () => {
           cargoAtualId={cargoId}
         />
 
-        {/* Widget de Chat Persistente Flutuante com Abas por Concurso, Mute e Emojis */}
-        <PersistentChatWidget />
+        {/* Widget de Chat Persistente Flutuante (quando não estiver na página própria de conversas) */}
+        {currentView !== 'chat' && (
+          <PersistentChatWidget
+            onToggleFullPage={(expand) => {
+              if (expand) handleNavigate('chat');
+            }}
+          />
+        )}
 
         {/* Botão Voltar ao Topo que se reposiciona dinamicamente para não ficar atrás do chat */}
         {mostrarVoltarAoTopo && (

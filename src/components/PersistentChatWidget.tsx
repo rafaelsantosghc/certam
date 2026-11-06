@@ -56,6 +56,9 @@ import {
 interface PersistentChatWidgetProps {
   concursoInicialId?: string;
   onRequireAuth?: () => void;
+  isFullPage?: boolean;
+  onToggleFullPage?: (expand: boolean) => void;
+  onVoltar?: () => void;
 }
 
 interface ResumoNovaMensagemChat {
@@ -509,6 +512,9 @@ DmMessageItem.displayName = 'DmMessageItem';
 export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
   concursoInicialId,
   onRequireAuth,
+  isFullPage = false,
+  onToggleFullPage,
+  onVoltar,
 }) => {
   const { usuario, isAdmin } = useAuth();
   const {
@@ -517,8 +523,8 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
     solicitarPermissaoNotificacaoNavegador,
   } = useNotifications();
 
-  const [isOpen, setIsOpen] = useState(false);
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isOpen, setIsOpen] = useState(isFullPage);
+  const [isExpanded, setIsExpanded] = useState(isFullPage);
   const [abaModo, setAbaModo] = useState<'concursos' | 'privadas'>('concursos');
   const [mobileViewMode, setMobileViewMode] = useState<'mensagens' | 'conversas'>('mensagens');
 
@@ -1039,7 +1045,12 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
     if (!container) return;
     const distanceFromBottom =
       container.scrollHeight - container.scrollTop - container.clientHeight;
+    const atBottom = distanceFromBottom <= 32;
+    setIsUserAtBottom(atBottom);
     setMostrarBotaoDescer(distanceFromBottom > 48);
+    if (atBottom) {
+      setNovasMensagensNaoLidasCount(0);
+    }
 
     // Lazy loading: ao rolar próximo ao topo (scrollTop < 40), carrega mais 50 mensagens anteriores
     if (container.scrollTop < 40) {
@@ -1059,7 +1070,11 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
   };
 
   const verificarSeUsuarioEstaNoFinal = (): boolean => {
-    return isUserAtBottom;
+    const container = messagesContainerRef.current;
+    if (!container) return isUserAtBottom;
+    const distanceFromBottom =
+      container.scrollHeight - container.scrollTop - container.clientHeight;
+    return isUserAtBottom && distanceFromBottom <= 32;
   };
 
   // Configuração do IntersectionObserver para detectar com precisão quando o usuário está no fim da lista
@@ -1075,6 +1090,7 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
           setIsUserAtBottom(atBottom);
           if (atBottom) {
             setNovasMensagensNaoLidasCount(0);
+            setMostrarBotaoDescer(false);
           }
         });
       },
@@ -1088,7 +1104,7 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
     return () => {
       observer.disconnect();
     };
-  }, [isOpen, abaModo, concursoAtivoId, salaAtivaId, dmContatoEmail]);
+  }, [isOpen, isFullPage, abaModo, concursoAtivoId, salaAtivaId, dmContatoEmail]);
 
   // Purga automática de mensagens antigas (por período de retenção ou limite de contagem) ao inicializar e periodicamente para preservar o localStorage
   useEffect(() => {
@@ -1931,22 +1947,51 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
     rolarAteOFim();
   };
 
-  const handleCurtir = (msgId: string) => {
-    chatStore.curtirMensagem(concursoAtivoId, salaAtiva.cargoScope, 'geral', msgId, usuario);
-    carregarMensagensAtivas();
-  };
+  const handleCurtir = React.useCallback(
+    (msgId: string) => {
+      chatStore.curtirMensagem(concursoAtivoId, salaAtiva.cargoScope, 'geral', msgId, usuario);
+      carregarMensagensAtivas();
+    },
+    [concursoAtivoId, salaAtiva.cargoScope, usuario]
+  );
 
-  const handleReagir = (msgId: string, emoji: string) => {
-    chatStore.reagirEmoji(concursoAtivoId, salaAtiva.cargoScope, 'geral', msgId, emoji, usuario);
-    setEmojisFrequentes(chatStore.getEmojisFrequentes(8));
-    setEmojiPickerMsgId(null);
-    carregarMensagensAtivas();
-  };
+  const handleReagir = React.useCallback(
+    (msgId: string, emoji: string) => {
+      chatStore.reagirEmoji(concursoAtivoId, salaAtiva.cargoScope, 'geral', msgId, emoji, usuario);
+      setEmojisFrequentes(chatStore.getEmojisFrequentes(8));
+      setEmojiPickerMsgId(null);
+      carregarMensagensAtivas();
+    },
+    [concursoAtivoId, salaAtiva.cargoScope, usuario]
+  );
 
-  const handleReenviar = async (msgId: string) => {
-    await chatStore.reenviarMensagem(concursoAtivoId, salaAtiva.cargoScope, 'geral', msgId);
-    carregarMensagensAtivas();
-  };
+  const handleReenviar = React.useCallback(
+    async (msgId: string) => {
+      await chatStore.reenviarMensagem(concursoAtivoId, salaAtiva.cargoScope, 'geral', msgId);
+      carregarMensagensAtivas();
+    },
+    [concursoAtivoId, salaAtiva.cargoScope]
+  );
+
+  const handleToggleEmojiPicker = React.useCallback((id: string) => {
+    setEmojiPickerMsgId((prev) => (prev === id ? null : id));
+  }, []);
+
+  const handleAlternarFixado = React.useCallback(
+    (id: string) => {
+      chatStore.alternarFixado(concursoAtivoId, salaAtiva.cargoScope, 'geral', id);
+      carregarMensagensAtivas();
+    },
+    [concursoAtivoId, salaAtiva.cargoScope]
+  );
+
+  const handleApagar = React.useCallback(
+    (id: string) => {
+      chatStore.apagarMensagem(concursoAtivoId, salaAtiva.cargoScope, 'geral', id);
+      carregarMensagensAtivas();
+    },
+    [concursoAtivoId, salaAtiva.cargoScope]
+  );
 
   const handleInserirEmojiTexto = (emoji: string) => {
     setTexto((prev) => `${prev}${emoji}`);
@@ -2093,11 +2138,17 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
   return (
     <div
       ref={chatContainerRef}
-      className={`fixed z-[45] flex flex-col items-end max-w-[calc(100vw-1rem)] chat-widget-box ${
-        isOpen ? 'chat-window-box' : ''
-      }`}
+      className={
+        isFullPage
+          ? 'w-full h-[calc(100vh-130px)] min-h-[580px] max-w-[1880px] mx-auto bg-white rounded-2xl shadow-2xl border border-slate-300 flex flex-col overflow-hidden animate-in fade-in duration-200'
+          : `fixed z-[45] flex flex-col items-end max-w-[calc(100vw-1rem)] chat-widget-box ${
+              isOpen ? 'chat-window-box' : ''
+            }`
+      }
       style={
-        isOpen
+        isFullPage
+          ? undefined
+          : isOpen
           ? windowPos
             ? { left: `${windowPos.x}px`, top: `${windowPos.y}px`, bottom: 'auto', right: 'auto' }
             : { bottom: '24px', right: '24px' }
@@ -2191,7 +2242,7 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
       )}
 
       {/* Botão Flutuante Sempre em Destaque quando minimizado */}
-      {!isOpen ? (
+      {!isFullPage && !isOpen ? (
         <button
           type="button"
           onMouseDown={handleMouseDownBubble}
@@ -2228,22 +2279,43 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
           </div>
         </button>
       ) : (
-        /* Janela Persistente do Chat com Layout de Lista Lateral Responsivo, Resizável e Movível */
+        /* Janela do Chat com Layout de Lista Lateral Responsivo, Resizável e Movível (ou Tela Inteira modo WhatsApp) */
         <div
-          className={`bg-white rounded-2xl shadow-2xl border border-slate-300 flex flex-col overflow-hidden transition-all duration-200 ${
-            isExpanded
-              ? 'w-[96vw] sm:w-[720px] md:w-[800px]'
-              : 'w-[94vw] sm:w-[580px] md:w-[640px]'
-          }`}
-          style={{ resize: 'both', overflow: 'auto', minWidth: '340px', minHeight: '460px', maxWidth: '98vw', maxHeight: '92vh' }}
+          className={
+            isFullPage
+              ? 'w-full h-full flex flex-col overflow-hidden bg-white'
+              : `bg-white rounded-2xl shadow-2xl border border-slate-300 flex flex-col overflow-hidden transition-all duration-200 ${
+                  isExpanded
+                    ? 'w-[96vw] sm:w-[720px] md:w-[800px]'
+                    : 'w-[94vw] sm:w-[580px] md:w-[640px]'
+                }`
+          }
+          style={
+            isFullPage
+              ? undefined
+              : { resize: 'both', overflow: 'auto', minWidth: '340px', minHeight: '460px', maxWidth: '98vw', maxHeight: '92vh' }
+          }
         >
-          {/* Cabeçalho Principal (Movível / Draggable) */}
+          {/* Cabeçalho Principal (Movível / Draggable quando em modo janela) */}
           <div
-            onMouseDown={handleMouseDownWindowHeader}
-            className="bg-gradient-to-r from-[#07192B] via-[#0A2540] to-[#0D3B56] px-3.5 py-2.5 text-white flex items-center justify-between gap-2 shrink-0 cursor-move select-none"
-            title="Arraste para mover a janela do chat"
+            onMouseDown={isFullPage ? undefined : handleMouseDownWindowHeader}
+            className={`bg-gradient-to-r from-[#07192B] via-[#0A2540] to-[#0D3B56] px-3.5 py-2.5 text-white flex items-center justify-between gap-2 shrink-0 ${
+              isFullPage ? 'select-text' : 'cursor-move select-none'
+            }`}
+            title={isFullPage ? undefined : 'Arraste para mover a janela do chat'}
           >
             <div className="flex items-center gap-2 min-w-0">
+              {isFullPage && onVoltar && (
+                <button
+                  type="button"
+                  onClick={onVoltar}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-[11px] font-semibold text-teal-200 border border-teal-400/30 cursor-pointer shrink-0 transition-colors mr-1"
+                  title="Voltar para a página anterior"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                  <span>Voltar</span>
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() =>
@@ -2377,12 +2449,24 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
 
               <button
                 type="button"
-                onClick={() => setIsExpanded(!isExpanded)}
-                title={isExpanded ? 'Restaurar tamanho' : 'Expandir janela do chat'}
-                className="p-1.5 rounded-lg hover:bg-white/10 text-slate-300 transition-colors cursor-pointer"
+                onClick={() => {
+                  if (isFullPage) {
+                    if (onToggleFullPage) onToggleFullPage(false);
+                    else if (onVoltar) onVoltar();
+                  } else {
+                    if (onToggleFullPage) onToggleFullPage(true);
+                    else setIsExpanded(!isExpanded);
+                  }
+                }}
+                title={
+                  isFullPage
+                    ? 'Voltar para janela flutuante'
+                    : 'Expandir janela do chat (estilo WhatsApp)'
+                }
+                className="p-1.5 rounded-lg hover:bg-white/10 text-slate-300 hover:text-white transition-colors cursor-pointer"
               >
-                {isExpanded ? (
-                  <Minimize2 className="w-3.5 h-3.5" />
+                {isFullPage || isExpanded ? (
+                  <Minimize2 className="w-3.5 h-3.5 text-teal-300" />
                 ) : (
                   <Maximize2 className="w-3.5 h-3.5" />
                 )}
@@ -2390,9 +2474,16 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
 
               <button
                 type="button"
-                onClick={() => setIsOpen(false)}
-                title="Minimizar chat (permanece ativo na tela)"
-                className="p-1.5 rounded-lg hover:bg-white/10 text-slate-300 transition-colors cursor-pointer"
+                onClick={() => {
+                  if (isFullPage) {
+                    if (onToggleFullPage) onToggleFullPage(false);
+                    else if (onVoltar) onVoltar();
+                  } else {
+                    setIsOpen(false);
+                  }
+                }}
+                title={isFullPage ? 'Retornar para a página anterior' : 'Minimizar chat (permanece ativo na tela)'}
+                className="p-1.5 rounded-lg hover:bg-white/10 text-slate-300 hover:text-white transition-colors cursor-pointer"
               >
                 <ChevronDown className="w-4 h-4" />
               </button>
@@ -2405,7 +2496,7 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
             <aside
               className={`${
                 sidebarRetraido ? 'hidden sm:hidden' : mobileViewMode === 'conversas' ? 'flex w-full' : 'hidden sm:flex'
-              } sm:w-48 md:w-56 bg-slate-900 border-r border-slate-800 flex-col shrink-0`}
+              } ${isFullPage ? 'sm:w-72 md:w-80' : 'sm:w-48 md:w-56'} bg-slate-900 border-r border-slate-800 flex-col shrink-0`}
             >
               {/* Seletor Principal: Concursos vs Mensagens Privadas */}
               <div className="p-1.5 bg-slate-950 border-b border-slate-800 grid grid-cols-2 gap-1">
@@ -2572,7 +2663,7 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
                   {/* Lista Lateral de Chats Ativos Agrupados por Categoria (via useChatPermissions) */}
                   <div
                     className={`overflow-y-auto p-1.5 space-y-2.5 ${
-                      isExpanded ? 'h-[335px]' : 'h-[235px]'
+                      isFullPage ? 'flex-1 min-h-0' : isExpanded ? 'h-[335px]' : 'h-[235px]'
                     }`}
                   >
                     {categoriasVisiveis
@@ -2709,7 +2800,7 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
 
                   <div
                     className={`overflow-y-auto p-1.5 space-y-1 ${
-                      isExpanded ? 'h-[445px]' : 'h-[345px]'
+                      isFullPage ? 'flex-1 min-h-0' : isExpanded ? 'h-[445px]' : 'h-[345px]'
                     }`}
                   >
                     {dmConversasFiltradas.map((conv) => {
@@ -2896,8 +2987,8 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
                   {/* Validação de segurança via useChatPermissions antes de renderizar o Chat dos Aprovados ou Chat do Lote */}
                   {!podeRenderizarSala(salaAtiva) || (salaAtiva.restrito && !salaAtiva.temAcesso) ? (
                     <div
-                      className={`flex flex-col items-center justify-center text-center p-6 bg-slate-50/80 shrink-0 ${
-                        isExpanded ? 'h-[455px]' : 'h-[355px]'
+                      className={`flex flex-col items-center justify-center text-center p-6 bg-slate-50/80 ${
+                        isFullPage ? 'flex-1 min-h-0' : isExpanded ? 'h-[455px] shrink-0' : 'h-[355px] shrink-0'
                       }`}
                     >
                       <div className="w-11 h-11 rounded-2xl bg-amber-100 text-amber-700 border border-amber-300 flex items-center justify-center mb-3 shadow-xs">
@@ -2961,12 +3052,12 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
                         )}
                       </div>
 
-                      {/* Container de tamanho fixo com overflow-y-auto posicionado a partir da mensagem mais antiga não lida */}
+                      {/* Container com overflow-y-auto posicionado a partir da mensagem mais antiga não lida */}
                       <div
                         ref={messagesContainerRef}
                         onScroll={handleContainerScroll}
-                        className={`overflow-y-auto overscroll-contain p-3 space-y-2.5 bg-slate-50/60 shrink-0 relative ${
-                          isExpanded ? 'h-[365px]' : 'h-[265px]'
+                        className={`overflow-y-auto overscroll-contain p-3 space-y-2.5 bg-slate-50/60 relative ${
+                          isFullPage ? 'flex-1 min-h-0' : isExpanded ? 'h-[365px] shrink-0' : 'h-[265px] shrink-0'
                         }`}
                       >
                         {mensagensFiltradasBusca.length === 0 ? (
@@ -3022,30 +3113,12 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
                                   emojisFrequentes={emojisFrequentes}
                                   onCurtir={handleCurtir}
                                   onReagir={handleReagir}
-                                  onToggleEmojiPicker={(id) =>
-                                    setEmojiPickerMsgId((prev) => (prev === id ? null : id))
-                                  }
+                                  onToggleEmojiPicker={handleToggleEmojiPicker}
                                   onSetCategoriaEmoji={setCategoriaEmojiAtiva}
                                   onIniciarDm={handleIniciarConversaPrivada}
                                   onReenviar={handleReenviar}
-                                  onAlternarFixado={(id) => {
-                                    chatStore.alternarFixado(
-                                      concursoAtivoId,
-                                      salaAtiva.cargoScope,
-                                      'geral',
-                                      id
-                                    );
-                                    carregarMensagensAtivas();
-                                  }}
-                                  onApagar={(id) => {
-                                    chatStore.apagarMensagem(
-                                      concursoAtivoId,
-                                      salaAtiva.cargoScope,
-                                      'geral',
-                                      id
-                                    );
-                                    carregarMensagensAtivas();
-                                  }}
+                                  onAlternarFixado={handleAlternarFixado}
+                                  onApagar={handleApagar}
                                   formatarDuracaoAudio={formatarDuracaoAudio}
                                   destacarTextoBusca={destacarTextoBusca}
                                 />
@@ -3189,8 +3262,8 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
                       <div
                         ref={messagesContainerRef}
                         onScroll={handleContainerScroll}
-                        className={`overflow-y-auto overscroll-contain p-3 space-y-2.5 bg-slate-50/60 shrink-0 relative ${
-                          isExpanded ? 'h-[375px]' : 'h-[275px]'
+                        className={`overflow-y-auto overscroll-contain p-3 space-y-2.5 bg-slate-50/60 relative ${
+                          isFullPage ? 'flex-1 min-h-0' : isExpanded ? 'h-[375px] shrink-0' : 'h-[275px] shrink-0'
                         }`}
                       >
                         {dmIsBloqueado && (
@@ -3258,8 +3331,8 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
                     </>
                   ) : (
                     <div
-                      className={`flex flex-col items-center justify-center text-center p-6 bg-slate-50/70 shrink-0 ${
-                        isExpanded ? 'h-[460px]' : 'h-[360px]'
+                      className={`flex flex-col items-center justify-center text-center p-6 bg-slate-50/70 ${
+                        isFullPage ? 'flex-1 min-h-0' : isExpanded ? 'h-[460px] shrink-0' : 'h-[360px] shrink-0'
                       }`}
                     >
                       <MessageCircle className="w-8 h-8 text-teal-600 mb-2" />

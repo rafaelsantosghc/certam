@@ -128,7 +128,7 @@ export const Header: React.FC<HeaderProps> = ({
 
   return (
     <>
-      <header className="h-[68px] sm:h-[76px] bg-white border-b border-slate-200 sticky top-0 z-[60] card-shadow flex items-center justify-between px-4 sm:px-6 lg:px-8 shrink-0">
+      <header className="h-[68px] sm:h-[76px] bg-white border-b border-slate-200 sticky top-0 z-40 card-shadow flex items-center justify-between px-4 sm:px-6 lg:px-8 shrink-0">
         {/* Esquerda: Hamburger Mobile e Breadcrumb */}
         <div className="flex items-center gap-3 min-w-0">
           <button
