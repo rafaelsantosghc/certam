@@ -78,6 +78,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
         />
       )}
 
+      {/* Backdrop quando expandido por hover sobre o site */}
+      {isCollapsed && hoverExpanded && (
+        <div
+          onClick={() => setHoverExpanded(false)}
+          className="fixed inset-0 bg-slate-950/30 z-40 lg:block hidden backdrop-blur-[1px]"
+        />
+      )}
+
       {/* Trigger invisível na borda esquerda para abrir ao passar o mouse quando colapsado */}
       {isCollapsed && (
         <div
@@ -89,17 +97,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <aside
         onMouseEnter={() => isCollapsed && setHoverExpanded(true)}
         onMouseLeave={() => isCollapsed && setHoverExpanded(false)}
-        className={`fixed inset-y-0 left-0 z-50 bg-[#07192B] text-white flex flex-col transition-all duration-300 shrink-0 border-r border-[#0F2942] ${
+        className={`fixed inset-y-0 left-0 z-50 bg-[#07192B] text-white flex flex-col transition-all duration-300 shrink-0 border-r border-[#0F2942] shadow-2xl ${
           efetivamenteColapsado ? 'w-16' : 'w-64'
         } ${
-          isOpenMobile ? 'translate-x-0 shadow-2xl w-64' : '-translate-x-full lg:translate-x-0'
+          isOpenMobile ? 'translate-x-0 w-64' : '-translate-x-full lg:translate-x-0'
         }`}
       >
         {/* Logo e Marca CERTAM */}
         <button
           type="button"
           onClick={() => handleLinkClick('portal')}
-          className="h-[76px] flex items-center px-6 border-b border-[#0F2942] gap-3 group text-left w-full cursor-pointer"
+          title="Portal CERTAM"
+          className="h-[76px] flex items-center px-4 sm:px-6 border-b border-[#0F2942] gap-3 group text-left w-full cursor-pointer"
         >
           <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#135A7A] via-[#1D8A8A] to-[#2DD4AA] p-1.5 flex items-center justify-center shrink-0 shadow-sm group-hover:brightness-110 transition-all">
             <svg className="w-full h-full" viewBox="0 0 100 100" fill="none">
@@ -119,7 +128,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               />
             </svg>
           </div>
-          <div>
+          <div className={`transition-opacity duration-200 overflow-hidden whitespace-nowrap ${efetivamenteColapsado ? 'opacity-0 w-0' : 'opacity-100'}`}>
             <span className="text-xl font-bold tracking-widest text-white font-serif uppercase">
               CERTAM
             </span>
@@ -130,21 +139,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </button>
 
         {/* Navegação Geral do Portal */}
-        <nav className="flex-1 py-5 space-y-1 overflow-y-auto">
+        <nav className="flex-1 py-5 space-y-1 overflow-y-auto overflow-x-hidden">
           {/* 1. Concursos Cadastrados */}
           <button
             type="button"
             onClick={() => handleLinkClick('portal')}
-            className={`w-full flex items-center gap-3.5 px-6 py-3 text-sm font-medium transition-all cursor-pointer text-left ${
+            title="Concursos cadastrados"
+            className={`w-full flex items-center gap-3.5 px-4 sm:px-6 py-3 text-sm font-medium transition-all cursor-pointer text-left ${
               currentView === 'portal'
                 ? 'font-semibold text-[#2DD4AA] bg-[#0C2640] border-l-4 border-[#2DD4AA]'
                 : 'text-[#94A3B8] hover:text-white hover:bg-[#0C2640]/50 border-l-4 border-transparent'
             }`}
           >
-            <span className="w-5 h-5 flex items-center justify-center">
+            <span className="w-5 h-5 flex items-center justify-center shrink-0">
               <LayoutGrid className="w-5 h-5" />
             </span>
-            <span>Concursos cadastrados</span>
+            <span className={`whitespace-nowrap overflow-hidden transition-opacity duration-200 ${efetivamenteColapsado ? 'opacity-0 w-0' : 'opacity-100'}`}>
+              Concursos cadastrados
+            </span>
           </button>
 
           {/* 3. Painel Administrativo (Apenas para o Administrador) */}
@@ -152,16 +164,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <button
               type="button"
               onClick={() => handleLinkClick('admin')}
-              className={`w-full flex items-center gap-3.5 px-6 py-3 text-sm font-medium transition-all cursor-pointer text-left ${
+              title="Painel administrativo"
+              className={`w-full flex items-center gap-3.5 px-4 sm:px-6 py-3 text-sm font-medium transition-all cursor-pointer text-left ${
                 currentView === 'admin'
                   ? 'font-semibold text-amber-300 bg-[#0C2640] border-l-4 border-amber-400'
                   : 'text-[#94A3B8] hover:text-amber-300 hover:bg-[#0C2640]/50 border-l-4 border-transparent'
               }`}
             >
-              <span className="w-5 h-5 flex items-center justify-center">
+              <span className="w-5 h-5 flex items-center justify-center shrink-0">
                 <Settings className="w-5 h-5" />
               </span>
-              <span className="flex items-center gap-1.5">
+              <span className={`flex items-center gap-1.5 whitespace-nowrap overflow-hidden transition-opacity duration-200 ${efetivamenteColapsado ? 'opacity-0 w-0' : 'opacity-100'}`}>
                 <span>Painel administrativo</span>
                 <span className="px-1 py-0.5 rounded text-[9px] bg-amber-400/20 text-amber-300 font-mono font-bold">
                   GERÊNCIA
@@ -174,109 +187,65 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <button
             type="button"
             onClick={() => handleLinkClick('politica')}
-            className={`w-full flex items-center gap-3.5 px-6 py-3 text-sm font-medium transition-all cursor-pointer text-left ${
+            title="Política de privacidade"
+            className={`w-full flex items-center gap-3.5 px-4 sm:px-6 py-3 text-sm font-medium transition-all cursor-pointer text-left ${
               currentView === 'politica'
                 ? 'font-semibold text-[#2DD4AA] bg-[#0C2640] border-l-4 border-[#2DD4AA]'
                 : 'text-[#94A3B8] hover:text-white hover:bg-[#0C2640]/50 border-l-4 border-transparent'
             }`}
           >
-            <span className="w-5 h-5 flex items-center justify-center">
+            <span className="w-5 h-5 flex items-center justify-center shrink-0">
               <ShieldCheck className="w-5 h-5" />
             </span>
-            <span>Política de privacidade</span>
+            <span className={`whitespace-nowrap overflow-hidden transition-opacity duration-200 ${efetivamenteColapsado ? 'opacity-0 w-0' : 'opacity-100'}`}>
+              Política de privacidade
+            </span>
           </button>
 
           {/* MENU DINÂMICO: CONCURSOS CADASTRADOS */}
-          <div className="pt-4 border-t border-[#0F2942] px-4 space-y-2">
-            <div className="flex items-center justify-between text-[10px] uppercase tracking-wider font-mono font-bold text-teal-400 px-2">
-              <button
-                type="button"
-                onClick={() => setSecaoConcursosAberta(!secaoConcursosAberta)}
-                className="flex items-center gap-1.5 hover:text-white cursor-pointer transition-colors"
-                title={secaoConcursosAberta ? 'Recolher concursos ativos' : 'Expandir concursos ativos'}
-              >
-                <ChevronDown
-                  className={`w-3.5 h-3.5 transition-transform duration-200 ${
-                    secaoConcursosAberta ? '' : '-rotate-90'
-                  }`}
-                />
-                <span>Concursos ativos</span>
-              </button>
-              <span className="px-1.5 py-0.5 rounded bg-teal-500/20 text-[#2DD4AA] text-[10px] font-mono font-bold">
-                {concursos.length}
-              </span>
-            </div>
+          {!efetivamenteColapsado && (
+            <div className="pt-4 border-t border-[#0F2942] px-4 space-y-2">
+              <div className="flex items-center justify-between text-[10px] uppercase tracking-wider font-mono font-bold text-teal-400 px-2">
+                <button
+                  type="button"
+                  onClick={() => setSecaoConcursosAberta(!secaoConcursosAberta)}
+                  className="flex items-center gap-1.5 hover:text-white cursor-pointer transition-colors"
+                  title={secaoConcursosAberta ? 'Recolher concursos ativos' : 'Expandir concursos ativos'}
+                >
+                  <ChevronDown
+                    className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                      secaoConcursosAberta ? '' : '-rotate-90'
+                    }`}
+                  />
+                  <span>Concursos ativos</span>
+                </button>
+                <span className="px-1.5 py-0.5 rounded bg-teal-500/20 text-[#2DD4AA] text-[10px] font-mono font-bold">
+                  {concursos.length}
+                </span>
+              </div>
 
-            {secaoConcursosAberta && (
-              <div className="space-y-1">
-                {concursos.length === 0 ? (
-                  <p className="text-[11px] text-slate-400/80 px-2.5 py-1.5 italic">
-                    Nenhum concurso ativo
-                  </p>
-                ) : (
-                  concursos.map((conc) => {
-                  const isActive =
-                    (currentView === 'concurso' || currentView === 'concurso_geral') &&
-                    concursoAtualId === conc.id;
-                  const isExpanded = concursosExpandidos[conc.id] !== false;
+              {secaoConcursosAberta && (
+                <div className="space-y-1">
+                  {concursos.length === 0 ? (
+                    <p className="text-[11px] text-slate-400/80 px-2.5 py-1.5 italic">
+                      Nenhum concurso ativo
+                    </p>
+                  ) : (
+                    concursos.map((conc) => {
+                    const isActive =
+                      (currentView === 'concurso' || currentView === 'concurso_geral') &&
+                      concursoAtualId === conc.id;
+                    const isExpanded = concursosExpandidos[conc.id] !== false;
 
-                  return (
-                    <div key={conc.id} className="space-y-0.5">
-                      <div
-                        className={`w-full rounded-xl text-xs font-semibold flex items-center justify-between transition-colors ${
-                          isActive
-                            ? 'bg-[#0C2640] text-teal-300 border border-teal-500/30'
-                            : 'text-slate-300 hover:text-white hover:bg-[#0C2640]/40'
-                        }`}
-                      >
-                        <button
-                          type="button"
-                          onClick={() =>
-                            handleLinkClick('concurso_geral', {
-                              concursoId: conc.id,
-                            })
-                          }
-                          className="flex-1 text-left px-3 py-2 truncate cursor-pointer hover:text-white"
-                          title={`Visão geral de ${conc.nome}`}
+                    return (
+                      <div key={conc.id} className="space-y-0.5">
+                        <div
+                          className={`w-full rounded-xl text-xs font-semibold flex items-center justify-between transition-colors ${
+                            isActive
+                              ? 'bg-[#0C2640] text-teal-300 border border-teal-500/30'
+                              : 'text-slate-300 hover:text-white hover:bg-[#0C2640]/40'
+                          }`}
                         >
-                          <span className="truncate pr-1">{conc.orgao} - {conc.ano}</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={(e) => toggleConcurso(conc.id, e)}
-                          className="p-1.5 hover:bg-white/10 rounded-lg text-slate-400 hover:text-white cursor-pointer transition-colors mr-1 shrink-0"
-                          title={isExpanded ? `Recolher cargos de ${conc.orgao}` : `Expandir cargos de ${conc.orgao}`}
-                        >
-                          <ChevronDown
-                            className={`w-3.5 h-3.5 transition-transform duration-200 ${
-                              isExpanded ? '' : '-rotate-90'
-                            }`}
-                          />
-                        </button>
-                      </div>
-
-                      {/* Cargos deste concurso */}
-                      {isExpanded && (
-                        <div className="pl-3 space-y-0.5">
-                          {conc.cargos?.map((cg) => (
-                            <button
-                              key={cg.id}
-                              type="button"
-                              onClick={() =>
-                                handleLinkClick('concurso', {
-                                  concursoId: conc.id,
-                                  cargoId: cg.id,
-                                  tab: 'dashboard',
-                                })
-                              }
-                              className="w-full text-left px-2.5 py-1 text-[11px] text-slate-400 hover:text-teal-200 truncate rounded-md hover:bg-white/5 transition-colors flex items-center gap-1.5 cursor-pointer"
-                            >
-                              <span className="w-1.5 h-1.5 rounded-full bg-teal-500/50"></span>
-                              <span className="truncate">{cg.nome}</span>
-                            </button>
-                          ))}
-
                           <button
                             type="button"
                             onClick={() =>
@@ -284,64 +253,102 @@ export const Sidebar: React.FC<SidebarProps> = ({
                                 concursoId: conc.id,
                               })
                             }
-                            className="w-full text-left px-2.5 py-1 text-[11px] text-teal-300 hover:text-white truncate rounded-md hover:bg-white/5 transition-colors flex items-center gap-1.5 font-medium cursor-pointer"
+                            className="flex-1 text-left px-3 py-2 truncate cursor-pointer hover:text-white"
+                            title={`Visão geral de ${conc.nome}`}
                           >
-                            <HelpCircle className="w-3.5 h-3.5 text-[#2DD4AA] shrink-0" />
-                            <span>Visão geral &amp; Quadro de vagas</span>
+                            <span className="truncate pr-1">{conc.orgao} - {conc.ano}</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={(e) => toggleConcurso(conc.id, e)}
+                            className="p-1.5 hover:bg-white/10 rounded-lg text-slate-400 hover:text-white cursor-pointer transition-colors mr-1 shrink-0"
+                            title={isExpanded ? `Recolher cargos de ${conc.orgao}` : `Expandir cargos de ${conc.orgao}`}
+                          >
+                            <ChevronDown
+                              className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                                isExpanded ? '' : '-rotate-90'
+                              }`}
+                            />
                           </button>
                         </div>
-                      )}
-                    </div>
-                  );
-                })
+
+                        {/* Cargos deste concurso */}
+                        {isExpanded && (
+                          <div className="pl-3 space-y-0.5">
+                            {conc.cargos?.map((cg) => (
+                              <button
+                                key={cg.id}
+                                type="button"
+                                onClick={() =>
+                                  handleLinkClick('concurso', {
+                                    concursoId: conc.id,
+                                    cargoId: cg.id,
+                                    tab: 'dashboard',
+                                  })
+                                }
+                                className="w-full text-left px-2.5 py-1 text-[11px] text-slate-400 hover:text-teal-200 truncate rounded-md hover:bg-white/5 transition-colors flex items-center gap-1.5 cursor-pointer"
+                              >
+                                <span className="w-1.5 h-1.5 rounded-full bg-teal-500/50"></span>
+                                <span className="truncate">{cg.nome}</span>
+                              </button>
+                            ))}
+
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleLinkClick('concurso_geral', {
+                                  concursoId: conc.id,
+                                })
+                              }
+                              className="w-full text-left px-2.5 py-1 text-[11px] text-teal-300 hover:text-white truncate rounded-md hover:bg-white/5 transition-colors flex items-center gap-1.5 font-medium cursor-pointer"
+                            >
+                              <HelpCircle className="w-3.5 h-3.5 text-[#2DD4AA] shrink-0" />
+                              <span>Visão geral &amp; Quadro de vagas</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+                </div>
               )}
-              </div>
-            )}
-          </div>
+            </div>
+          )}
         </nav>
 
         {/* Rodapé da Sidebar */}
-        <div className="p-4 border-t border-[#0F2942] space-y-2.5">
+        <div className="p-3 sm:p-4 border-t border-[#0F2942] space-y-2.5">
           {usuario ? (
-            <div className="px-3 py-2.5 rounded-xl bg-[#0C2640] border border-teal-500/20 text-xs space-y-1">
-              <div className="flex items-center justify-between">
+            <div className={`px-3 py-2.5 rounded-xl bg-[#0C2640] border border-teal-500/20 text-xs space-y-1 ${efetivamenteColapsado ? 'text-center px-1' : ''}`}>
+              <div className="flex items-center justify-center">
                 <span className={`font-bold block text-[11px] ${usuario.is_admin ? 'text-amber-300' : 'text-teal-400'}`}>
-                  {usuario.is_admin ? 'Administrador' : 'Candidato'}
+                  {efetivamenteColapsado ? usuario.nome.charAt(0).toUpperCase() : (usuario.is_admin ? 'Administrador' : 'Candidato')}
                 </span>
-                {usuario.is_admin && (
-                  <span className="px-1.5 py-0.5 rounded text-[9px] bg-amber-400/20 text-amber-300 font-mono font-bold">
-                    ADMIN
-                  </span>
-                )}
               </div>
-              <span className="text-white font-medium text-xs truncate block">
-                {usuario.nome}
-              </span>
-              <span className="text-slate-400 font-mono text-[10px] truncate block">
-                {usuario.email}
-              </span>
+              {!efetivamenteColapsado && (
+                <>
+                  <span className="text-white font-medium text-xs truncate block">
+                    {usuario.nome}
+                  </span>
+                  <span className="text-slate-400 font-mono text-[10px] truncate block">
+                    {usuario.email}
+                  </span>
+                </>
+              )}
             </div>
-          ) : (
-            <div className="px-3 py-2.5 rounded-xl bg-[#0C2640]/60 border border-slate-700/50 text-xs space-y-2">
-              <span className="text-slate-400 text-[11px] block">Acesso ao portal</span>
-              <button
-                type="button"
-                onClick={() => handleLinkClick('portal')}
-                className="w-full py-1.5 px-2 bg-teal-500/10 hover:bg-teal-500/20 border border-teal-500/30 text-teal-300 rounded-lg text-xs font-semibold text-center cursor-pointer transition-colors block"
-              >
-                Identificar-se
-              </button>
-            </div>
-          )}
+          ) : null}
 
           {usuario && (
             <button
               type="button"
               onClick={logout}
-              className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-xl transition-colors cursor-pointer"
+              title="Desconectar conta"
+              className={`w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-xl transition-colors cursor-pointer ${efetivamenteColapsado ? 'justify-center' : ''}`}
             >
-              <LogOut className="w-3.5 h-3.5" />
-              <span>Desconectar conta</span>
+              <LogOut className="w-3.5 h-3.5 shrink-0" />
+              {!efetivamenteColapsado && <span>Desconectar conta</span>}
             </button>
           )}
         </div>

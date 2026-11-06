@@ -578,26 +578,44 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Leitura de Notificações
   const marcarNotificacaoComoLida = (notifId: string) => {
+    let paraSalvar: Usuario | null = null;
     setUsuario((prev) => {
       if (!prev) return null;
       const ids = prev.read_notification_ids || [];
       if (ids.includes(notifId)) return prev;
-      return {
+      const atualizado: Usuario = {
         ...prev,
         read_notification_ids: [...ids, notifId],
       };
+      paraSalvar = atualizado;
+      return atualizado;
     });
+    if (paraSalvar) {
+      const salvo = userRegistryStore.salvarUsuario(paraSalvar);
+      if (salvo) {
+        setUsuario(salvo);
+      }
+    }
   };
 
   const marcarTodasNotificacoesComoLidas = (todasIds: string[]) => {
+    let paraSalvar: Usuario | null = null;
     setUsuario((prev) => {
       if (!prev) return null;
       const set = new Set([...(prev.read_notification_ids || []), ...todasIds]);
-      return {
+      const atualizado: Usuario = {
         ...prev,
         read_notification_ids: Array.from(set),
       };
+      paraSalvar = atualizado;
+      return atualizado;
     });
+    if (paraSalvar) {
+      const salvo = userRegistryStore.salvarUsuario(paraSalvar);
+      if (salvo) {
+        setUsuario(salvo);
+      }
+    }
   };
 
   const inscreverConcurso = (concursoId: string, cargoId: string) => {
