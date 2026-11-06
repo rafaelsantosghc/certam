@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { lotesStore } from '../store/lotesStore';
 import { userRegistryStore } from '../store/userRegistryStore';
+import { certamStore } from '../store/certamStore';
 import { useAuth } from '../store/authContext';
 import { COMARCAS_RS } from '../data/comarcas';
 import { Candidato, Lote, Comarca } from '../types';
@@ -168,8 +169,17 @@ export const SimuladorLotes: React.FC<SimuladorLotesProps> = ({
 
   const temPermissaoAcesso = isCandidatoContempladoNesteLote || isAdmin;
 
-  // Comarcas do lote ativo (ou fallback para COMARCAS_RS se não houver comarcas configuradas)
+  // Comarcas do lote ativo (ou catálogo de lotações definido no painel administrativo do concurso)
   const comarcasDoLote = useMemo<Comarca[]>(() => {
+    const conc = certamStore.getConcurso(concursoEfetivoId);
+    if (conc && conc.catalogo_lotacoes && conc.catalogo_lotacoes.length > 0) {
+      return conc.catalogo_lotacoes.map((cat, idx) => ({
+        id: idx + 5000,
+        nome: cat.nome,
+        regiao: (cat.regiao as any) || 'Metropolitana',
+        vagas_total: cat.vagas_total || 1,
+      }));
+    }
     if (loteAtivo && loteAtivo.comarcas && loteAtivo.comarcas.length > 0) {
       return loteAtivo.comarcas.map((c, idx) => {
         const ref = COMARCAS_RS.find((r) => r.nome.toLowerCase() === c.nome.toLowerCase());
@@ -182,7 +192,7 @@ export const SimuladorLotes: React.FC<SimuladorLotesProps> = ({
       });
     }
     return COMARCAS_RS;
-  }, [loteAtivo]);
+  }, [concursoEfetivoId, loteAtivo]);
 
   // Filtrar os candidatos contemplados neste lote para a simulação
   const candidatosContempladosNoLote = useMemo(() => {

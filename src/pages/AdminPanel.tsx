@@ -926,6 +926,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     });
   }, [usuariosGerais, buscaUsuario, filtroStatusUsuario, filtroRoleUsuario]);
 
+  const [paginaCadastros, setPaginaCadastros] = useState(1);
+  const itensPorPaginaCadastros = 25;
+
+  useEffect(() => {
+    setPaginaCadastros(1);
+  }, [buscaUsuario, filtroStatusUsuario, filtroRoleUsuario]);
+
+  const totalPaginasCadastros = Math.ceil(usuariosGeraisFiltrados.length / itensPorPaginaCadastros) || 1;
+  const usuariosGeraisPaginados = useMemo(() => {
+    const start = (paginaCadastros - 1) * itensPorPaginaCadastros;
+    return usuariosGeraisFiltrados.slice(start, start + itensPorPaginaCadastros);
+  }, [usuariosGeraisFiltrados, paginaCadastros]);
+
   // Se não for o administrador oficial autorizado, bloqueia imediatamente
   if (!isAdmin || !usuario) {
     return (
@@ -2400,14 +2413,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {usuariosGeraisFiltrados.length === 0 ? (
+                  {usuariosGeraisPaginados.length === 0 ? (
                     <tr>
                       <td colSpan={7} className="py-10 text-center text-slate-400">
                         Nenhum usuário encontrado para os filtros aplicados.
                       </td>
                     </tr>
                   ) : (
-                    usuariosGeraisFiltrados.map((u) => (
+                    usuariosGeraisPaginados.map((u) => (
                       <tr key={u.id} className={`hover:bg-slate-50/80 transition-colors ${u.bloqueado ? 'bg-rose-50/30' : ''}`}>
                         <td className="py-3 px-4">
                           <div className="font-bold text-slate-900">{u.nome}</div>
@@ -2528,6 +2541,48 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 </tbody>
               </table>
             </div>
+
+            {/* Paginação do Cadastro Geral */}
+            {usuariosGeraisFiltrados.length > 0 && (
+              <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-600">
+                <div>
+                  Mostrando{' '}
+                  <span className="font-bold">
+                    {(paginaCadastros - 1) * itensPorPaginaCadastros + 1}
+                  </span>{' '}
+                  a{' '}
+                  <span className="font-bold">
+                    {Math.min(
+                      paginaCadastros * itensPorPaginaCadastros,
+                      usuariosGeraisFiltrados.length
+                    )}
+                  </span>{' '}
+                  de <span className="font-bold">{usuariosGeraisFiltrados.length}</span> registros
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPaginaCadastros((p) => Math.max(1, p - 1))}
+                    disabled={paginaCadastros === 1}
+                    className="px-3 py-1.5 bg-white border border-slate-300 rounded-lg font-bold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 cursor-pointer transition-colors"
+                  >
+                    ← Anterior
+                  </button>
+                  <span className="px-2 font-mono text-slate-700">
+                    Página {paginaCadastros} de {totalPaginasCadastros}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setPaginaCadastros((p) => Math.min(totalPaginasCadastros, p + 1))}
+                    disabled={paginaCadastros === totalPaginasCadastros}
+                    className="px-3 py-1.5 bg-white border border-slate-300 rounded-lg font-bold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 cursor-pointer transition-colors"
+                  >
+                    Próxima →
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Modal de Edição / Novo Usuário */}

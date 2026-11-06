@@ -2,6 +2,7 @@ import { Usuario, Candidato } from '../types';
 import { cloudSync } from './cloudSync';
 import { certamStore } from './certamStore';
 import { lotesStore } from './lotesStore';
+import { notificationStore } from './notificationStore';
 import { calcularSimilaridadeNome } from '../utils/phoneticSearch';
 import { validarCpf, formatarCpf, limparCpf, validarEFormatarCpf } from '../utils/cpfValidator';
 
@@ -531,6 +532,29 @@ export const userRegistryStore = {
 
     if (existingKey && existingKey !== dictKey) {
       delete reg[existingKey];
+    }
+
+    // Verificar se o usuário está vinculado a concursos homologados e disparar notificação de preferência de lotes se necessário
+    if (finalUser.email && !isFakeEmail(finalUser.email)) {
+      try {
+        const allConcs = certamStore.getConcursos();
+        const temHomologados = allConcs.some(c => c.homologado || c.status === 'Homologado');
+        if (temHomologados) {
+          const notifs = notificationStore.getNotificacoes();
+          const jaTemNotif = notifs.some(n => n.destinatario_email?.toLowerCase() === finalUser.email?.toLowerCase() && n.link_destino === 'lotes');
+          if (!jaTemNotif) {
+            notificationStore.criarNotificacao({
+              destinatario_email: finalUser.email,
+              titulo: 'Preencha suas Lotações de Preferência',
+              mensagem: 'Seu cadastro está vinculado a concursos homologados. Por favor, acesse a aba de Lotações para preencher suas preferências de comarcas e lotações.',
+              tipo: 'geral',
+              link_destino: 'lotes'
+            });
+          }
+        }
+      } catch {
+        // ignore
+      }
     }
 
     reg[dictKey] = finalUser;
