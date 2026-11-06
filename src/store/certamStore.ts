@@ -1,5 +1,7 @@
 import { Concurso, Cargo, CronogramaItem, DocumentoItem, QuadroVagas, ComunicadoItem, ConvocacaoHistorico } from '../types';
 import { cloudSync } from './cloudSync';
+import { lotesStore } from './lotesStore';
+import { notificationStore } from './notificationStore';
 
 const STORAGE_KEY = 'certam_concursos_cargos_v6';
 const BANNED_LEGACY_IDS = new Set(['tjrs_2024', 'tjrs_analista_2024', 'mprs_2024']);
@@ -164,6 +166,36 @@ export const certamStore = {
         },
       ];
     }
+    // Verificar remoção de lotações/comarcas para notificar candidatos afetados
+    const velhoConcurso = this.getConcurso(concurso.id);
+    if (velhoConcurso) {
+      const velhoCatalogo = velhoConcurso.catalogo_lotacoes || [];
+      const novoCatalogo = concurso.catalogo_lotacoes || [];
+      const removidas = velhoCatalogo.filter(v => !novoCatalogo.some(n => n.nome.toLowerCase() === v.nome.toLowerCase()));
+      if (removidas.length > 0) {
+        try {
+          const tipoTermo = concurso.tipo_lotacao || 'Lotação';
+          const cargosAlvo = concurso.cargos || [];
+          cargosAlvo.forEach(cg => {
+            const cands = lotesStore.getCandidatos(concurso.id, cg.id);
+            cands.forEach(cand => {
+              if (cand.email && cand.escolhas_comarcas && cand.escolhas_comarcas.some(e => removidas.some(r => r.nome.toLowerCase() === e.toLowerCase()))) {
+                notificationStore.criarNotificacao({
+                  destinatario_email: cand.email,
+                  titulo: `Atualização nas ${tipoTermo}s do Concurso`,
+                  mensagem: `A ${tipoTermo.toLowerCase()} "${removidas[0].nome}" foi removida do concurso ${concurso.orgao}. Por favor, acesse a aba de Lotações para ajustar suas preferências.`,
+                  tipo: 'geral',
+                  link_destino: 'lotes'
+                });
+              }
+            });
+          });
+        } catch {
+          // ignore
+        }
+      }
+    }
+
     if (index >= 0) {
       list[index] = { ...list[index], ...concurso };
     } else {

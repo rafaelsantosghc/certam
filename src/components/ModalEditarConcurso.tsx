@@ -389,14 +389,32 @@ export const ModalEditarConcurso: React.FC<ModalEditarConcursoProps> = ({
                   </span>
                 </span>
 
-                <button
-                  type="button"
-                  onClick={() => setMostrarImportadorLote(!mostrarImportadorLote)}
-                  className="text-[11px] font-semibold text-teal-700 hover:text-teal-900 flex items-center gap-1 cursor-pointer"
-                >
-                  <ListPlus className="w-3.5 h-3.5" />
-                  <span>{mostrarImportadorLote ? 'Ocultar colagem' : 'Colar múltiplas em lote'}</span>
-                </button>
+                <div className="flex items-center gap-3">
+                  {catalogoLotacoes.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (window.confirm(`Tem certeza de que deseja remover todas as ${tipoLotacao}s cadastradas neste concurso?`)) {
+                          setCatalogoLotacoes([]);
+                        }
+                      }}
+                      className="text-[11px] font-semibold text-rose-600 hover:text-rose-800 flex items-center gap-1 cursor-pointer"
+                      title="Remover todas as lotações"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Remover Todas</span>
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => setMostrarImportadorLote(!mostrarImportadorLote)}
+                    className="text-[11px] font-semibold text-teal-700 hover:text-teal-900 flex items-center gap-1 cursor-pointer"
+                  >
+                    <ListPlus className="w-3.5 h-3.5" />
+                    <span>{mostrarImportadorLote ? 'Ocultar colagem' : 'Colar múltiplas em lote'}</span>
+                  </button>
+                </div>
               </div>
 
               {mostrarImportadorLote && (

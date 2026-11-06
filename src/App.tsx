@@ -360,6 +360,15 @@ export const AppContent: React.FC = () => {
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mostrarVoltarAoTopo, setMostrarVoltarAoTopo] = useState(false);
+  const [chatBounds, setChatBounds] = useState<{
+    left: number;
+    top: number;
+    right: number;
+    bottom: number;
+    width: number;
+    height: number;
+    isOpen: boolean;
+  } | null>(null);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -368,6 +377,118 @@ export const AppContent: React.FC = () => {
     window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
+
+  useEffect(() => {
+    const handleChatBounds = (e: Event) => {
+      const detail = (e as CustomEvent)?.detail;
+      if (detail && typeof detail === 'object') {
+        setChatBounds(detail);
+      }
+    };
+    window.addEventListener('certam_chat_bounds_changed', handleChatBounds);
+    return () => window.removeEventListener('certam_chat_bounds_changed', handleChatBounds);
+  }, []);
+
+  // Calcula a posição do botão Voltar ao Topo garantindo que nunca fique escondido atrás do chat ou do balão flutuante
+  const voltarAoTopoPos = React.useMemo(() => {
+    // Por padrão (se não houver medição do chat ainda):
+    const defaultPos = {
+      bottom: '100px',
+      right: '24px',
+      left: 'auto',
+      top: 'auto',
+    };
+
+    if (typeof window === 'undefined' || !chatBounds) {
+      return defaultPos;
+    }
+
+    const btnWidth = 48;
+    const btnHeight = 48;
+    const margin = 20;
+    const windowWidth = window.innerWidth;
+    const windowHeight = window.innerHeight;
+
+    // Posições candidatas onde o botão pode ficar confortavelmente:
+    // 1. Canto inferior direito acima do balão (padrão)
+    // 2. Canto inferior esquerdo (caso o chat cubra o lado direito)
+    // 3. À esquerda da janela do chat
+    // 4. Acima da janela do chat
+    // 5. Canto inferior central
+    const candidatePositions = [
+      // 1. Canto inferior direito tradicional (acima de um balão fechado no canto)
+      {
+        left: windowWidth - btnWidth - margin,
+        top: windowHeight - btnHeight - 96,
+        style: { right: `${margin}px`, bottom: '96px', left: 'auto', top: 'auto' },
+      },
+      // 2. Canto inferior esquerdo (ótimo quando o chat foi arrastado ou aberto na direita)
+      {
+        left: margin + (sidebarCollapsed ? 70 : 16),
+        top: windowHeight - btnHeight - margin,
+        style: {
+          left: `${margin + (sidebarCollapsed ? 70 : 16)}px`,
+          bottom: `${margin}px`,
+          right: 'auto',
+          top: 'auto',
+        },
+      },
+      // 3. À esquerda do chat com margem de segurança
+      {
+        left: Math.max(margin, chatBounds.left - btnWidth - 16),
+        top: Math.min(windowHeight - btnHeight - margin, Math.max(margin, chatBounds.bottom - btnHeight)),
+        style: {
+          left: `${Math.max(margin, chatBounds.left - btnWidth - 16)}px`,
+          top: `${Math.min(windowHeight - btnHeight - margin, Math.max(margin, chatBounds.bottom - btnHeight))}px`,
+          right: 'auto',
+          bottom: 'auto',
+        },
+      },
+      // 4. Acima do chat com margem de segurança
+      {
+        left: Math.min(windowWidth - btnWidth - margin, Math.max(margin, chatBounds.right - btnWidth)),
+        top: Math.max(margin, chatBounds.top - btnHeight - 16),
+        style: {
+          left: `${Math.min(windowWidth - btnWidth - margin, Math.max(margin, chatBounds.right - btnWidth))}px`,
+          top: `${Math.max(margin, chatBounds.top - btnHeight - 16)}px`,
+          right: 'auto',
+          bottom: 'auto',
+        },
+      },
+      // 5. Canto inferior direito mais alto
+      {
+        left: windowWidth - btnWidth - margin,
+        top: Math.max(margin, windowHeight - btnHeight - 180),
+        style: { right: `${margin}px`, bottom: '180px', left: 'auto', top: 'auto' },
+      },
+    ];
+
+    // Verifica sobreposição com a caixa do chat (com padding de proteção de 16px)
+    const padding = 16;
+    for (const cand of candidatePositions) {
+      const candRight = cand.left + btnWidth;
+      const candBottom = cand.top + btnHeight;
+
+      const overlaps = !(
+        candRight + padding <= chatBounds.left ||
+        cand.left >= chatBounds.right + padding ||
+        candBottom + padding <= chatBounds.top ||
+        cand.top >= chatBounds.bottom + padding
+      );
+
+      if (!overlaps) {
+        return cand.style;
+      }
+    }
+
+    // Se todas sobrepuserem (tela muito pequena), força canto inferior esquerdo
+    return {
+      left: '20px',
+      bottom: '20px',
+      right: 'auto',
+      top: 'auto',
+    };
+  }, [chatBounds, sidebarCollapsed]);
 
   return (
     <div className="min-h-screen flex flex-col bg-[var(--certam-light-bg)] text-[var(--certam-text-primary)] transition-colors duration-200">
@@ -504,12 +625,13 @@ export const AppContent: React.FC = () => {
         {/* Widget de Chat Persistente Flutuante com Abas por Concurso, Mute e Emojis */}
         <PersistentChatWidget />
 
-        {/* Botão Voltar ao Topo */}
+        {/* Botão Voltar ao Topo que se reposiciona dinamicamente para não ficar atrás do chat */}
         {mostrarVoltarAoTopo && (
           <button
             type="button"
             onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-            className="fixed bottom-24 right-6 z-40 p-3 rounded-2xl bg-[#07192B] hover:bg-[#0C2640] text-teal-300 shadow-2xl border border-teal-500/30 transition-all hover:scale-110 cursor-pointer flex items-center justify-center no-print group"
+            style={voltarAoTopoPos}
+            className="fixed z-40 p-3 rounded-2xl bg-[#07192B] hover:bg-[#0C2640] text-teal-300 shadow-2xl border border-teal-500/30 transition-all duration-300 hover:scale-110 cursor-pointer flex items-center justify-center no-print group"
             title="Voltar ao topo da página"
             aria-label="Voltar ao topo"
           >

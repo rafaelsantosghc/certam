@@ -25,6 +25,7 @@ import {
   ArrowLeft,
   UserCheck,
   Pencil,
+  AlertCircle,
 } from 'lucide-react';
 
 interface SimuladorLotesProps {
@@ -944,47 +945,69 @@ export const SimuladorLotes: React.FC<SimuladorLotesProps> = ({
                     </div>
 
                     <div className="flex-1 overflow-y-auto space-y-2 pr-1">
-                      {escolhasComarcas.map((nome, idx) => (
-                        <div
-                          key={nome}
-                          className="p-2.5 rounded-xl bg-white border border-teal-200 shadow-2xs flex items-center justify-between text-xs"
-                        >
-                          <div className="flex items-center gap-2.5">
-                            <span className="w-6 h-6 rounded-lg bg-[#07192B] text-teal-300 font-mono font-bold text-xs flex items-center justify-center shrink-0">
-                              {idx + 1}º
-                            </span>
-                            <span className="font-bold text-slate-900">{nome}</span>
-                          </div>
+                      {escolhasComarcas.map((nome, idx) => {
+                        const existeNoCatalogo = comarcasDoLote.some(
+                          (c) => c.nome.toLowerCase() === nome.toLowerCase()
+                        );
+                        return (
+                          <div
+                            key={nome}
+                            className={`p-2.5 rounded-xl border shadow-2xs flex items-center justify-between text-xs ${
+                              existeNoCatalogo
+                                ? 'bg-white border-teal-200'
+                                : 'bg-rose-50 border-rose-300'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <span className={`w-6 h-6 rounded-lg font-mono font-bold text-xs flex items-center justify-center shrink-0 ${
+                                existeNoCatalogo ? 'bg-[#07192B] text-teal-300' : 'bg-rose-600 text-white'
+                              }`}>
+                                {idx + 1}º
+                              </span>
+                              <div className="min-w-0">
+                                <span className={`font-bold block truncate ${existeNoCatalogo ? 'text-slate-900' : 'text-rose-900'}`}>
+                                  {nome}
+                                </span>
+                                {!existeNoCatalogo && (
+                                  <span className="text-[10px] text-rose-600 font-semibold flex items-center gap-1">
+                                    <AlertCircle className="w-3 h-3 shrink-0" />
+                                    <span>Removida do concurso (remova das preferências)</span>
+                                  </span>
+                                )}
+                              </div>
+                            </div>
 
-                          <div className="flex items-center gap-1">
-                            <button
-                              type="button"
-                              disabled={idx === 0}
-                              onClick={() => moverComarca(idx, 'cima')}
-                              className="p-1 rounded bg-slate-100 hover:bg-slate-200 disabled:opacity-30 cursor-pointer"
-                            >
-                              <ArrowUp className="w-3.5 h-3.5 text-slate-700" />
-                            </button>
-                            <button
-                              type="button"
-                              disabled={idx === escolhasComarcas.length - 1}
-                              onClick={() => moverComarca(idx, 'baixo')}
-                              className="p-1 rounded bg-slate-100 hover:bg-slate-200 disabled:opacity-30 cursor-pointer"
-                            >
-                              <ArrowDown className="w-3.5 h-3.5 text-slate-700" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setEscolhasComarcas(escolhasComarcas.filter((c) => c !== nome))
-                              }
-                              className="p-1 rounded hover:bg-rose-50 text-rose-500 cursor-pointer"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button
+                                type="button"
+                                disabled={idx === 0}
+                                onClick={() => moverComarca(idx, 'cima')}
+                                className="p-1 rounded bg-slate-100 hover:bg-slate-200 disabled:opacity-30 cursor-pointer"
+                              >
+                                <ArrowUp className="w-3.5 h-3.5 text-slate-700" />
+                              </button>
+                              <button
+                                type="button"
+                                disabled={idx === escolhasComarcas.length - 1}
+                                onClick={() => moverComarca(idx, 'baixo')}
+                                className="p-1 rounded bg-slate-100 hover:bg-slate-200 disabled:opacity-30 cursor-pointer"
+                              >
+                                <ArrowDown className="w-3.5 h-3.5 text-slate-700" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setEscolhasComarcas(escolhasComarcas.filter((c) => c !== nome))
+                                }
+                                className="p-1 rounded hover:bg-rose-50 text-rose-500 cursor-pointer"
+                                title="Remover"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 </div>

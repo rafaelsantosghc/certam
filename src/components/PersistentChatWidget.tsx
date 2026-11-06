@@ -1554,9 +1554,11 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
   const [dragging, setDragging] = useState(false);
   const [sidebarRetraido, setSidebarRetraido] = useState(false);
   const dragRelRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const hasMovedRef = useRef(false);
 
   const handleMouseDownHeader = (e: React.MouseEvent) => {
     setDragging(true);
+    hasMovedRef.current = false;
     const box = (e.currentTarget as HTMLElement).closest('.chat-widget-box')?.getBoundingClientRect() || { left: window.innerWidth - 600, top: window.innerHeight - 600 };
     dragRelRef.current = {
       x: e.clientX - box.left,
@@ -1568,6 +1570,7 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (!dragging) return;
+      hasMovedRef.current = true;
       const newX = Math.max(10, Math.min(window.innerWidth - 120, e.clientX - dragRelRef.current.x));
       const newY = Math.max(10, Math.min(window.innerHeight - 100, e.clientY - dragRelRef.current.y));
       setPos({ x: newX, y: newY });
@@ -1584,8 +1587,36 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
     };
   }, [dragging]);
 
+  const chatContainerRef = useRef<HTMLDivElement>(null);
+
+  // Notificar posição e dimensões do chat para evitar sobreposição com outros elementos flutuantes (como o botão Voltar ao Topo)
+  useEffect(() => {
+    const reportBounds = () => {
+      if (!chatContainerRef.current) return;
+      const rect = chatContainerRef.current.getBoundingClientRect();
+      window.dispatchEvent(
+        new CustomEvent('certam_chat_bounds_changed', {
+          detail: {
+            left: rect.left,
+            top: rect.top,
+            right: rect.right,
+            bottom: rect.bottom,
+            width: rect.width,
+            height: rect.height,
+            isOpen,
+          },
+        })
+      );
+    };
+
+    reportBounds();
+    const frameId = requestAnimationFrame(reportBounds);
+    return () => cancelAnimationFrame(frameId);
+  }, [pos, isOpen, isExpanded, dragging]);
+
   return (
     <div
+      ref={chatContainerRef}
       className="fixed z-[45] flex flex-col items-end max-w-[calc(100vw-1rem)] chat-widget-box"
       style={
         pos
@@ -1683,6 +1714,7 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
           type="button"
           onMouseDown={handleMouseDownHeader}
           onClick={() => {
+            if (hasMovedRef.current) return;
             if (browserNotificationPermission === 'default') {
               void solicitarPermissaoNotificacaoNavegador();
             }
