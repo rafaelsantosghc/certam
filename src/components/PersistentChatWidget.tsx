@@ -143,6 +143,15 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
   const [primeiraNaoLidaId, setPrimeiraNaoLidaId] = useState<string | null>(null);
   const [mostrarBotaoDescer, setMostrarBotaoDescer] = useState<boolean>(false);
 
+  // Lazy loading de mensagens antigas (exibe inicialmente as últimas 50, incrementando ao rolar para cima)
+  const [limiteMensagensExibidas, setLimiteMensagensExibidas] = useState<number>(50);
+  const prevScrollHeightRef = useRef<number>(0);
+
+  // IntersectionObserver e Badge de Novas Mensagens ao ler histórico
+  const [isUserAtBottom, setIsUserAtBottom] = useState<boolean>(true);
+  const [novasMensagensNaoLidasCount, setNovasMensagensNaoLidasCount] = useState<number>(0);
+  const bottomSentinelRef = useRef<HTMLDivElement>(null);
+
   const knownMsgIdsRef = useRef<Set<string>>(new Set());
   const knownDmIdsRef = useRef<Set<string>>(new Set());
   const initializedKnownIdsRef = useRef(false);
@@ -538,6 +547,11 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
     setMensagens([...msgs]);
   };
 
+  // Reset do limite de lazy loading ao trocar de sala ou concurso
+  useEffect(() => {
+    setLimiteMensagensExibidas(50);
+  }, [concursoAtivoId, salaAtivaId, abaModo, dmContatoEmail]);
+
   // Posiciona automaticamente na mensagem mais antiga não lida ao abrir a conversa (ou no final se todas já foram lidas)
   const posicionarScrollConversa = (targetUnreadId: string | null) => {
     window.setTimeout(() => {
@@ -582,7 +596,55 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
     const distanceFromBottom =
       container.scrollHeight - container.scrollTop - container.clientHeight;
     setMostrarBotaoDescer(distanceFromBottom > 48);
+
+    // Lazy loading: ao rolar próximo ao topo (scrollTop < 40), carrega mais 50 mensagens anteriores
+    if (container.scrollTop < 40) {
+      const listaAtual = abaModo === 'concursos' ? mensagensFiltradasBusca : dmMensagensFiltradasBusca;
+      if (limiteMensagensExibidas < listaAtual.length) {
+        prevScrollHeightRef.current = container.scrollHeight;
+        setLimiteMensagensExibidas((prev) => Math.min(listaAtual.length, prev + 50));
+        // Restaura a posição de scroll após renderizar as mensagens anteriores
+        window.setTimeout(() => {
+          if (messagesContainerRef.current) {
+            const novaAltura = messagesContainerRef.current.scrollHeight;
+            messagesContainerRef.current.scrollTop = novaAltura - prevScrollHeightRef.current;
+          }
+        }, 10);
+      }
+    }
   };
+
+  const verificarSeUsuarioEstaNoFinal = (): boolean => {
+    return isUserAtBottom;
+  };
+
+  // Configuração do IntersectionObserver para detectar com precisão quando o usuário está no fim da lista
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    const sentinel = bottomSentinelRef.current;
+    if (!container || !sentinel) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          const atBottom = entry.isIntersecting;
+          setIsUserAtBottom(atBottom);
+          if (atBottom) {
+            setNovasMensagensNaoLidasCount(0);
+          }
+        });
+      },
+      {
+        root: container,
+        threshold: 0.1,
+      }
+    );
+
+    observer.observe(sentinel);
+    return () => {
+      observer.disconnect();
+    };
+  }, [isOpen, abaModo, concursoAtivoId, salaAtivaId, dmContatoEmail]);
 
   // Purga automática de mensagens antigas (por período de retenção ou limite de contagem) ao inicializar e periodicamente para preservar o localStorage
   useEffect(() => {
@@ -874,8 +936,19 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
         }, 6000);
       }
 
-      carregarMensagensAtivas();
-    };
+       const estavaNoFinal = verificarSeUsuarioEstaNoFinal();
+       carregarMensagensAtivas();
+
+       if (isOpen) {
+         if (estavaNoFinal) {
+           window.setTimeout(() => {
+             rolarAteOFim();
+           }, 50);
+         } else if (ultimaNovaParaNotificar) {
+           setNovasMensagensNaoLidasCount((prev) => prev + 1);
+         }
+       }
+     };
 
     const handleMuteChanged = () => {
       setMuteVersion((v) => v + 1);
@@ -1183,9 +1256,63 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
           const audioBlob = new Blob(audioChunksRef.current, { type: mimeFinal });
           audioChunksRef.current = [];
           const base64Url = await converterBlobParaBase64(audioBlob);
+
+          // Transcrição automática em background usando Web Speech API (se disponível)
+          let transcricaoGerada = '';
+          const SpeechRecognitionAPI =
+            (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+          if (SpeechRecognitionAPI) {
+            try {
+              const recognition = new SpeechRecognitionAPI();
+              recognition.lang = 'pt-BR';
+              recognition.interimResults = false;
+              recognition.maxAlternatives = 1;
+              transcricaoGerada = await new Promise<string>((resolve) => {
+                let resolved = false;
+                recognition.onresult = (event: any) => {
+                  const text = event.results?.[0]?.[0]?.transcript || '';
+                  if (!resolved) {
+                    resolved = true;
+                    resolve(text);
+                  }
+                };
+                recognition.onerror = () => {
+                  if (!resolved) {
+                    resolved = true;
+                    resolve('');
+                  }
+                };
+                recognition.onend = () => {
+                  if (!resolved) {
+                    resolved = true;
+                    resolve('');
+                  }
+                };
+                try {
+                  recognition.start();
+                  // Timeout de segurança de 4 segundos para a transcrição
+                  window.setTimeout(() => {
+                    if (!resolved) {
+                      resolved = true;
+                      try { recognition.stop(); } catch {}
+                      resolve('');
+                    }
+                  }, 4000);
+                } catch {
+                  resolve('');
+                }
+              });
+            } catch {
+              // ignora erro de speech recognition
+            }
+          }
+
           setAudioPreviewBase64(base64Url);
           setAudioPreviewDuracao(duracaoFinal);
           setAudioPreviewMimeType(mimeFinal);
+          if (transcricaoGerada) {
+            setTexto((prev) => (prev ? `${prev} [Transcrição: ${transcricaoGerada}]` : `Transcrição: ${transcricaoGerada}`));
+          }
         } catch {
           setErroGravacaoAudio('Não foi possível converter o áudio gravado para Base64.');
         }
@@ -2285,7 +2412,11 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
                             )}
                           </div>
                         ) : (
-                          mensagensFiltradasBusca.map((msg) => {
+                          (() => {
+                            const listaVisivel = mensagensFiltradasBusca.slice(
+                              Math.max(0, mensagensFiltradasBusca.length - limiteMensagensExibidas)
+                            );
+                            return listaVisivel.map((msg) => {
                             const jaCurtiu = chatStore.usuarioCurtiuMensagem(msg, usuario);
                             const minhaReacao = chatStore.obterReacaoDoUsuario(msg, usuario);
                             const totalCurtidas = Array.isArray(msg.curtido_por)
@@ -2627,13 +2758,31 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
                                 </div>
                               </React.Fragment>
                             );
-                          })
+                          });
+                          })()
                         )}
                         <div ref={messagesEndRef} />
+                       <div ref={bottomSentinelRef} className="h-2 w-full" />
                       </div>
 
+                      {/* Badge / Botão Flutuante Temporário para novas mensagens enquanto lê o histórico */}
+                      {novasMensagensNaoLidasCount > 0 && !isUserAtBottom && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            rolarAteOFim();
+                            setNovasMensagensNaoLidasCount(0);
+                          }}
+                          className="absolute right-4 bottom-16 z-30 inline-flex items-center gap-1.5 bg-teal-600 hover:bg-teal-700 text-white text-[10px] font-extrabold px-3.5 py-2 rounded-full shadow-xl border border-teal-300/60 cursor-pointer transition-all hover:scale-105 animate-pulse"
+                          title="Novas mensagens recebidas. Clique para rolar até o fim."
+                        >
+                          <ArrowDown className="w-3.5 h-3.5" />
+                          <span>↓ {novasMensagensNaoLidasCount} nova(s) mensagem(ns)</span>
+                        </button>
+                      )}
+
                       {/* Botão Flutuante 'Ir ao final' exibido apenas quando o usuário rola para cima */}
-                      {mostrarBotaoDescer && mensagens.length > 0 && (
+                      {mostrarBotaoDescer && novasMensagensNaoLidasCount === 0 && mensagens.length > 0 && (
                         <button
                           type="button"
                           onClick={rolarAteOFim}
@@ -2777,7 +2926,11 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
                             )}
                           </div>
                         ) : (
-                          dmMensagensFiltradasBusca.map((m) => {
+                          (() => {
+                            const listaVisivelDm = dmMensagensFiltradasBusca.slice(
+                              Math.max(0, dmMensagensFiltradasBusca.length - limiteMensagensExibidas)
+                            );
+                            return listaVisivelDm.map((m) => {
                             const souEu =
                               m.remetente_email.trim().toLowerCase() === meuEmail;
                             const isPrimeiraNaoLida = primeiraNaoLidaId === m.id;
@@ -2844,7 +2997,8 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
                                 </div>
                               </React.Fragment>
                             );
-                          })
+                          });
+                          })()
                         )}
                         <div ref={messagesEndRef} />
                       </div>

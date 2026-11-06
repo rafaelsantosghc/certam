@@ -306,6 +306,8 @@ export interface ChatMensagem {
   audio_base64?: string;
   audio_duracao?: number;
   audio_mime_type?: string;
+  audio_transcricao?: string;
+  audio_transcrevendo?: boolean;
 }
 
 export interface OutroConcursoAprovado {
@@ -475,6 +477,8 @@ export interface MensagemPrivada {
   audio_base64?: string;
   audio_duracao?: number;
   audio_mime_type?: string;
+  audio_transcricao?: string;
+  audio_transcrevendo?: boolean;
 }
 
 export interface BloqueioUsuario {
