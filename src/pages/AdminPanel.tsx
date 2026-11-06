@@ -2443,34 +2443,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                           ) : (
                             <div className="space-y-1">
                               <span className="text-slate-400 italic text-[11px] block">Cadastro Geral Portal</span>
-                              {(() => {
-                                const sugs = userRegistryStore.buscarSugestoesNomesParecidos(
-                                  u.nome,
-                                  u.cpf,
-                                  u.email,
-                                  2,
-                                  u.id || u.candidato_id
-                                );
-                                if (sugs.length === 0) return null;
-                                const top = sugs[0];
-                                return (
-                                  <div className="p-1.5 rounded-lg bg-amber-50 border border-amber-200 text-[10px] space-y-1">
-                                    <div className="font-bold text-amber-900 flex items-center gap-1">
-                                      <span>Sugestão ({top.similaridade}%):</span>
-                                      <span className="truncate max-w-[150px]" title={top.nome}>
-                                        {top.nome}
-                                      </span>
-                                    </div>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleVincularUsuarioGeralACandidato(u, top)}
-                                      className="px-2 py-0.5 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded text-[10px] cursor-pointer transition-colors"
-                                    >
-                                      Vincular Cadastro
-                                    </button>
-                                  </div>
-                                );
-                              })()}
                             </div>
                           )}
                         </td>
