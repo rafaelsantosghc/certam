@@ -48,6 +48,7 @@ import {
   Award,
   Layers,
   Eye,
+  Download,
 } from 'lucide-react';
 
 interface PersistentChatWidgetProps {
@@ -917,6 +918,59 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
     setMuteVersion((v) => v + 1);
   };
 
+  const handleExportarConversaJson = () => {
+    const exportedAt = new Date().toISOString();
+    const dateStamp = exportedAt.slice(0, 10);
+
+    const payload =
+      abaModo === 'privadas'
+        ? {
+            portal: 'CERTAM',
+            tipo_backup: 'conversa_privada',
+            exportado_em: exportedAt,
+            usuario_email: meuEmail || usuario?.email || null,
+            contato_email: dmContatoEmail || null,
+            contato_nome: dmContatoNome || null,
+            total_mensagens: dmMensagens.length,
+            mensagens: dmMensagens,
+          }
+        : {
+            portal: 'CERTAM',
+            tipo_backup: 'chat_concurso',
+            exportado_em: exportedAt,
+            concurso_id: concursoAtivo?.id || concursoAtivoId,
+            concurso_orgao: concursoAtivo?.orgao || null,
+            concurso_nome: concursoAtivo?.nome || null,
+            sala_id: salaAtiva.id,
+            sala_titulo: salaAtiva.titulo,
+            sala_tipo: salaAtiva.tipo,
+            total_mensagens: mensagens.length,
+            mensagens,
+          };
+
+    const rawSlug =
+      abaModo === 'privadas'
+        ? `privado_${dmContatoNome || dmContatoEmail || 'conversa'}`
+        : `${concursoAtivo?.orgao || concursoAtivoId}_${salaAtiva.id}`;
+    const safeSlug = rawSlug
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9_-]+/g, '_')
+      .replace(/^_+|_+$/g, '');
+
+    const jsonString = JSON.stringify(payload, null, 2);
+    const blob = new Blob([jsonString], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `certam_chat_${safeSlug || 'historico'}_${dateStamp}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   const handleToggleBloqueioDm = () => {
     if (!meuEmail || !dmContatoEmail) return;
     if (dmIsBloqueado) {
@@ -1329,6 +1383,16 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
                   )}
                 </button>
               )}
+
+              {/* Exportar Histórico da Conversa Atual (.JSON) */}
+              <button
+                type="button"
+                onClick={handleExportarConversaJson}
+                title="Exportar histórico atual da conversa em arquivo JSON (Backup pessoal)"
+                className="p-1.5 rounded-lg hover:bg-white/10 text-teal-300 hover:text-teal-200 transition-colors cursor-pointer flex items-center gap-1"
+              >
+                <Download className="w-3.5 h-3.5" />
+              </button>
 
               <button
                 type="button"

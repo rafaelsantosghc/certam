@@ -375,6 +375,7 @@ const LOCAL_ONLY_KEYS = new Set([
   'certam_chat_read_msg_ids_v1',
   'certam_chat_sound_enabled_v1',
   'certam_frequent_emojis_v1',
+  'certam_keepalive_ping',
 ]);
 
 function shouldSyncKey(key: string): boolean {
@@ -382,6 +383,7 @@ function shouldSyncKey(key: string): boolean {
     key in LEGACY_KEY_MIGRATIONS ||
     key === '_test_ping' ||
     key === 'certam_diag_heartbeat' ||
+    key === 'certam_keepalive_ping' ||
     LOCAL_ONLY_KEYS.has(key)
   ) {
     return false;
@@ -431,11 +433,24 @@ function isResolvedModerationStatus(status: unknown): boolean {
 }
 
 function mergeKeyedObjectItems(existingItem: any, incomingItem: any): any {
-  const existingTs = Number(existingItem?.updated_at_ms || existingItem?.updated_at || 0);
-  const incomingTs = Number(incomingItem?.updated_at_ms || incomingItem?.updated_at || 0);
+  const existingTs = Number(existingItem?.updated_at_ms || existingItem?.updated_at || existingItem?.created_at || 0);
+  const incomingTs = Number(incomingItem?.updated_at_ms || incomingItem?.updated_at || incomingItem?.created_at || 0);
   const base = existingTs > incomingTs ? incomingItem : existingItem;
   const newer = existingTs > incomingTs ? existingItem : incomingItem;
   const merged = { ...base, ...newer };
+
+  // Preserva sempre o menor created_at original para nunca alterar a ordem cronológica da mensagem
+  if (existingItem?.created_at || incomingItem?.created_at) {
+    const c1 = Number(existingItem?.created_at || 0);
+    const c2 = Number(incomingItem?.created_at || 0);
+    merged.created_at = c1 > 0 && c2 > 0 ? Math.min(c1, c2) : c1 || c2;
+  }
+  if (existingItem?.status_envio === 'entregue' || incomingItem?.status_envio === 'entregue') {
+    merged.status_envio = 'entregue';
+  }
+  if (existingItem?.lida === true || incomingItem?.lida === true) {
+    merged.lida = true;
+  }
 
   if (existingItem?.updated_at_ms || incomingItem?.updated_at_ms) {
     merged.updated_at_ms = Math.max(
@@ -470,6 +485,55 @@ function mergeKeyedObjectItems(existingItem: any, incomingItem: any): any {
     merged.status = incomingItem.status;
   }
   return merged;
+}
+
+function extractChatOrDmTimestamp(item: any, fallbackIndex: number): number {
+  if (!item || typeof item !== 'object') return fallbackIndex;
+  if (typeof item.created_at === 'number' && item.created_at > 0) {
+    return item.created_at;
+  }
+  const idStr = String(item.id || '');
+  const match = idStr.match(/^(?:msg|dm)-([a-z0-9]+)-/i);
+  if (match && match[1]) {
+    const parsed = parseInt(match[1], 36);
+    if (!Number.isNaN(parsed) && parsed > 1000000000000) {
+      return parsed;
+    }
+  }
+  return fallbackIndex;
+}
+
+function mergeChatOrDmJsonArrays(arrA: any[], arrB: any[]): any[] {
+  const map = new Map<string, { item: any; orderHint: number }>();
+  let seq = 0;
+
+  for (const item of arrA) {
+    if (!item || typeof item !== 'object') continue;
+    const ik = String(item.id || item.email || `idx_${seq}`);
+    map.set(ik, { item, orderHint: seq++ });
+  }
+  for (const item of arrB) {
+    if (!item || typeof item !== 'object') continue;
+    const ik = String(item.id || item.email || `idx_${seq}`);
+    const prev = map.get(ik);
+    if (prev) {
+      map.set(ik, {
+        item: mergeKeyedObjectItems(prev.item, item),
+        orderHint: prev.orderHint,
+      });
+    } else {
+      map.set(ik, { item, orderHint: seq++ });
+    }
+  }
+
+  return Array.from(map.values())
+    .map((entry) => ({
+      item: entry.item,
+      ts: extractChatOrDmTimestamp(entry.item, entry.orderHint),
+      orderHint: entry.orderHint,
+    }))
+    .sort((a, b) => (a.ts !== b.ts ? a.ts - b.ts : a.orderHint - b.orderHint))
+    .map((entry) => entry.item);
 }
 
 function mergeCandidateArraysJson(
@@ -516,16 +580,25 @@ function mergeCandidateArraysJson(
   }
 }
 
+export function normalizeSupabaseProjectUrl(rawUrl: string): string {
+  if (!rawUrl || typeof rawUrl !== 'string') return '';
+  return rawUrl
+    .trim()
+    .replace(/\/+$/, '')
+    .replace(/\/(?:rest|auth|realtime|storage)\/v1(?:\/.*)?$/i, '')
+    .replace(/\/+$/, '');
+}
+
 function resolveSupabaseConfig(): SupabaseConnectionConfig | null {
   try {
     const env = (import.meta as any).env || {};
-    const envUrl = (
+    const envUrl = normalizeSupabaseProjectUrl(
       env.VITE_SUPABASE_URL ||
-      env.NEXT_PUBLIC_SUPABASE_URL ||
-      env.SUPABASE_URL ||
-      env.PUBLIC_SUPABASE_URL ||
-      ''
-    ).trim();
+        env.NEXT_PUBLIC_SUPABASE_URL ||
+        env.SUPABASE_URL ||
+        env.PUBLIC_SUPABASE_URL ||
+        ''
+    );
     const envKey = (
       env.VITE_SUPABASE_ANON_KEY ||
       env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
@@ -536,7 +609,7 @@ function resolveSupabaseConfig(): SupabaseConnectionConfig | null {
       ''
     ).trim();
     if (envUrl && envKey && envUrl.startsWith('http')) {
-      return { url: envUrl.replace(/\/+$/, ''), anonKey: envKey };
+      return { url: envUrl, anonKey: envKey };
     }
   } catch {
     // ignore
@@ -555,9 +628,22 @@ function resolveSupabaseConfig(): SupabaseConnectionConfig | null {
         parsed.url.trim().startsWith('http') &&
         parsed.anonKey.trim().length > 10
       ) {
+        const cleanUrl = normalizeSupabaseProjectUrl(parsed.url);
+        const cleanKey = parsed.anonKey.trim();
+        if (cleanUrl !== parsed.url.trim()) {
+          const fixedStr = JSON.stringify({ url: cleanUrl, anonKey: cleanKey });
+          memoryStore.set(SUPABASE_CONFIG_KEY, fixedStr);
+          if (typeof window !== 'undefined') {
+            try {
+              localStorage.setItem(SUPABASE_CONFIG_KEY, fixedStr);
+            } catch {
+              // ignore
+            }
+          }
+        }
         return {
-          url: parsed.url.trim().replace(/\/+$/, ''),
-          anonKey: parsed.anonKey.trim(),
+          url: cleanUrl,
+          anonKey: cleanKey,
         };
       }
     }
@@ -1510,6 +1596,22 @@ async function executePullFromServer(): Promise<boolean> {
             }
 
             if (hasKeyedItems) {
+              const isChatOrDm = k.startsWith('certam_chat_messages_') || k.startsWith('certam_dm_');
+              if (isChatOrDm) {
+                const mergedArr = mergeChatOrDmJsonArrays(serverArr, localArr);
+                const mergedStr = JSON.stringify(mergedArr);
+                if (mergedStr !== localVal) {
+                  memoryStore.set(k, mergedStr);
+                  safeLocalStorageSet(k, mergedStr);
+                  changedKeys.push(k);
+                }
+                if (mergedStr !== serverVal) {
+                  toPushBack[k] = mergedStr;
+                }
+                if (srvVer) knownServerVersions.set(k, srvVer);
+                continue;
+              }
+
               const map = new Map<string, any>();
               serverArr.forEach((item: any) => {
                 const itemKey = String(item.id || item.email);
@@ -1706,8 +1808,22 @@ export const cloudSync = {
       if (typeof rawVal !== 'string') continue;
       const k = LEGACY_KEY_MIGRATIONS[rawKey] || rawKey;
       if (!shouldSyncKey(k)) continue;
-      const sanitized = sanitizeSyncValue(k, rawVal) || rawVal;
-      const prev = memoryStore.get(k);
+      let sanitized = sanitizeSyncValue(k, rawVal) || rawVal;
+      const prev = memoryStore.get(k) || (typeof window !== 'undefined' ? localStorage.getItem(k) : null);
+
+      const isChatOrDm = k.startsWith('certam_chat_messages_') || k.startsWith('certam_dm_');
+      if (isChatOrDm && isNonEmptySerialized(prev) && prev.startsWith('[') && sanitized.startsWith('[')) {
+        try {
+          const prevArr = JSON.parse(prev);
+          const incArr = JSON.parse(sanitized);
+          if (Array.isArray(prevArr) && Array.isArray(incArr)) {
+            sanitized = JSON.stringify(mergeChatOrDmJsonArrays(prevArr, incArr));
+          }
+        } catch {
+          // ignore
+        }
+      }
+
       if (prev !== sanitized) {
         memoryStore.set(k, sanitized);
         safeLocalStorageSet(k, sanitized);
@@ -1834,7 +1950,7 @@ export const cloudSync = {
   },
 
   async setSupabaseConfig(url: string, anonKey: string): Promise<boolean> {
-    const cleanUrl = url.trim().replace(/\/+$/, '');
+    const cleanUrl = normalizeSupabaseProjectUrl(url);
     const cleanKey = anonKey.trim();
     if (!cleanUrl || !cleanKey) return false;
     const serialized = JSON.stringify({ url: cleanUrl, anonKey: cleanKey });
@@ -2301,31 +2417,81 @@ export const cloudSync = {
   },
 
   async triggerKeepAlivePing(): Promise<boolean> {
+    const nowIso = new Date().toISOString();
     const cfg = resolveSupabaseConfig();
-    if (!cfg) return false;
+    if (cfg) {
+      const baseUrl = normalizeSupabaseProjectUrl(cfg.url);
+      let supabaseReached = false;
+
+      try {
+        // 1. Consulta a tabela configuracoes (select=*)
+        const res = await fetch(`${baseUrl}/rest/v1/configuracoes?select=*&limit=1`, {
+          method: 'GET',
+          headers: getSupabaseHeaders(cfg.anonKey),
+          cache: 'no-store',
+        });
+        if (res.ok) {
+          supabaseReached = true;
+        }
+      } catch {
+        // continua para tentativa no endpoint raiz PostgREST
+      }
+
+      try {
+        // 2. Escrita leve (UPSERT/PATCH) para registrar atividade real no WAL do PostgreSQL do Supabase
+        const writeRes = await upsertConfigRowsToSupabase(
+          { url: baseUrl, anonKey: cfg.anonKey },
+          [
+            {
+              chave: 'certam_keepalive_ping',
+              valor: { pingAt: nowIso, project: 'qeriodszxddmzmnjzipz' },
+              updated_at: nowIso,
+            },
+          ]
+        );
+        if (writeRes.ok) {
+          supabaseReached = true;
+        }
+      } catch {
+        // ignore
+      }
+
+      if (!supabaseReached) {
+        try {
+          // 3. Fallback para o endpoint raiz do PostgREST (/rest/v1/) que sempre responde 200 OK com chave válida
+          const rootRes = await fetch(`${baseUrl}/rest/v1/`, {
+            method: 'GET',
+            headers: getSupabaseHeaders(cfg.anonKey),
+            cache: 'no-store',
+          });
+          if (rootRes.ok) {
+            supabaseReached = true;
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      if (supabaseReached) {
+        syncTelemetry.lastKeepAliveAt = nowIso;
+        syncStatus.lastSupabaseOk = true;
+        syncStatus.lastSupabaseError = null;
+        return true;
+      }
+    }
+
+    // Fallback para servidor local (/api/sync) caso o Supabase não esteja acessível
     try {
-      const nowIso = new Date().toISOString();
-      const res = await fetch(`${cfg.url}/rest/v1/configuracoes?select=chave&limit=1`, {
-        method: 'GET',
-        headers: getSupabaseHeaders(cfg.anonKey),
-        cache: 'no-store',
-      });
-      // Executa também escrita leve (UPSERT/PATCH) para registrar atividade real no WAL do PostgreSQL do Supabase
-      await upsertConfigRowsToSupabase(cfg, [
-        {
-          chave: 'certam_keepalive_ping',
-          valor: { pingAt: nowIso, project: 'qeriodszxddmzmnjzipz' },
-          updated_at: nowIso,
-        },
-      ]).catch(() => {});
-      if (res.ok) {
+      const localRes = await fetch('/api/sync', { cache: 'no-store' });
+      if (localRes.ok) {
         syncTelemetry.lastKeepAliveAt = nowIso;
         return true;
       }
-      return false;
     } catch {
-      return false;
+      // ignore
     }
+
+    return false;
   },
 
   initAutoSync(): void {

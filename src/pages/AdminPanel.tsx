@@ -4138,6 +4138,10 @@ NOTIFY pgrst, 'reload schema';`;
                   setDiagLoading(true);
                   try {
                     const ok = await cloudSync.setSupabaseConfig(supabaseUrlInput, supabaseKeyInput);
+                    const normalizedCfg = cloudSync.getSupabaseConfig();
+                    if (normalizedCfg?.url) {
+                      setSupabaseUrlInput(normalizedCfg.url);
+                    }
                     const rep = await cloudSync.runDiagnostics();
                     setDiagReport(rep);
                     reloadData();
@@ -4290,7 +4294,22 @@ NOTIFY pgrst, 'reload schema';`;
                     <button
                       type="button"
                       onClick={async () => {
+                        if (supabaseUrlInput.trim() && supabaseKeyInput.trim()) {
+                          const currentCfg = cloudSync.getSupabaseConfig();
+                          if (
+                            !currentCfg ||
+                            currentCfg.url !== supabaseUrlInput.trim() ||
+                            currentCfg.anonKey !== supabaseKeyInput.trim()
+                          ) {
+                            await cloudSync.setSupabaseConfig(supabaseUrlInput, supabaseKeyInput);
+                          }
+                          const normalizedCfg = cloudSync.getSupabaseConfig();
+                          if (normalizedCfg?.url) {
+                            setSupabaseUrlInput(normalizedCfg.url);
+                          }
+                        }
                         const ok = await cloudSync.triggerKeepAlivePing();
+                        reloadData();
                         showToast(
                           ok
                             ? 'Keep-Alive enviado ao Supabase com sucesso! Projeto ativo.'

@@ -306,7 +306,48 @@ function loadSyncDb(): SyncDbFileFormat {
   return db;
 }
 
+const MAX_SYNC_DB_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
+const DAILY_BACKUP_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 horas
+let lastDailyBackupCheckAt = 0;
+
+function checkAndBackupSyncDbIfOversized(forceCheck = false): void {
+  const now = Date.now();
+  if (!forceCheck && now - lastDailyBackupCheckAt < DAILY_BACKUP_CHECK_INTERVAL_MS) {
+    return;
+  }
+  lastDailyBackupCheckAt = now;
+
+  const targetFiles = [PUBLIC_SYNC_DB_FILE, TMP_SYNC_DB_FILE];
+  for (const filePath of targetFiles) {
+    try {
+      if (!fs.existsSync(filePath)) continue;
+      const stats = fs.statSync(filePath);
+      if (stats.size > MAX_SYNC_DB_SIZE_BYTES) {
+        const dataDir = path.dirname(filePath);
+        const timestamp = Date.now();
+        const backupFileName = `certam_sync_db_backup_${timestamp}.json`;
+        const backupFilePath = path.join(dataDir, backupFileName);
+        const rawSnapshot = fs.readFileSync(filePath, 'utf-8');
+
+        // Renomeia o arquivo original para certam_sync_db_backup_[TIMESTAMP].json para evitar perda de histórico
+        fs.renameSync(filePath, backupFilePath);
+        // Mantém cópia operacional ativa para que as leituras subsequentes não falhem
+        fs.writeFileSync(filePath, rawSnapshot, 'utf-8');
+        console.log(
+          `[certamSyncPlugin][backup] Arquivo ${path.basename(filePath)} (${(
+            stats.size /
+            (1024 * 1024)
+          ).toFixed(2)} MB) excedeu 5MB. Backup automático criado em: ${backupFilePath}`
+        );
+      }
+    } catch (err) {
+      console.warn('[certamSyncPlugin][backup] Falha ao verificar/rotacionar backup de certam_sync_db.json:', err);
+    }
+  }
+}
+
 function saveSyncDb(db: SyncDbFileFormat) {
+  checkAndBackupSyncDbIfOversized(false);
   const serialized = JSON.stringify(db, null, 2);
   try {
     const dir = path.dirname(PUBLIC_SYNC_DB_FILE);
@@ -333,14 +374,37 @@ function isResolvedModerationStatus(status: unknown): boolean {
   );
 }
 
+function extractChatItemTimestamp(item: any, fallbackIndex: number): number {
+  if (!item || typeof item !== 'object') return fallbackIndex;
+  if (typeof item.created_at === 'number' && item.created_at > 0) {
+    return item.created_at;
+  }
+  const idStr = String(item.id || '');
+  const match = idStr.match(/^(?:msg|dm)-([a-z0-9]+)-/i);
+  if (match && match[1]) {
+    const parsed = parseInt(match[1], 36);
+    if (!Number.isNaN(parsed) && parsed > 1000000000000) {
+      return parsed;
+    }
+  }
+  return fallbackIndex;
+}
+
 function mergeKeyedObjectItems(existingItem: any, incomingItem: any): any {
-  const existingUpdatedAt = Number(existingItem?.updated_at || 0);
-  const incomingUpdatedAt = Number(incomingItem?.updated_at || 0);
+  const existingUpdatedAt = Number(existingItem?.updated_at || existingItem?.created_at || 0);
+  const incomingUpdatedAt = Number(incomingItem?.updated_at || incomingItem?.created_at || 0);
   const incomingIsNewerOrEqual = incomingUpdatedAt >= existingUpdatedAt;
 
   const merged = incomingIsNewerOrEqual
     ? { ...existingItem, ...incomingItem }
     : { ...incomingItem, ...existingItem };
+
+  // Preserva sempre o menor created_at original para nunca alterar a ordem cronológica da mensagem
+  if (existingItem?.created_at || incomingItem?.created_at) {
+    const c1 = Number(existingItem?.created_at || 0);
+    const c2 = Number(incomingItem?.created_at || 0);
+    merged.created_at = c1 > 0 && c2 > 0 ? Math.min(c1, c2) : c1 || c2;
+  }
 
   // Garante que o sender_id e credenciais de admin nunca sejam perdidos na mesclagem de mensagens
   if (!merged.sender_id && (incomingItem?.sender_id || existingItem?.sender_id)) {
@@ -466,7 +530,7 @@ function mergeSyncValues(
 
         const map = new Map<string, any>();
         if (isChatOrDmKey) {
-          // Mensagens de chat e DM mantêm ordem cronológica (existentes primeiro, novas ao final)
+          // Mensagens de chat e DM mantêm ordem estritamente cronológica
           existingArr.forEach((item: any, idx: number) => {
             const k = getItemKey(item, idx);
             if (k) map.set(k, item);
@@ -481,6 +545,25 @@ function mergeSyncValues(
                 : item;
             map.set(k, prev ? mergeKeyedObjectItems(prev, normalizedItem) : normalizedItem);
           });
+
+          const orderedValues = Array.from(map.values())
+            .map((item, idx) => ({
+              item,
+              ts: extractChatItemTimestamp(item, idx),
+              idx,
+            }))
+            .sort((a, b) => (a.ts !== b.ts ? a.ts - b.ts : a.idx - b.idx))
+            .map((entry) => entry.item);
+
+          const mergedResult = JSON.stringify(orderedValues);
+          if (keyName) {
+            logChatEntriesDebug('mergeSyncValues:merged', keyName, mergedResult, {
+              existingCount: existingArr.length,
+              incomingCount: incomingArr.length,
+              mergedCount: orderedValues.length,
+            });
+          }
+          return mergedResult;
         } else {
           // Filas administrativas (auditoria/notificações) mantêm itens novos na frente
           incomingArr.forEach((item: any, idx: number) => {
@@ -498,13 +581,6 @@ function mergeSyncValues(
           });
         }
         const mergedResult = JSON.stringify(Array.from(map.values()));
-        if (isChatOrDmKey && keyName) {
-          logChatEntriesDebug('mergeSyncValues:merged', keyName, mergedResult, {
-            existingCount: existingArr.length,
-            incomingCount: incomingArr.length,
-            mergedCount: map.size,
-          });
-        }
         return mergedResult;
       }
     } catch (err) {
@@ -955,6 +1031,19 @@ function certamSyncPlugin(): Plugin {
   };
 
   const SERVER_BOOT_ID = `cb${Date.now().toString(36)}`;
+  let dailyBackupInterval: ReturnType<typeof setInterval> | null = null;
+
+  const startDailySyncDbBackupScheduler = () => {
+    checkAndBackupSyncDbIfOversized(true);
+    if (!dailyBackupInterval) {
+      dailyBackupInterval = setInterval(() => {
+        checkAndBackupSyncDbIfOversized(true);
+      }, DAILY_BACKUP_CHECK_INTERVAL_MS);
+      if (typeof dailyBackupInterval.unref === 'function') {
+        dailyBackupInterval.unref();
+      }
+    }
+  };
 
   return {
     name: 'certam-sync-api',
@@ -965,6 +1054,7 @@ function certamSyncPlugin(): Plugin {
       );
     },
     configureServer(server) {
+      startDailySyncDbBackupScheduler();
       attachChatWebSocketServer(server.httpServer);
       server.middlewares.use((req: any, res: any, next: any) => {
         const url = String(req.url || '');
@@ -1009,6 +1099,7 @@ function certamSyncPlugin(): Plugin {
       attachMiddleware(server.middlewares);
     },
     configurePreviewServer(server) {
+      startDailySyncDbBackupScheduler();
       attachChatWebSocketServer(server.httpServer);
       attachMiddleware(server.middlewares);
     },

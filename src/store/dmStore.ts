@@ -27,14 +27,49 @@ export interface SugestaoContatoDm {
 
 const DM_MAX_MESSAGES_PER_CONVERSATION = 100;
 const DM_RETENTION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 dias
+let lastDmCreatedAt = 0;
 
-function extrairTimestampDm(m: MensagemPrivada): number {
+function extrairTimestampDm(m: MensagemPrivada, fallbackIdx = -1): number {
+  if (typeof m.created_at === 'number' && m.created_at > 0) {
+    return m.created_at;
+  }
   const match = String(m.id || '').match(/^dm-([a-z0-9]+)-/i);
   if (match && match[1]) {
     const parsed = parseInt(match[1], 36);
     if (!Number.isNaN(parsed) && parsed > 1000000000000) return parsed;
   }
-  return -1;
+  return fallbackIdx;
+}
+
+function ordenarMensagensDmCronologicamente(list: MensagemPrivada[]): MensagemPrivada[] {
+  if (!Array.isArray(list) || list.length <= 1) return list || [];
+  const dedupMap = new Map<string, { msg: MensagemPrivada; idx: number }>();
+  list.forEach((m, idx) => {
+    if (!m || !m.id) return;
+    const prev = dedupMap.get(m.id);
+    if (!prev) {
+      dedupMap.set(m.id, { msg: m, idx });
+    } else {
+      dedupMap.set(m.id, {
+        msg: {
+          ...prev.msg,
+          ...m,
+          lida: Boolean(prev.msg.lida || m.lida),
+          created_at: prev.msg.created_at || m.created_at,
+        },
+        idx: prev.idx,
+      });
+    }
+  });
+
+  return Array.from(dedupMap.values())
+    .map((entry) => ({
+      msg: entry.msg,
+      ts: extrairTimestampDm(entry.msg, entry.idx),
+      idx: entry.idx,
+    }))
+    .sort((a, b) => (a.ts !== b.ts ? a.ts - b.ts : a.idx - b.idx))
+    .map((entry) => entry.msg);
 }
 
 function aplicarRetencaoDm(
@@ -45,12 +80,13 @@ function aplicarRetencaoDm(
   if (!Array.isArray(list) || list.length === 0) {
     return { mantidas: [], removidas: 0 };
   }
+  const ordenadas = ordenarMensagensDmCronologicamente(list);
   const now = Date.now();
   const porPar = new Map<string, MensagemPrivada[]>();
 
-  for (const m of list) {
+  for (const m of ordenadas) {
     if (!m || !m.remetente_email || !m.destinatario_email) continue;
-    const ts = extrairTimestampDm(m);
+    const ts = extrairTimestampDm(m, -1);
     if (ts > 1000000000000 && now - ts > maxAgeMs) {
       continue;
     }
@@ -71,7 +107,7 @@ function aplicarRetencaoDm(
     recortado.forEach((item) => idsMantidos.add(item.id));
   }
 
-  const mantidas = list.filter((m) => m && idsMantidos.has(m.id));
+  const mantidas = ordenadas.filter((m) => m && idsMantidos.has(m.id));
   return {
     mantidas,
     removidas: Math.max(0, list.length - mantidas.length),
@@ -128,20 +164,27 @@ export const dmStore = {
   enviarMensagem(msg: Omit<MensagemPrivada, 'id' | 'data_hora' | 'lida'>): MensagemPrivada {
     chatRealtimeClient.init();
     const list = [...this.getMensagens()];
+    const maxExistingTs = list.reduce((acc, item, idx) => Math.max(acc, extrairTimestampDm(item, idx)), 0);
+    const monotonicNow = Math.max(Date.now(), lastDmCreatedAt + 1, maxExistingTs + 1);
+    lastDmCreatedAt = monotonicNow;
+
     const nova: MensagemPrivada = {
       ...msg,
-      id: `dm-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`,
+      id: `dm-${monotonicNow.toString(36)}-${Math.random().toString(36).substring(2, 6)}`,
       data_hora:
         'Hoje às ' +
-        new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+        new Date(monotonicNow).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
       lida: false,
+      created_at: monotonicNow,
+      updated_at: monotonicNow,
     };
     list.push(nova);
-    this.salvarMensagens(list);
+    const ordenadas = ordenarMensagensDmCronologicamente(list);
+    this.salvarMensagens(ordenadas);
 
     // Envia também via canal em tempo real (WebSocket / ACK) para entrega imediata ao destinatário
     void chatRealtimeClient.sendEntriesWithAck(nova.id, {
-      [DM_STORAGE_KEY]: JSON.stringify(list),
+      [DM_STORAGE_KEY]: JSON.stringify(ordenadas),
     });
 
     return nova;

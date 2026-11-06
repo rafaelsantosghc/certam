@@ -467,6 +467,8 @@ export interface MensagemPrivada {
   texto: string;
   data_hora: string;
   lida: boolean;
+  created_at?: number;
+  updated_at?: number;
 }
 
 export interface BloqueioUsuario {

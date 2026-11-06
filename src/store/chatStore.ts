@@ -300,6 +300,18 @@ function extrairTimestampOrdenacao(m: ChatMensagem, fallbackIndex: number): numb
   return fallbackIndex;
 }
 
+function ordenarMensagensChatCronologicamente(msgs: ChatMensagem[]): ChatMensagem[] {
+  if (!Array.isArray(msgs) || msgs.length <= 1) return msgs || [];
+  return msgs
+    .map((m, idx) => ({
+      m,
+      ts: extrairTimestampOrdenacao(m, idx),
+      idx,
+    }))
+    .sort((a, b) => (a.ts !== b.ts ? a.ts - b.ts : a.idx - b.idx))
+    .map((entry) => entry.m);
+}
+
 /**
  * Purga mensagens antigas (acima de `maxAgeMs`) ou excedentes ao limite `maxCount` por sala,
  * preservando sempre as mensagens fixadas (`is_fixado: true`) e o histórico recente relevante.
@@ -313,12 +325,13 @@ export function aplicarPoliticaRetencaoMensagens(
     return { mantidas: [], removidas: 0 };
   }
 
+  const ordenadas = ordenarMensagensChatCronologicamente(msgs);
   const now = Date.now();
   const fixadas: ChatMensagem[] = [];
   const regularesRecentes: ChatMensagem[] = [];
 
-  for (let i = 0; i < msgs.length; i++) {
-    const m = msgs[i];
+  for (let i = 0; i < ordenadas.length; i++) {
+    const m = ordenadas[i];
     if (!m) continue;
     if (m.is_fixado) {
       fixadas.push(m);
@@ -343,13 +356,14 @@ export function aplicarPoliticaRetencaoMensagens(
     ...regularesLimitadas.map((m) => m.id),
   ]);
 
-  const mantidas = msgs.filter((m) => m && idsMantidos.has(m.id));
+  const mantidas = ordenadas.filter((m) => m && idsMantidos.has(m.id));
   return {
     mantidas,
     removidas: Math.max(0, msgs.length - mantidas.length),
   };
 }
 
+let lastChatCreatedAt = 0;
 const selfSentMessageIds = new Set<string>();
 
 export const chatStore = {
@@ -938,8 +952,13 @@ export const chatStore = {
   ): ChatMensagem {
     chatRealtimeClient.init();
     const msgs = this.getMensagens(concursoId, cargoId, canalId);
-    const now = new Date();
-    const nowMs = now.getTime();
+    const maxExistingTs = msgs.reduce(
+      (acc, item, idx) => Math.max(acc, extrairTimestampOrdenacao(item, idx)),
+      0
+    );
+    const nowMs = Math.max(Date.now(), lastChatCreatedAt + 1, maxExistingTs + 1);
+    lastChatCreatedAt = nowMs;
+    const now = new Date(nowMs);
     const dataHoraStr = `Hoje às ${now.getHours().toString().padStart(2, '0')}:${now
       .getMinutes()
       .toString()
