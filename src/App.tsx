@@ -190,22 +190,31 @@ export const AppContent: React.FC = () => {
       const urlAdmin = params.get('admin');
       const urlLote = params.get('lote');
 
+      const concursosDisponiveis = certamStore.getConcursos();
+      const concursoValido = urlId ? concursosDisponiveis.find((c) => c.id === urlId) : null;
+      const concursoIdFinal = concursoValido ? urlId : concursosDisponiveis[0]?.id || 'tjrs_2025';
+
+      if (concursoIdFinal) {
+        setConcursoId(concursoIdFinal);
+      }
+
       if (urlAdmin === '1' || pathname.includes('admin')) {
         if (urlTab) setInitialTab(urlTab);
         setCurrentView('admin');
       } else if (urlTab === 'lote' || pathname.includes('lote')) {
-        if (urlId) setConcursoId(urlId);
+        if (concursoIdFinal) setConcursoId(concursoIdFinal);
         if (urlCargo) setCargoId(urlCargo);
         if (urlLote) setLoteId(urlLote);
         setCurrentView('lote');
       } else if (urlTab === 'politica' || pathname.includes('politica')) {
         setCurrentView('politica');
-      } else if (urlId || pathname.includes('concurso')) {
-        const concRef = (urlId ? certamStore.getConcurso(urlId) : undefined) || certamStore.getConcursos()[0];
-        if (urlId) setConcursoId(urlId);
+      } else if (urlId || pathname.includes('concurso') || concursoValido) {
+        const concRef = concursoValido || concursosDisponiveis[0];
         if (urlCargo || urlTab) {
           const resolvedCargo =
-            urlCargo || concRef?.cargos?.[0]?.id || cargoId;
+            (urlCargo && concRef?.cargos?.some((cg) => cg.id === urlCargo) ? urlCargo : null) ||
+            concRef?.cargos?.[0]?.id ||
+            cargoId;
           if (resolvedCargo) setCargoId(resolvedCargo);
           if (urlTab) setInitialTab(urlTab);
           setCurrentView('concurso');
@@ -214,7 +223,8 @@ export const AppContent: React.FC = () => {
         }
       }
     } catch {
-      // ignore
+      // Fallback seguro caso ocorra qualquer exceção ao analisar a URL
+      setCurrentView('portal');
     }
   }, []);
 
