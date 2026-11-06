@@ -2306,6 +2306,14 @@ export const cloudSync = {
         headers: getSupabaseHeaders(cfg.anonKey),
         cache: 'no-store',
       });
+      // Executa também escrita leve (UPSERT/PATCH) para registrar atividade real no WAL do PostgreSQL do Supabase
+      await upsertConfigRowsToSupabase(cfg, [
+        {
+          chave: 'certam_keepalive_ping',
+          valor: { pingAt: nowIso, project: 'qeriodszxddmzmnjzipz' },
+          updated_at: nowIso,
+        },
+      ]).catch(() => {});
       if (res.ok) {
         syncTelemetry.lastKeepAliveAt = nowIso;
         return true;

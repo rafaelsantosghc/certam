@@ -8,6 +8,7 @@ import {
 } from '../store/chatStore';
 import { dmStore, ContatoConversa, SugestaoContatoDm } from '../store/dmStore';
 import { useAuth } from '../store/authContext';
+import { useChatPermissions } from '../hooks/useChatPermissions';
 import { Concurso, ChatMensagem, MensagemPrivada } from '../types';
 import { sanitizeInput } from '../utils/security';
 import {
@@ -165,11 +166,12 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
     [concursos, concursoAtivoId]
   );
 
-  // Salas dinâmicas do concurso ativo: Geral, Cargo (antes da homologação/lista), Aprovados e Lotes
-  const salasDoConcursoAtivo = useMemo<SalaChatConcurso[]>(() => {
-    void dadosVersion;
-    return chatStore.getSalasDoConcurso(concursoAtivo, usuario, isAdmin);
-  }, [concursoAtivo, usuario, isAdmin, dadosVersion]);
+  // Hook que valida se usuario.id ou usuario.cpf consta na lista de aprovados do concurso específico
+  // antes de renderizar o Chat dos Aprovados (e Chat do Lote) no PersistentChatWidget
+  const {
+    salasPermitidas: salasDoConcursoAtivo,
+    podeRenderizarSala,
+  } = useChatPermissions(concursoAtivo, usuario, isAdmin, dadosVersion);
 
   const salaAtiva = useMemo<SalaChatConcurso>(() => {
     return (
@@ -447,10 +449,9 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
   };
 
   const rolarAteOFim = () => {
-    const container = messagesContainerRef.current;
-    if (container) {
-      container.scrollTo({
-        top: container.scrollHeight,
+    if (messagesContainerRef.current) {
+      messagesContainerRef.current.scrollTo({
+        top: messagesContainerRef.current.scrollHeight,
         behavior: 'smooth',
       });
     } else {
@@ -1567,8 +1568,8 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
                     </div>
                   </div>
 
-                  {/* Caso o usuário tente acessar Chat dos Aprovados ou Chat do Lote sem pertencer à lista/lote */}
-                  {salaAtiva.restrito && !salaAtiva.temAcesso ? (
+                  {/* Validação de segurança via useChatPermissions antes de renderizar o Chat dos Aprovados ou Chat do Lote */}
+                  {!podeRenderizarSala(salaAtiva) || (salaAtiva.restrito && !salaAtiva.temAcesso) ? (
                     <div
                       className={`flex flex-col items-center justify-center text-center p-6 bg-slate-50/80 shrink-0 ${
                         isExpanded ? 'h-[455px]' : 'h-[355px]'
@@ -1926,19 +1927,18 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
                         <div ref={messagesEndRef} />
                       </div>
 
-                      {/* Botão Flutuante para Descer até o Fim (Mensagem Mais Recente) */}
-                      {(mostrarBotaoDescer || Boolean(primeiraNaoLidaId)) &&
-                        mensagens.length > 0 && (
-                          <button
-                            type="button"
-                            onClick={rolarAteOFim}
-                            className="absolute right-4 bottom-16 z-30 inline-flex items-center gap-1.5 bg-[#07192B]/95 hover:bg-[#0C2640] text-[#2DD4AA] text-[10px] font-extrabold px-3 py-1.5 rounded-full shadow-lg border border-teal-400/40 cursor-pointer transition-all hover:scale-105"
-                            title="Descer a conversa até o fim para ver a mensagem mais recente"
-                          >
-                            <ArrowDown className="w-3.5 h-3.5 animate-bounce" />
-                            <span>Ver mais recente</span>
-                          </button>
-                        )}
+                      {/* Botão Flutuante 'Ir ao final' exibido apenas quando o usuário rola para cima */}
+                      {mostrarBotaoDescer && mensagens.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={rolarAteOFim}
+                          className="absolute right-4 bottom-16 z-30 inline-flex items-center gap-1.5 bg-[#07192B]/95 hover:bg-[#0C2640] text-[#2DD4AA] text-[10px] font-extrabold px-3 py-1.5 rounded-full shadow-lg border border-teal-400/40 cursor-pointer transition-all hover:scale-105"
+                          title="Ir ao final da conversa para ver a mensagem mais recente"
+                        >
+                          <ArrowDown className="w-3.5 h-3.5 animate-bounce" />
+                          <span>Ir ao final</span>
+                        </button>
+                      )}
                     </>
                   )}
                 </>
@@ -2079,18 +2079,17 @@ export const PersistentChatWidget: React.FC<PersistentChatWidgetProps> = ({
                         <div ref={messagesEndRef} />
                       </div>
 
-                      {(mostrarBotaoDescer || Boolean(primeiraNaoLidaId)) &&
-                        dmMensagens.length > 0 && (
-                          <button
-                            type="button"
-                            onClick={rolarAteOFim}
-                            className="absolute right-4 bottom-16 z-30 inline-flex items-center gap-1.5 bg-[#07192B]/95 hover:bg-[#0C2640] text-[#2DD4AA] text-[10px] font-extrabold px-3 py-1.5 rounded-full shadow-lg border border-teal-400/40 cursor-pointer transition-all hover:scale-105"
-                            title="Descer a conversa até o fim para ver a mensagem mais recente"
-                          >
-                            <ArrowDown className="w-3.5 h-3.5 animate-bounce" />
-                            <span>Ver mais recente</span>
-                          </button>
-                        )}
+                      {mostrarBotaoDescer && dmMensagens.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={rolarAteOFim}
+                          className="absolute right-4 bottom-16 z-30 inline-flex items-center gap-1.5 bg-[#07192B]/95 hover:bg-[#0C2640] text-[#2DD4AA] text-[10px] font-extrabold px-3 py-1.5 rounded-full shadow-lg border border-teal-400/40 cursor-pointer transition-all hover:scale-105"
+                          title="Ir ao final da conversa para ver a mensagem mais recente"
+                        >
+                          <ArrowDown className="w-3.5 h-3.5 animate-bounce" />
+                          <span>Ir ao final</span>
+                        </button>
+                      )}
                     </>
                   ) : (
                     <div

@@ -10,6 +10,7 @@ import { dmStore } from '../store/dmStore';
 import { certamStore } from '../store/certamStore';
 import { cloudSync } from '../store/cloudSync';
 import { useAuth } from '../store/authContext';
+import { useChatPermissions } from '../hooks/useChatPermissions';
 import {
   MessageSquare,
   Send,
@@ -85,8 +86,10 @@ export const CommunityForum: React.FC<CommunityForumProps> = ({
     return lista.find((c) => c.id === concursoId) || null;
   }, [concursoId]);
 
+  const { salasPermitidas } = useChatPermissions(concursoObj, usuario, isAdmin);
+
   const salasDisponiveis = useMemo<SalaChatConcurso[]>(() => {
-    if (!concursoObj) {
+    if (!concursoObj || salasPermitidas.length === 0) {
       return [
         {
           id: 'geral',
@@ -103,15 +106,14 @@ export const CommunityForum: React.FC<CommunityForumProps> = ({
         },
       ];
     }
-    const todas = chatStore.getSalasDoConcurso(concursoObj, usuario, isAdmin);
-    return [...todas].sort((a, b) => {
+    return [...salasPermitidas].sort((a, b) => {
       if (a.tipo === 'geral') return -1;
       if (b.tipo === 'geral') return 1;
       const aDoCargo = a.cargoId === cargoId ? 0 : 1;
       const bDoCargo = b.cargoId === cargoId ? 0 : 1;
       return aDoCargo - bDoCargo;
     });
-  }, [concursoObj, usuario, isAdmin, cargoId, concursoId]);
+  }, [concursoObj, salasPermitidas, cargoId, concursoId]);
 
   const salaAtual = useMemo<SalaChatConcurso>(() => {
     return (
@@ -996,9 +998,10 @@ export const CommunityForum: React.FC<CommunityForumProps> = ({
                     type="button"
                     onClick={() => rolarAteOFim(true)}
                     className="pointer-events-auto inline-flex items-center gap-1.5 bg-[#07192B] hover:bg-teal-700 text-white text-xs font-bold px-3.5 py-2 rounded-full shadow-lg border border-teal-400/30 transition-all cursor-pointer"
+                    title="Ir ao final da conversa"
                   >
                     <ArrowDown className="w-3.5 h-3.5 text-teal-300" />
-                    <span>Ver mais recente</span>
+                    <span>Ir ao final</span>
                   </button>
                 </div>
               )}

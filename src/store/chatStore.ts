@@ -47,26 +47,22 @@ export function localizarCandidatoDoUsuarioNoCargo(
   candidatos: Candidato[]
 ): Candidato | null {
   if (!usuario || !Array.isArray(candidatos) || candidatos.length === 0) return null;
+  const userIdStr = String(usuario.id || '').trim();
+  const userCandIdStr = String(usuario.candidato_id || '').trim();
   const cpfUsuarioLimpo = limparCpf(usuario.cpf);
-  const cpfValido = cpfUsuarioLimpo.length >= 6 && !/^0+$/.test(cpfUsuarioLimpo);
-  const emailUsuarioLimpo = String(usuario.email || '').trim().toLowerCase();
-  const emailValido =
-    emailUsuarioLimpo.length > 3 && emailUsuarioLimpo !== 'candidato@certam.com.br';
-  const nomeUsuarioNorm =
-    usuario.nome && usuario.nome.trim().length >= 3 ? normalizarTexto(usuario.nome) : '';
+  const cpfValido = cpfUsuarioLimpo.length >= 9 && !/^0+$/.test(cpfUsuarioLimpo);
 
   return (
     candidatos.find((c) => {
-      if (usuario.candidato_id && c.id && c.id === usuario.candidato_id) return true;
+      if (!c) return false;
+      const cIdStr = String(c.id || '').trim();
+      if (cIdStr) {
+        if (userIdStr && cIdStr === userIdStr) return true;
+        if (userCandIdStr && cIdStr === userCandIdStr) return true;
+      }
       if (cpfValido && c.cpf) {
         const cpfCandLimpo = limparCpf(c.cpf);
-        if (cpfCandLimpo.length >= 6 && cpfCandLimpo === cpfUsuarioLimpo) return true;
-      }
-      if (emailValido && c.email && c.email.trim().toLowerCase() === emailUsuarioLimpo) {
-        return true;
-      }
-      if (nomeUsuarioNorm && c.nome && normalizarTexto(c.nome) === nomeUsuarioNorm) {
-        return true;
+        if (cpfCandLimpo.length >= 9 && cpfCandLimpo === cpfUsuarioLimpo) return true;
       }
       return false;
     }) || null
