@@ -285,6 +285,7 @@ class ChatRealtimeConnectionManager {
         this.setConnectionState('connected');
 
         const joinRef = String(this.phxRefCounter++);
+        // Usa exclusivamente broadcast leve (evita postgres_changes em configuracoes, que transmitia linhas inteiras de MBs via WAL e consumia Egress)
         const joinPayload = {
           topic: 'realtime:public:configuracoes',
           event: 'phx_join',
@@ -292,13 +293,6 @@ class ChatRealtimeConnectionManager {
             config: {
               broadcast: { ack: true, self: false },
               presence: { key: '' },
-              postgres_changes: [
-                {
-                  event: '*',
-                  schema: 'public',
-                  table: 'configuracoes',
-                },
-              ],
             },
           },
           ref: joinRef,
@@ -310,7 +304,6 @@ class ChatRealtimeConnectionManager {
         }
 
         this.startSupabaseHeartbeat();
-        void cloudSync.pullFromServer();
       };
 
       ws.onmessage = (event) => {

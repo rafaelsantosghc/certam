@@ -171,6 +171,9 @@ function resolveServerSupabaseConfig(dbEntries) {
   return null;
 }
 
+let lastSupabasePullAt = 0;
+const SERVER_SUPABASE_PULL_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutos
+
 async function upsertRowToSupabase(cfg, chave, rawStrVal) {
   let parsedValor = rawStrVal;
   try {
@@ -185,30 +188,32 @@ async function upsertRowToSupabase(cfg, chave, rawStrVal) {
     'Content-Type': 'application/json',
   };
 
-  // 1. Tenta upsert direto com on_conflict=chave
+  // 1. Tenta upsert direto com on_conflict=chave e return=minimal (0 bytes de Egress)
   try {
     const res = await fetch(`${cfg.url}/rest/v1/configuracoes?on_conflict=chave`, {
       method: 'POST',
       headers: { ...headers, Prefer: 'resolution=merge-duplicates,return=minimal' },
-      body: JSON.stringify([{ chave, valor: parsedValor }]),
+      body: JSON.stringify([{ chave, valor: parsedValor, updated_at: new Date().toISOString() }]),
     });
     if (res.ok) return true;
   } catch {
     // fallback
   }
 
-  // 2. Fallback universal PATCH + INSERT (não exige UNIQUE constraint nem updated_at)
+  // 2. Fallback PATCH com return=minimal,count=exact (sem baixar o JSON de volta, economizando 100% de Egress)
   const encodedKey = encodeURIComponent(chave);
   for (const candidateValor of [parsedValor, rawStrVal]) {
     try {
       const patchRes = await fetch(`${cfg.url}/rest/v1/configuracoes?chave=eq.${encodedKey}`, {
         method: 'PATCH',
-        headers: { ...headers, Prefer: 'return=representation' },
+        headers: { ...headers, Prefer: 'return=minimal,count=exact' },
         body: JSON.stringify({ valor: candidateValor }),
       });
       if (patchRes.ok) {
-        const rows = await patchRes.json().catch(() => []);
-        if (Array.isArray(rows) && rows.length > 0) return true;
+        const range = patchRes.headers.get('content-range') || '';
+        if (range && !range.endsWith('/0') && !range.startsWith('*/0')) {
+          return true;
+        }
         break;
       }
     } catch {
@@ -249,13 +254,18 @@ export default async function handler(req, res) {
       supCfg.key
     ).trim();
     db.entries[SUPABASE_CONFIG_KEY] = JSON.stringify({ url: supCfg.url, anonKey: anonEnv });
-    db.versions[SUPABASE_CONFIG_KEY] = Date.now();
+    db.versions[SUPABASE_CONFIG_KEY] = 1;
   }
 
   if (req.method === 'GET') {
-    if (supCfg) {
+    const now = Date.now();
+    const hasLocalEntries = Object.keys(db.entries).length > 1;
+    // Evita consultar SELECT * no Supabase a cada requisição GET (o que esgotava o limite de 5GB de Egress).
+    // O cliente já faz Delta Sync seletivo (select=chave,updated_at) diretamente com o Supabase.
+    if (supCfg && (!hasLocalEntries || now - lastSupabasePullAt > SERVER_SUPABASE_PULL_COOLDOWN_MS)) {
+      lastSupabasePullAt = now;
       try {
-        const supRes = await fetch(`${supCfg.url}/rest/v1/configuracoes?select=*`, {
+        const metaRes = await fetch(`${supCfg.url}/rest/v1/configuracoes?select=chave,updated_at`, {
           method: 'GET',
           headers: {
             apikey: supCfg.key,
@@ -263,27 +273,57 @@ export default async function handler(req, res) {
             'Content-Type': 'application/json',
           },
         });
-        if (supRes.ok) {
-          const rows = await supRes.json();
-          if (Array.isArray(rows)) {
-            for (const row of rows) {
+        if (metaRes.ok) {
+          const metaRows = await metaRes.json();
+          if (Array.isArray(metaRows)) {
+            const keysToFetch = [];
+            for (const row of metaRows) {
               if (!row || typeof row.chave !== 'string') continue;
               const rawKey = row.chave;
               if (!rawKey.startsWith('certam_')) continue;
               if (rawKey === '_test_ping' || rawKey === 'certam_diag_heartbeat') continue;
               const k = LEGACY_KEY_MIGRATIONS[rawKey] || rawKey;
               if (k.includes('tjrs_2024') || k.includes('mprs_2024')) continue;
-              const rawVal =
-                typeof row.valor === 'string' ? row.valor : JSON.stringify(row.valor ?? null);
-              const cleanVal = sanitizeSyncEntryValue(k, rawVal);
-              if (cleanVal && cleanVal !== '[]' && cleanVal !== '{}' && cleanVal !== 'null') {
-                db.entries[k] = cleanVal;
-                db.versions[k] = row.updated_at
-                  ? new Date(row.updated_at).getTime()
-                  : db.versions[k] || Date.now();
+              const ts = row.updated_at ? new Date(row.updated_at).getTime() : 1;
+              const knownTs = db.versions[k] || 0;
+              if (!db.entries[k] || ts > knownTs) {
+                keysToFetch.push(rawKey);
               }
             }
-            saveLocalDb(db);
+            if (keysToFetch.length > 0) {
+              const inList = keysToFetch.map((k) => `"${k.replace(/"/g, '')}"`).join(',');
+              const supRes = await fetch(
+                `${supCfg.url}/rest/v1/configuracoes?select=chave,valor,updated_at&chave=in.(${encodeURIComponent(inList)})`,
+                {
+                  method: 'GET',
+                  headers: {
+                    apikey: supCfg.key,
+                    Authorization: `Bearer ${supCfg.key}`,
+                    'Content-Type': 'application/json',
+                  },
+                }
+              );
+              if (supRes.ok) {
+                const rows = await supRes.json();
+                if (Array.isArray(rows)) {
+                  for (const row of rows) {
+                    if (!row || typeof row.chave !== 'string') continue;
+                    const rawKey = row.chave;
+                    const k = LEGACY_KEY_MIGRATIONS[rawKey] || rawKey;
+                    const rawVal =
+                      typeof row.valor === 'string' ? row.valor : JSON.stringify(row.valor ?? null);
+                    const cleanVal = sanitizeSyncEntryValue(k, rawVal);
+                    if (cleanVal && cleanVal !== '[]' && cleanVal !== '{}' && cleanVal !== 'null') {
+                      db.entries[k] = cleanVal;
+                      db.versions[k] = row.updated_at
+                        ? new Date(row.updated_at).getTime()
+                        : db.versions[k] || 1;
+                    }
+                  }
+                  saveLocalDb(db);
+                }
+              }
+            }
           }
         }
       } catch {
@@ -304,6 +344,7 @@ export default async function handler(req, res) {
       const incoming = payload?.entries || {};
       const ackId = payload?.ackId;
       const msgId = payload?.msgId;
+      const skipSupabaseForward = Boolean(payload?.clientWillPushSupabase);
       const keysToDelete = Array.isArray(payload?.deleteKeys) ? payload.deleteKeys : [];
       const now = Date.now();
       const updatedEntries = {};
@@ -354,7 +395,8 @@ export default async function handler(req, res) {
           db.entries[k] = sanitized;
           db.versions[k] = now;
           updatedEntries[k] = sanitized;
-          if (activeSupCfg && k !== SUPABASE_CONFIG_KEY) {
+          // Evita escrita duplicada no Supabase quando o próprio navegador já fará o upsert direto
+          if (activeSupCfg && !skipSupabaseForward && k !== SUPABASE_CONFIG_KEY) {
             await upsertRowToSupabase(activeSupCfg, k, sanitized);
           }
         }

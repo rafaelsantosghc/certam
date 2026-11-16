@@ -1,11 +1,51 @@
-const SYNC_INTERVAL_MS = 3500;
+const SYNC_INTERVAL_MS = 30000; // 30s (reduzido de 3.5s para proteger a franquia de Egress do Supabase Free)
+const MIN_PULL_COOLDOWN_MS = 8000;
 let initialized = false;
 let activePullPromise: Promise<boolean> | null = null;
+let lastPullCompletedAt = 0;
 let localApiAvailable: boolean | null = null;
+let supabaseCooldownUntil = 0;
 
+const KNOWN_VERSIONS_STORAGE_KEY = 'certam_known_server_versions_v1';
 const memoryStore = new Map<string, string>();
 const lastLocalWriteAt = new Map<string, number>();
 const knownServerVersions = new Map<string, number>();
+const seededMissingKeysInSession = new Set<string>();
+
+function loadPersistedServerVersions(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const raw = localStorage.getItem(KNOWN_VERSIONS_STORAGE_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object') {
+      for (const [k, v] of Object.entries(parsed)) {
+        if (typeof v === 'number' && v > 0) {
+          knownServerVersions.set(k, v);
+        }
+      }
+    }
+  } catch {
+    // ignore
+  }
+}
+
+function savePersistedServerVersions(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const obj: Record<string, number> = {};
+    for (const [k, v] of knownServerVersions.entries()) {
+      if (typeof v === 'number' && v > 0) {
+        obj[k] = v;
+      }
+    }
+    localStorage.setItem(KNOWN_VERSIONS_STORAGE_KEY, JSON.stringify(obj));
+  } catch {
+    // ignore
+  }
+}
+
+loadPersistedServerVersions();
 
 let realtimeBroadcastChannel: BroadcastChannel | null = null;
 if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
@@ -376,6 +416,8 @@ const LOCAL_ONLY_KEYS = new Set([
   'certam_chat_sound_enabled_v1',
   'certam_frequent_emojis_v1',
   'certam_keepalive_ping',
+  'certam_last_keepalive_ts',
+  KNOWN_VERSIONS_STORAGE_KEY,
 ]);
 
 function shouldSyncKey(key: string): boolean {
@@ -830,31 +872,20 @@ async function upsertSingleRowViaPatchOrInsert(
   const encodedKey = encodeURIComponent(chave);
   const strValor = typeof valor === 'string' ? valor : JSON.stringify(valor);
 
-  // 1. Tenta PATCH filtrando por chave=eq.<chave> (não exige UNIQUE constraint nem coluna updated_at)
+  // 1. Tenta PATCH com Prefer: return=minimal,count=exact (não baixa o JSON de volta, economizando 100% de Egress de escrita)
   for (const candidateValor of [valor, strValor]) {
     try {
       const patchRes = await fetch(`${cfg.url}/rest/v1/configuracoes?chave=eq.${encodedKey}`, {
         method: 'PATCH',
         headers: getSupabaseHeaders(cfg.anonKey, {
-          Prefer: 'return=representation',
+          Prefer: 'return=minimal,count=exact',
         }),
         body: JSON.stringify({ valor: candidateValor }),
       });
 
       if (patchRes.ok) {
-        const updatedRows = await patchRes.json().catch(() => []);
-        if (Array.isArray(updatedRows) && updatedRows.length > 0) {
-          // Se existiam linhas duplicadas para a mesma chave (com id), remove as cópias excedentes
-          if (updatedRows.length > 1 && updatedRows[0]?.id !== undefined) {
-            const keepId = updatedRows[0].id;
-            await fetch(
-              `${cfg.url}/rest/v1/configuracoes?chave=eq.${encodedKey}&id=neq.${encodeURIComponent(String(keepId))}`,
-              {
-                method: 'DELETE',
-                headers: getSupabaseHeaders(cfg.anonKey),
-              }
-            ).catch(() => {});
-          }
+        const range = patchRes.headers.get('content-range') || '';
+        if (range && !range.endsWith('/0') && !range.startsWith('*/0')) {
           return { ok: true };
         }
         // Nenhuma linha existia com essa chave -> prossegue para INSERT simples abaixo
@@ -1014,112 +1045,58 @@ async function fetchEntriesFromSupabase(): Promise<{
   syncStatus.supabaseUrl = cfg?.url || '';
   if (!cfg) return null;
 
+  if (Date.now() < supabaseCooldownUntil) {
+    return null;
+  }
+
   try {
-    // PLANO 1 — DELTA SYNC:
-    // Passo 1: Consulta leve apenas de metadados (chave, updated_at) ~1 KB
+    // PLANO 1 — DELTA SYNC ESTRITO (Zero-Payload para chaves em cache):
+    // Passo 1: Consulta leve apenas de metadados (chave, updated_at) ~800 bytes
+    let metaRows: any[] | null = null;
     const metaRes = await fetch(`${cfg.url}/rest/v1/configuracoes?select=chave,updated_at`, {
       method: 'GET',
       headers: getSupabaseHeaders(cfg.anonKey),
       cache: 'no-store',
     });
 
-    if (metaRes.ok) {
-      const metaRows = await metaRes.json();
-      if (Array.isArray(metaRows)) {
-        syncTelemetry.deltaPollsCount++;
-        const entries: Record<string, string> = {};
-        const versions: Record<string, number> = {};
-        const keysToDownload: string[] = [];
-
-        for (const row of metaRows) {
-          if (!row || typeof row.chave !== 'string') continue;
-          const rawKey = row.chave;
-          if (!rawKey.startsWith('certam_')) continue;
-          if (rawKey === '_test_ping' || rawKey === 'certam_diag_heartbeat') continue;
-          const canonicalKey = LEGACY_KEY_MIGRATIONS[rawKey] || rawKey;
-          if (!shouldSyncKey(canonicalKey)) continue;
-
-          const ts = row.updated_at ? new Date(row.updated_at).getTime() : 0;
-          versions[canonicalKey] = Math.max(versions[canonicalKey] || 0, ts);
-
-          const cachedVal = memoryStore.get(canonicalKey) ?? (typeof window !== 'undefined' ? localStorage.getItem(canonicalKey) : null);
-          const knownTs = knownServerVersions.get(canonicalKey) || 0;
-
-          if (isNonEmptySerialized(cachedVal) && ts > 0 && knownTs > 0 && ts <= knownTs) {
-            // Chave não mudou no Supabase! Reaproveita o cache em memória sem gastar Egress
-            entries[canonicalKey] = cachedVal;
-            syncTelemetry.keysSkippedByDelta++;
-            syncTelemetry.estimatedBytesSaved += cachedVal.length;
-          } else {
-            keysToDownload.push(rawKey);
-          }
-        }
-
-        // Passo 2: Baixa o payload (valor) APENAS das chaves novas ou modificadas
-        if (keysToDownload.length > 0) {
-          const inList = keysToDownload.map((k) => `"${k.replace(/"/g, '')}"`).join(',');
-          const deltaRes = await fetch(
-            `${cfg.url}/rest/v1/configuracoes?select=chave,valor,updated_at&chave=in.(${encodeURIComponent(inList)})`,
-            {
-              method: 'GET',
-              headers: getSupabaseHeaders(cfg.anonKey),
-              cache: 'no-store',
-            }
-          );
-
-          if (deltaRes.ok) {
-            const deltaRows = await deltaRes.json();
-            if (Array.isArray(deltaRows)) {
-              for (const row of deltaRows) {
-                if (!row || typeof row.chave !== 'string') continue;
-                const rawKey = row.chave;
-                const canonicalKey = LEGACY_KEY_MIGRATIONS[rawKey] || rawKey;
-                if (!shouldSyncKey(canonicalKey)) continue;
-
-                const rawSerialized =
-                  typeof row.valor === 'string' ? row.valor : JSON.stringify(row.valor ?? null);
-                const serialized = sanitizeSyncValue(canonicalKey, rawSerialized);
-                const ts = row.updated_at ? new Date(row.updated_at).getTime() : Date.now() - 5000;
-
-                if (!isNonEmptySerialized(serialized)) continue;
-                syncTelemetry.estimatedBytesDownloaded += serialized.length;
-
-                if (!entries[canonicalKey] || (versions[canonicalKey] || 0) <= ts) {
-                  entries[canonicalKey] = serialized;
-                  versions[canonicalKey] = ts;
-                }
-              }
-            }
-          }
-        }
-
-        syncStatus.lastSupabaseOk = true;
-        syncStatus.lastSupabaseError = null;
-        return { entries, versions };
-      }
-    }
-
-    // Fallback para select=* caso a tabela legada não possua a coluna updated_at
-    syncTelemetry.fullDownloadsCount++;
-    const res = await fetch(`${cfg.url}/rest/v1/configuracoes?select=*`, {
-      method: 'GET',
-      headers: getSupabaseHeaders(cfg.anonKey),
-      cache: 'no-store',
-    });
-
-    if (!res.ok) {
-      const errText = await res.text().catch(() => `HTTP ${res.status}`);
-      syncStatus.lastSupabaseOk = false;
-      syncStatus.lastSupabaseError = `Erro ao ler configuracoes (${res.status}): ${errText.slice(0, 180)}`;
+    if (metaRes.status === 402 || metaRes.status === 429 || metaRes.status >= 500) {
+      // Se o Supabase estiver em restrição por cota/rate-limit, aplica backoff de 5 minutos para zerar Egress
+      supabaseCooldownUntil = Date.now() + 5 * 60 * 1000;
       return null;
     }
 
-    const rows = await res.json();
-    const entries: Record<string, string> = {};
-    const versions: Record<string, number> = {};
+    if (metaRes.ok) {
+      const parsed = await metaRes.json().catch(() => null);
+      if (Array.isArray(parsed)) {
+        metaRows = parsed;
+      }
+    } else {
+      // Fallback caso a tabela legada não tenha a coluna updated_at: consulta APENAS a coluna 'chave' (~400 bytes), NUNCA select=*!
+      const keyOnlyRes = await fetch(`${cfg.url}/rest/v1/configuracoes?select=chave`, {
+        method: 'GET',
+        headers: getSupabaseHeaders(cfg.anonKey),
+        cache: 'no-store',
+      });
+      if (keyOnlyRes.ok) {
+        const parsedKeys = await keyOnlyRes.json().catch(() => null);
+        if (Array.isArray(parsedKeys)) {
+          metaRows = parsedKeys;
+        }
+      } else {
+        const errText = await keyOnlyRes.text().catch(() => `HTTP ${keyOnlyRes.status}`);
+        syncStatus.lastSupabaseOk = false;
+        syncStatus.lastSupabaseError = `Erro ao ler configuracoes (${keyOnlyRes.status}): ${errText.slice(0, 180)}`;
+        return null;
+      }
+    }
 
-    if (Array.isArray(rows)) {
-      for (const row of rows) {
+    if (Array.isArray(metaRows)) {
+      syncTelemetry.deltaPollsCount++;
+      const entries: Record<string, string> = {};
+      const versions: Record<string, number> = {};
+      const keysToDownload: string[] = [];
+
+      for (const row of metaRows) {
         if (!row || typeof row.chave !== 'string') continue;
         const rawKey = row.chave;
         if (!rawKey.startsWith('certam_')) continue;
@@ -1127,24 +1104,74 @@ async function fetchEntriesFromSupabase(): Promise<{
         const canonicalKey = LEGACY_KEY_MIGRATIONS[rawKey] || rawKey;
         if (!shouldSyncKey(canonicalKey)) continue;
 
-        const rawSerialized =
-          typeof row.valor === 'string' ? row.valor : JSON.stringify(row.valor ?? null);
-        const serialized = sanitizeSyncValue(canonicalKey, rawSerialized);
-        const ts = row.updated_at ? new Date(row.updated_at).getTime() : Date.now() - 5000;
+        // Se updated_at for nulo/ausente na linha, usa 1 como versão estável para não re-baixar em todo ciclo
+        const ts = row.updated_at ? new Date(row.updated_at).getTime() : 1;
+        versions[canonicalKey] = Math.max(versions[canonicalKey] || 0, ts);
 
-        if (!isNonEmptySerialized(serialized)) continue;
-        syncTelemetry.estimatedBytesDownloaded += serialized.length;
+        const cachedVal =
+          memoryStore.get(canonicalKey) ??
+          (typeof window !== 'undefined' ? localStorage.getItem(canonicalKey) : null);
+        const knownTs = knownServerVersions.get(canonicalKey) || 0;
 
-        if (!entries[canonicalKey] || (versions[canonicalKey] || 0) < ts) {
-          entries[canonicalKey] = serialized;
-          versions[canonicalKey] = ts;
+        // Se já temos valor em cache local e (ts <= knownTs OU é a primeira carga com valor já hidratado e sem updated_at mais novo):
+        if (isNonEmptySerialized(cachedVal) && ((knownTs > 0 && ts <= knownTs) || ts === 1)) {
+          entries[canonicalKey] = cachedVal;
+          if (knownTs === 0) {
+            knownServerVersions.set(canonicalKey, ts);
+          }
+          syncTelemetry.keysSkippedByDelta++;
+          syncTelemetry.estimatedBytesSaved += cachedVal.length;
+        } else {
+          keysToDownload.push(rawKey);
         }
       }
+
+      // Passo 2: Baixa o payload (valor) APENAS das chaves efetivamente novas ou modificadas
+      if (keysToDownload.length > 0) {
+        const inList = keysToDownload.map((k) => `"${k.replace(/"/g, '')}"`).join(',');
+        const deltaRes = await fetch(
+          `${cfg.url}/rest/v1/configuracoes?select=chave,valor&chave=in.(${encodeURIComponent(inList)})`,
+          {
+            method: 'GET',
+            headers: getSupabaseHeaders(cfg.anonKey),
+            cache: 'no-store',
+          }
+        );
+
+        if (deltaRes.ok) {
+          const deltaRows = await deltaRes.json();
+          if (Array.isArray(deltaRows)) {
+            for (const row of deltaRows) {
+              if (!row || typeof row.chave !== 'string') continue;
+              const rawKey = row.chave;
+              const canonicalKey = LEGACY_KEY_MIGRATIONS[rawKey] || rawKey;
+              if (!shouldSyncKey(canonicalKey)) continue;
+
+              const rawSerialized =
+                typeof row.valor === 'string' ? row.valor : JSON.stringify(row.valor ?? null);
+              const serialized = sanitizeSyncValue(canonicalKey, rawSerialized);
+              const ts = versions[canonicalKey] || 1;
+
+              if (!isNonEmptySerialized(serialized)) continue;
+              syncTelemetry.estimatedBytesDownloaded += serialized.length;
+
+              entries[canonicalKey] = serialized;
+              versions[canonicalKey] = ts;
+              knownServerVersions.set(canonicalKey, ts);
+            }
+            savePersistedServerVersions();
+          }
+        }
+      } else {
+        savePersistedServerVersions();
+      }
+
+      syncStatus.lastSupabaseOk = true;
+      syncStatus.lastSupabaseError = null;
+      return { entries, versions };
     }
 
-    syncStatus.lastSupabaseOk = true;
-    syncStatus.lastSupabaseError = null;
-    return { entries, versions };
+    return null;
   } catch (err: any) {
     syncStatus.lastSupabaseOk = false;
     syncStatus.lastSupabaseError = err?.message || 'Falha de rede ao consultar Supabase';
@@ -1174,6 +1201,8 @@ async function sendEntriesBatch(
     }
   }
 
+  const willPushSupabase = Boolean(resolveSupabaseConfig());
+
   // Só chama /api/sync se não tiver sido detectado modo estático (ex: Vercel sem backend Express)
   if (localApiAvailable !== false) {
     if (Object.keys(priorityBatch).length > 0 || cleanConflicts || deleteKeys.length > 0) {
@@ -1186,6 +1215,7 @@ async function sendEntriesBatch(
             forceReplace,
             cleanConflicts,
             deleteKeys,
+            clientWillPushSupabase: willPushSupabase,
           }),
         });
         const contentType = res.headers.get('content-type') || '';
@@ -1198,6 +1228,7 @@ async function sendEntriesBatch(
             for (const [vk, vv] of Object.entries(data.versions)) {
               if (typeof vv === 'number') knownServerVersions.set(vk, vv);
             }
+            savePersistedServerVersions();
           }
         } else if (res.status === 404 || res.status === 405 || !contentType.includes('application/json')) {
           localApiAvailable = false;
@@ -1219,6 +1250,7 @@ async function sendEntriesBatch(
             body: JSON.stringify({
               entries: { [bk]: cleanVal },
               forceReplace: forceReplace || isAdminAuthoritativeKey(bk),
+              clientWillPushSupabase: willPushSupabase,
             }),
           });
           if (res.ok) {
@@ -1229,6 +1261,7 @@ async function sendEntriesBatch(
               for (const [vk, vv] of Object.entries(data.versions)) {
                 if (typeof vv === 'number') knownServerVersions.set(vk, vv);
               }
+              savePersistedServerVersions();
             }
           }
         } catch {
@@ -1238,7 +1271,7 @@ async function sendEntriesBatch(
     }
   }
 
-  if (Object.keys(entries).length > 0) {
+  if (Object.keys(entries).length > 0 && willPushSupabase) {
     await pushEntriesToSupabase(entries);
   }
 }
@@ -1427,53 +1460,23 @@ async function executePullFromServer(): Promise<boolean> {
     const toForcePushAdmin: Record<string, string> = {};
     const allLocal = getAllLocalSyncEntries();
 
-    // 1. Garantir que dados autoritativos do Admin e listas de classificação locais que ainda não estejam no servidor/Supabase sejam publicados
+    // 1. Publicar APENAS chaves que ainda não existem no servidor/Supabase (1 única vez por sessão, evitando loops de Egress por ordenação de chaves JSONB)
     for (const [localKey, localVal] of Object.entries(allLocal)) {
       if (!isNonEmptySerialized(localVal)) continue;
+      if (seededMissingKeysInSession.has(localKey)) continue;
 
       const srvVal = entries[localKey];
-      const apiVal = localApiEntries[localKey];
-      const supVal = supabaseData?.entries?.[localKey];
+      const missingEverywhere = !isNonEmptySerialized(srvVal);
 
-      if (isAdminAuthoritativeKey(localKey)) {
-        if (isCurrentUserAdmin) {
-          const missingInApi = syncStatus.lastLocalApiOk && apiVal !== localVal;
-          const missingInSupabase = Boolean(
-            supabaseData && localKey !== SUPABASE_CONFIG_KEY && supVal !== localVal
-          );
-          if (srvVal !== localVal || missingInApi || missingInSupabase) {
+      if (missingEverywhere) {
+        seededMissingKeysInSession.add(localKey);
+        if (isAdminAuthoritativeKey(localKey)) {
+          if (isCurrentUserAdmin || localKey.startsWith('certam_candidatos_data_v6_')) {
             toForcePushAdmin[localKey] = localVal;
           }
         } else {
-          // Se este navegador já possui listas de classificação ou concursos mais completos salvos pelo Admin (ex: admin deslogou para testar como usuário comum), publica imediatamente para o servidor/Supabase!
-          const srvVerForLocal = serverVersions[localKey] || 0;
-          const missingOnServer = !isNonEmptySerialized(srvVal) || srvVerForLocal <= 1;
-          const missingOnSupabase = Boolean(
-            supabaseData && localKey !== SUPABASE_CONFIG_KEY && !isNonEmptySerialized(supVal)
-          );
-          const localIsRicherConcursos =
-            localKey === 'certam_concursos_cargos_v6' && isRicherConcursosJson(localVal, srvVal);
-          if (
-            localKey.startsWith('certam_candidatos_data_v6_') &&
-            (missingOnServer || missingOnSupabase)
-          ) {
-            toForcePushAdmin[localKey] = localVal;
-          } else if (
-            (missingOnServer || localIsRicherConcursos) &&
-            localVal !== srvVal
-          ) {
-            toForcePushAdmin[localKey] = localVal;
-          }
+          toPushBack[localKey] = localVal;
         }
-        continue;
-      }
-
-      if (
-        !isNonEmptySerialized(srvVal) ||
-        (syncStatus.lastLocalApiOk && !isNonEmptySerialized(apiVal)) ||
-        (supabaseData && !isNonEmptySerialized(supVal))
-      ) {
-        toPushBack[localKey] = localVal;
       }
     }
 
@@ -1488,24 +1491,14 @@ async function executePullFromServer(): Promise<boolean> {
       const localVal = cloudSync.getItem(k);
       const srvVer = serverVersions[rawKey] || serverVersions[k] || 0;
       const prevKnownVer = knownServerVersions.get(k) || 0;
-      const recentlyWrittenLocally = Date.now() - (lastLocalWriteAt.get(k) || 0) < 3500;
+      const recentlyWrittenLocally = Date.now() - (lastLocalWriteAt.get(k) || 0) < 5000;
 
       if (!isNonEmptySerialized(serverVal)) {
-        if (isNonEmptySerialized(localVal) && !recentlyWrittenLocally) {
-          if (
-            !isAdminAuthoritativeKey(k) ||
-            isCurrentUserAdmin ||
-            k.startsWith('certam_candidatos_data_v6_')
-          ) {
-            toPushBack[k] = localVal;
-          }
-        }
         continue;
       }
 
-      // REGRA DE AUTORIDADE PARA CONCURSOS, LOTES, CANDIDATOS E FAQs:
+      // REGRA DE AUTORIDADE PARA CONCURSOS, LOTES, CANDIDATOS E FAQs (Sem re-upload infinito quando JSONB reordena propriedades):
       if (isAdminAuthoritativeKey(k)) {
-        // PLANO 3 — Merge atômico por candidato em listas certam_candidatos_data_v6_*
         if (k.startsWith('certam_candidatos_data_v6_') && isNonEmptySerialized(localVal) && isNonEmptySerialized(serverVal)) {
           const { mergedStr, localHadNewerCandidate } = mergeCandidateArraysJson(localVal, serverVal);
           if (localHadNewerCandidate) {
@@ -1514,7 +1507,7 @@ async function executePullFromServer(): Promise<boolean> {
               safeLocalStorageSet(k, mergedStr);
               changedKeys.push(k);
             }
-            if (mergedStr !== serverVal) {
+            if (mergedStr !== serverVal && recentlyWrittenLocally) {
               toPushBack[k] = mergedStr;
             }
             if (srvVer) knownServerVersions.set(k, srvVer);
@@ -1522,39 +1515,30 @@ async function executePullFromServer(): Promise<boolean> {
           }
         }
 
-        if (isCurrentUserAdmin) {
-          if (isNonEmptySerialized(localVal)) {
-            if (localVal !== serverVal) {
-              toForcePushAdmin[k] = localVal;
-            }
-            if (srvVer) knownServerVersions.set(k, srvVer);
-            continue;
-          }
-          memoryStore.set(k, serverVal);
-          safeLocalStorageSet(k, serverVal);
-          if (srvVer) knownServerVersions.set(k, srvVer);
-          changedKeys.push(k);
-          continue;
-        } else {
-          // Nunca permite que um seed estático (srvVer <= 1) ou um seed sem catálogo de lotações sobrescreva dados reais já existentes neste navegador
-          if (
-            isNonEmptySerialized(localVal) &&
-            (srvVer <= 1 ||
-              (k === 'certam_concursos_cargos_v6' && isRicherConcursosJson(localVal, serverVal)))
-          ) {
-            if (localVal !== serverVal) {
-              toForcePushAdmin[k] = localVal;
-            }
-            continue;
-          }
-          if (localVal !== serverVal) {
-            memoryStore.set(k, serverVal);
-            safeLocalStorageSet(k, serverVal);
-            changedKeys.push(k);
-          }
+        // Se a chave foi editada localmente há menos de 5 segundos pelo Admin, preserva a versão local
+        if (isCurrentUserAdmin && recentlyWrittenLocally && isNonEmptySerialized(localVal)) {
           if (srvVer) knownServerVersions.set(k, srvVer);
           continue;
         }
+
+        // Nunca permite que um seed estático (srvVer <= 1) sobrescreva dados mais ricos já existentes localmente
+        if (
+          isNonEmptySerialized(localVal) &&
+          srvVer <= 1 &&
+          k === 'certam_concursos_cargos_v6' &&
+          isRicherConcursosJson(localVal, serverVal)
+        ) {
+          continue;
+        }
+
+        // Só atualiza se não tínhamos valor local ou se a versão do servidor avançou (srvVer > prevKnownVer)
+        if (!isNonEmptySerialized(localVal) || (srvVer > prevKnownVer && localVal !== serverVal)) {
+          memoryStore.set(k, serverVal);
+          safeLocalStorageSet(k, serverVal);
+          changedKeys.push(k);
+        }
+        if (srvVer) knownServerVersions.set(k, srvVer);
+        continue;
       }
 
       const isRealtimeChatOrDm = k.startsWith('certam_chat_') || k.startsWith('certam_dm_');
@@ -1712,6 +1696,7 @@ async function executePullFromServer(): Promise<boolean> {
     }
 
     syncStatus.lastPullAt = new Date().toISOString();
+    savePersistedServerVersions();
 
     if (changedKeys.length > 0) {
       dispatchUpdateEvents(changedKeys);
@@ -1872,6 +1857,8 @@ export const cloudSync = {
     memoryStore.set(canonicalKey, strValue);
     lastLocalWriteAt.set(canonicalKey, Date.now());
 
+    const willPushSupabase = Boolean(resolveSupabaseConfig());
+
     if (localApiAvailable !== false) {
       try {
         const res = await fetch('/api/sync', {
@@ -1880,6 +1867,7 @@ export const cloudSync = {
           body: JSON.stringify({
             entries: { [canonicalKey]: strValue },
             forceReplace: Boolean(forceReplace) || isAdminAuthoritativeKey(canonicalKey),
+            clientWillPushSupabase: willPushSupabase,
           }),
         });
         const contentType = res.headers.get('content-type') || '';
@@ -1892,6 +1880,7 @@ export const cloudSync = {
             for (const [vk, vv] of Object.entries(data.versions)) {
               if (typeof vv === 'number') knownServerVersions.set(vk, vv);
             }
+            savePersistedServerVersions();
           }
         } else if (res.status === 404 || res.status === 405 || !contentType.includes('application/json')) {
           localApiAvailable = false;
@@ -1902,7 +1891,9 @@ export const cloudSync = {
       }
     }
 
-    await pushEntriesToSupabase({ [canonicalKey]: strValue });
+    if (willPushSupabase) {
+      await pushEntriesToSupabase({ [canonicalKey]: strValue });
+    }
   },
 
   async pushAllLocal(forceReplace = false): Promise<void> {
@@ -1925,12 +1916,17 @@ export const cloudSync = {
     }
   },
 
-  async pullFromServer(): Promise<boolean> {
+  async pullFromServer(force = false): Promise<boolean> {
     if (typeof window === 'undefined') return false;
     if (activePullPromise) {
       return activePullPromise;
     }
+    const now = Date.now();
+    if (!force && lastPullCompletedAt > 0 && now - lastPullCompletedAt < MIN_PULL_COOLDOWN_MS) {
+      return false;
+    }
     activePullPromise = executePullFromServer().finally(() => {
+      lastPullCompletedAt = Date.now();
       activePullPromise = null;
     });
     return activePullPromise;
@@ -2424,8 +2420,8 @@ export const cloudSync = {
       let supabaseReached = false;
 
       try {
-        // 1. Consulta a tabela configuracoes (select=*)
-        const res = await fetch(`${baseUrl}/rest/v1/configuracoes?select=*&limit=1`, {
+        // 1. Consulta ultraleve apenas da coluna 'chave' (select=chave&limit=1 ~25 bytes, evitando baixar linhas pesadas de candidatos)
+        const res = await fetch(`${baseUrl}/rest/v1/configuracoes?select=chave&limit=1`, {
           method: 'GET',
           headers: getSupabaseHeaders(cfg.anonKey),
           cache: 'no-store',
@@ -2438,7 +2434,7 @@ export const cloudSync = {
       }
 
       try {
-        // 2. Escrita leve (UPSERT/PATCH) para registrar atividade real no WAL do PostgreSQL do Supabase
+        // 2. Escrita leve (UPSERT/PATCH com return=minimal) para registrar atividade real no PostgreSQL do Supabase
         const writeRes = await upsertConfigRowsToSupabase(
           { url: baseUrl, anonKey: cfg.anonKey },
           [
@@ -2458,7 +2454,6 @@ export const cloudSync = {
 
       if (!supabaseReached) {
         try {
-          // 3. Fallback para o endpoint raiz do PostgREST (/rest/v1/) que sempre responde 200 OK com chave válida
           const rootRes = await fetch(`${baseUrl}/rest/v1/`, {
             method: 'GET',
             headers: getSupabaseHeaders(cfg.anonKey),
@@ -2476,6 +2471,13 @@ export const cloudSync = {
         syncTelemetry.lastKeepAliveAt = nowIso;
         syncStatus.lastSupabaseOk = true;
         syncStatus.lastSupabaseError = null;
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.setItem('certam_last_keepalive_ts', String(Date.now()));
+          } catch {
+            // ignore
+          }
+        }
         return true;
       }
     }
@@ -2499,10 +2501,16 @@ export const cloudSync = {
     initialized = true;
     migrateAndCleanupLegacyLocalStorage();
     void idbHydrateMemoryStore().finally(() => {
-      this.pullFromServer().then(() => {
-        this.pushAllLocal();
-      });
-      void this.triggerKeepAlivePing();
+      void this.pullFromServer(true);
+      try {
+        const lastKa = Number(localStorage.getItem('certam_last_keepalive_ts') || '0');
+        // Executa keep-alive automático no máximo 1 vez a cada 12 horas
+        if (Date.now() - lastKa > 12 * 60 * 60 * 1000) {
+          void this.triggerKeepAlivePing();
+        }
+      } catch {
+        // ignore
+      }
     });
 
     // Escuta em tempo real entre abas do mesmo navegador via BroadcastChannel e evento nativo 'storage'
