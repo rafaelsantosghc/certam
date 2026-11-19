@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { certamStore } from '../store/certamStore';
 import { lotesStore } from '../store/lotesStore';
 import { faqStore } from '../store/faqStore';
@@ -8,6 +8,7 @@ import { notificationStore } from '../store/notificationStore';
 import { cloudSync, FullSyncDiagnosticsReport } from '../store/cloudSync';
 import { errorLogStore, ErrorLogEntry } from '../store/errorLogStore';
 import { useAuth } from '../store/authContext';
+import { PaginationControls, PaginationMode } from '../components/PaginationControls';
 import {
   Concurso,
   Cargo,
@@ -205,6 +206,23 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [buscaUsuario, setBuscaUsuario] = useState('');
   const [filtroStatusUsuario, setFiltroStatusUsuario] = useState<string>('todos');
   const [filtroRoleUsuario, setFiltroRoleUsuario] = useState<string>('todos');
+  const [modoPaginacaoUsuarios, setModoPaginacaoUsuarios] = useState<PaginationMode>('pagination');
+  const [itensPorPaginaCadastros, setItensPorPaginaCadastros] = useState<number>(25);
+  const [visiveisInfinitoUsuarios, setVisiveisInfinitoUsuarios] = useState<number>(25);
+  const [carregandoLoteUsuariosSupabase, setCarregandoLoteUsuariosSupabase] = useState<boolean>(false);
+  const [progressoListasCandidatos, setProgressoListasCandidatos] = useState(() =>
+    cloudSync.getCandidateDatasetsProgress()
+  );
+  const usuariosTableScrollRef = useRef<HTMLDivElement | null>(null);
+
+  // Filtros e Paginação / Infinite Scroll de Concursos (Admin)
+  const [buscaConcursoAdmin, setBuscaConcursoAdmin] = useState('');
+  const [filtroStatusConcursoAdmin, setFiltroStatusConcursoAdmin] = useState<string>('todos');
+  const [modoPaginacaoConcursosAdmin, setModoPaginacaoConcursosAdmin] = useState<PaginationMode>('pagination');
+  const [paginaConcursosAdmin, setPaginaConcursosAdmin] = useState<number>(1);
+  const [itensPorPaginaConcursosAdmin, setItensPorPaginaConcursosAdmin] = useState<number>(5);
+  const [visiveisInfinitoConcursosAdmin, setVisiveisInfinitoConcursosAdmin] = useState<number>(5);
+
   const [modalEditarUsuarioAberto, setModalEditarUsuarioAberto] = useState(false);
   const [usuarioEditando, setUsuarioEditando] = useState<any | null>(null);
   const [modalNovoUsuarioAberto, setModalNovoUsuarioAberto] = useState(false);
@@ -240,7 +258,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     const handleVinc = () => setVinculacoes(auditStore.getVinculacoes());
     const handleCont = () => setContatos(contactStore.getMensagens());
     const handleNotif = () => setNotificacoes(notificationStore.getNotificacoes());
-    const handleUsers = () => setUsuariosGerais(userRegistryStore.getAllUsers());
+    const handleUsers = () => {
+      setUsuariosGerais(userRegistryStore.getAllUsers());
+      setProgressoListasCandidatos(cloudSync.getCandidateDatasetsProgress());
+    };
 
     const handleConcursos = () => setConcursos(certamStore.getConcursos());
     const handleLotes = () => setLotesLista(lotesStore.getLotes());
@@ -254,6 +275,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       setConcursos(certamStore.getConcursos());
       setLotesLista(lotesStore.getLotes());
       setUsuariosGerais(userRegistryStore.getAllUsers());
+      setProgressoListasCandidatos(cloudSync.getCandidateDatasetsProgress());
       setErrorLogs(errorLogStore.getLogs());
     };
 
@@ -262,29 +284,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     window.addEventListener('certam_contact_updated', handleCont);
     window.addEventListener('certam_notifications_updated', handleNotif);
     window.addEventListener('certam_users_updated', handleUsers);
+    window.addEventListener('certam_candidatos_updated', handleUsers);
     window.addEventListener('certam_concursos_updated', handleConcursos);
     window.addEventListener('certam_lotes_updated', handleLotes);
     window.addEventListener('certam_error_logs_updated', handleErrorLogs);
     window.addEventListener('storage', handleStorage);
 
-    const refreshInterval = window.setInterval(() => {
-      setAuditRequests(auditStore.getAuditRequests());
-      setVinculacoes(auditStore.getVinculacoes());
-      setContatos(contactStore.getMensagens());
-      setNotificacoes(notificationStore.getNotificacoes());
-      setUsuariosGerais(userRegistryStore.getAllUsers());
-      setConcursos(certamStore.getConcursos());
-      setLotesLista(lotesStore.getLotes());
-      setErrorLogs(errorLogStore.getLogs());
-    }, 3500);
-
     return () => {
-      window.clearInterval(refreshInterval);
       window.removeEventListener('certam_audit_updated', handleAudit);
       window.removeEventListener('certam_vinculacoes_updated', handleVinc);
       window.removeEventListener('certam_contact_updated', handleCont);
       window.removeEventListener('certam_notifications_updated', handleNotif);
       window.removeEventListener('certam_users_updated', handleUsers);
+      window.removeEventListener('certam_candidatos_updated', handleUsers);
       window.removeEventListener('certam_concursos_updated', handleConcursos);
       window.removeEventListener('certam_lotes_updated', handleLotes);
       window.removeEventListener('certam_error_logs_updated', handleErrorLogs);
@@ -292,7 +304,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     };
   }, []);
 
-  // Recarregar dados e sincronizar com servidor sempre que o admin trocar de aba no painel (Item 2 e Item 5)
+  // Carrega progressivamente próximo lote de listas de candidatos do Supabase sob demanda (para a aba Cadastros)
+  const handleCarregarProximoLoteUsuariosSupabase = useCallback(async () => {
+    setCarregandoLoteUsuariosSupabase(true);
+    try {
+      await cloudSync.loadNextCandidateBatchForUsers(2);
+      setProgressoListasCandidatos(cloudSync.getCandidateDatasetsProgress());
+      setUsuariosGerais(userRegistryStore.getAllUsers());
+    } finally {
+      setCarregandoLoteUsuariosSupabase(false);
+    }
+  }, []);
+
+  // Recarregar dados sob demanda sempre que o admin trocar de aba no painel (sem baixar datasets massivos sem necessidade)
   useEffect(() => {
     const syncAndRefresh = async () => {
       await cloudSync.pullFromServer();
@@ -302,16 +326,37 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       setNotificacoes(notificationStore.getNotificacoes());
       setConcursos(certamStore.getConcursos());
       setLotesLista(lotesStore.getLotes());
-      setUsuariosGerais(userRegistryStore.getAllUsers());
       setErrorLogs(errorLogStore.getLogs());
+
+      if (abaAdmin === 'cadastros') {
+        setCarregandoLoteUsuariosSupabase(true);
+        try {
+          await cloudSync.ensureUserRegistryLoaded();
+          const prog = cloudSync.getCandidateDatasetsProgress();
+          // Se ainda não há nenhuma lista de candidatos carregada, busca apenas o 1º lote sob demanda
+          if (prog.loadedKeys.length === 0 && prog.unloadedKeys.length > 0) {
+            await cloudSync.loadNextCandidateBatchForUsers(2);
+          }
+          setProgressoListasCandidatos(cloudSync.getCandidateDatasetsProgress());
+          setUsuariosGerais(userRegistryStore.getAllUsers());
+        } finally {
+          setCarregandoLoteUsuariosSupabase(false);
+        }
+      } else if ((abaAdmin === 'classificacao_admin' || abaAdmin === 'candidatos') && classifAdminConcursoId) {
+        await cloudSync.ensureCandidateListLoaded(classifAdminConcursoId, classifAdminCargoId || undefined);
+      } else {
+        setUsuariosGerais(userRegistryStore.getAllUsers());
+        setProgressoListasCandidatos(cloudSync.getCandidateDatasetsProgress());
+      }
+
       if (abaAdmin === 'logs_erros' || abaAdmin === 'supabase') {
         const res = await errorLogStore.fetchFromSupabaseTable();
         setErrorLogs(res.logs);
         setErrorTableStatus({ tableExists: res.tableExists, error: res.error });
       }
     };
-    syncAndRefresh();
-  }, [abaAdmin]);
+    void syncAndRefresh();
+  }, [abaAdmin, classifAdminConcursoId, classifAdminCargoId]);
 
   // Modais e Estados de FAQ
   const [faqs, setFaqs] = useState<FaqItem[]>(() => faqStore.getFaqs());
@@ -926,18 +971,89 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     });
   }, [usuariosGerais, buscaUsuario, filtroStatusUsuario, filtroRoleUsuario]);
 
+  // Concursos filtrados e paginados (Aba Concursos Admin)
+  const concursosAdminFiltrados = useMemo(() => {
+    const q = buscaConcursoAdmin.trim().toLowerCase();
+    return concursos.filter((c) => {
+      const matchTexto =
+        !q ||
+        c.nome.toLowerCase().includes(q) ||
+        c.orgao.toLowerCase().includes(q) ||
+        String(c.ano || '').includes(q) ||
+        c.cargos?.some((cg) => cg.nome.toLowerCase().includes(q));
+
+      const matchStatus =
+        filtroStatusConcursoAdmin === 'todos' ||
+        (filtroStatusConcursoAdmin === 'homologados' && (Boolean(c.homologado) || c.status === 'Homologado')) ||
+        (filtroStatusConcursoAdmin === 'convocando' && (c.status === 'Convocando' || c.status === 'ativo')) ||
+        (filtroStatusConcursoAdmin === 'previstos' && (c.status === 'previsto' || c.status === 'Inscrições Abertas')) ||
+        (filtroStatusConcursoAdmin === 'encerrados' && c.status === 'encerrado');
+
+      return matchTexto && matchStatus;
+    });
+  }, [concursos, buscaConcursoAdmin, filtroStatusConcursoAdmin]);
+
+  useEffect(() => {
+    setPaginaConcursosAdmin(1);
+    setVisiveisInfinitoConcursosAdmin(itensPorPaginaConcursosAdmin);
+  }, [buscaConcursoAdmin, filtroStatusConcursoAdmin, itensPorPaginaConcursosAdmin]);
+
+  const totalPaginasConcursosAdmin = Math.max(
+    1,
+    Math.ceil(concursosAdminFiltrados.length / itensPorPaginaConcursosAdmin)
+  );
+
+  const concursosAdminExibidos = useMemo(() => {
+    if (modoPaginacaoConcursosAdmin === 'infinite') {
+      return concursosAdminFiltrados.slice(0, visiveisInfinitoConcursosAdmin);
+    }
+    const pagSegura = Math.min(paginaConcursosAdmin, totalPaginasConcursosAdmin);
+    const start = (pagSegura - 1) * itensPorPaginaConcursosAdmin;
+    return concursosAdminFiltrados.slice(start, start + itensPorPaginaConcursosAdmin);
+  }, [
+    concursosAdminFiltrados,
+    modoPaginacaoConcursosAdmin,
+    visiveisInfinitoConcursosAdmin,
+    paginaConcursosAdmin,
+    totalPaginasConcursosAdmin,
+    itensPorPaginaConcursosAdmin,
+  ]);
+
+  const handleCarregarMaisConcursosAdmin = useCallback(() => {
+    setVisiveisInfinitoConcursosAdmin((prev) =>
+      Math.min(concursosAdminFiltrados.length, prev + itensPorPaginaConcursosAdmin)
+    );
+  }, [concursosAdminFiltrados.length, itensPorPaginaConcursosAdmin]);
+
   const [paginaCadastros, setPaginaCadastros] = useState(1);
-  const itensPorPaginaCadastros = 25;
 
   useEffect(() => {
     setPaginaCadastros(1);
-  }, [buscaUsuario, filtroStatusUsuario, filtroRoleUsuario]);
+    setVisiveisInfinitoUsuarios(itensPorPaginaCadastros);
+  }, [buscaUsuario, filtroStatusUsuario, filtroRoleUsuario, itensPorPaginaCadastros]);
 
   const totalPaginasCadastros = Math.ceil(usuariosGeraisFiltrados.length / itensPorPaginaCadastros) || 1;
   const usuariosGeraisPaginados = useMemo(() => {
-    const start = (paginaCadastros - 1) * itensPorPaginaCadastros;
+    if (modoPaginacaoUsuarios === 'infinite') {
+      return usuariosGeraisFiltrados.slice(0, visiveisInfinitoUsuarios);
+    }
+    const pagSegura = Math.min(paginaCadastros, totalPaginasCadastros);
+    const start = (pagSegura - 1) * itensPorPaginaCadastros;
     return usuariosGeraisFiltrados.slice(start, start + itensPorPaginaCadastros);
-  }, [usuariosGeraisFiltrados, paginaCadastros]);
+  }, [
+    usuariosGeraisFiltrados,
+    modoPaginacaoUsuarios,
+    visiveisInfinitoUsuarios,
+    paginaCadastros,
+    totalPaginasCadastros,
+    itensPorPaginaCadastros,
+  ]);
+
+  const handleCarregarMaisUsuarios = useCallback(() => {
+    setVisiveisInfinitoUsuarios((prev) =>
+      Math.min(usuariosGeraisFiltrados.length, prev + itensPorPaginaCadastros)
+    );
+  }, [usuariosGeraisFiltrados.length, itensPorPaginaCadastros]);
 
   // Se não for o administrador oficial autorizado, bloqueia imediatamente
   if (!isAdmin || !usuario) {
@@ -1901,6 +2017,35 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             </button>
           </div>
 
+          {/* Filtros de Busca e Status dos Concursos */}
+          {concursos.length > 0 && (
+            <div className="bg-white rounded-2xl p-4 border border-slate-200 card-shadow grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="sm:col-span-2 relative">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Filtrar por órgão, concurso, ano ou cargo..."
+                  value={buscaConcursoAdmin}
+                  onChange={(e) => setBuscaConcursoAdmin(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs focus:border-teal-600 outline-hidden"
+                />
+              </div>
+              <div>
+                <select
+                  value={filtroStatusConcursoAdmin}
+                  onChange={(e) => setFiltroStatusConcursoAdmin(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium"
+                >
+                  <option value="todos">Todos os Status ({concursos.length})</option>
+                  <option value="convocando">Em Andamento / Convocando</option>
+                  <option value="homologados">Homologados</option>
+                  <option value="previstos">Previstos / Inscrições Abertas</option>
+                  <option value="encerrados">Encerrados</option>
+                </select>
+              </div>
+            </div>
+          )}
+
           {/* Lista de Concursos */}
           {concursos.length === 0 ? (
             <div className="bg-white rounded-2xl border border-dashed border-slate-300 p-12 text-center space-y-4 card-shadow">
@@ -1925,9 +2070,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 <span>Cadastrar Primeiro Concurso</span>
               </button>
             </div>
+          ) : concursosAdminFiltrados.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center text-xs text-slate-500">
+              Nenhum concurso encontrado para os filtros aplicados.
+            </div>
           ) : (
-            <div className="grid grid-cols-1 gap-5">
-              {concursos.map((c) => (
+            <div className="space-y-5">
+              <div className="grid grid-cols-1 gap-5">
+                {concursosAdminExibidos.map((c) => (
               <div
                 key={c.id}
                 className="bg-white rounded-2xl border border-slate-200 card-shadow p-5 sm:p-6 space-y-4"
@@ -2078,6 +2228,30 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 </div>
               </div>
             ))}
+              </div>
+
+              <PaginationControls
+                mode={modoPaginacaoConcursosAdmin}
+                onModeChange={(novoModo) => {
+                  setModoPaginacaoConcursosAdmin(novoModo);
+                  if (novoModo === 'infinite') {
+                    setVisiveisInfinitoConcursosAdmin(
+                      Math.max(itensPorPaginaConcursosAdmin, paginaConcursosAdmin * itensPorPaginaConcursosAdmin)
+                    );
+                  }
+                }}
+                currentPage={Math.min(paginaConcursosAdmin, totalPaginasConcursosAdmin)}
+                totalPages={totalPaginasConcursosAdmin}
+                pageSize={itensPorPaginaConcursosAdmin}
+                pageSizeOptions={[5, 10, 20]}
+                onPageChange={(p) => setPaginaConcursosAdmin(p)}
+                onPageSizeChange={(sz) => setItensPorPaginaConcursosAdmin(sz)}
+                totalItems={concursosAdminFiltrados.length}
+                displayedCount={concursosAdminExibidos.length}
+                itemLabel="concurso(s)"
+                onLoadMore={handleCarregarMaisConcursosAdmin}
+                hasMoreLocal={visiveisInfinitoConcursosAdmin < concursosAdminFiltrados.length}
+              />
             </div>
           )}
         </section>
@@ -2399,7 +2573,24 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
           {/* Tabela de Cadastros Gerais */}
           <div className="bg-white rounded-2xl border border-slate-200 card-shadow overflow-hidden">
-            <div className="overflow-x-auto max-h-[600px]">
+            <div
+              ref={usuariosTableScrollRef}
+              onScroll={(e) => {
+                if (modoPaginacaoUsuarios !== 'infinite') return;
+                const el = e.currentTarget;
+                if (el.scrollHeight - el.scrollTop - el.clientHeight < 140) {
+                  if (visiveisInfinitoUsuarios < usuariosGeraisFiltrados.length) {
+                    handleCarregarMaisUsuarios();
+                  } else if (
+                    progressoListasCandidatos.unloadedKeys.length > 0 &&
+                    !carregandoLoteUsuariosSupabase
+                  ) {
+                    void handleCarregarProximoLoteUsuariosSupabase();
+                  }
+                }
+              }}
+              className="overflow-x-auto max-h-[600px]"
+            >
               <table className="w-full text-left text-xs">
                 <thead className="bg-[#07192B] text-white text-[11px] uppercase tracking-wider sticky top-0 z-10">
                   <tr>
@@ -2542,47 +2733,39 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               </table>
             </div>
 
-            {/* Paginação do Cadastro Geral */}
-            {usuariosGeraisFiltrados.length > 0 && (
-              <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-600">
-                <div>
-                  Mostrando{' '}
-                  <span className="font-bold">
-                    {(paginaCadastros - 1) * itensPorPaginaCadastros + 1}
-                  </span>{' '}
-                  a{' '}
-                  <span className="font-bold">
-                    {Math.min(
-                      paginaCadastros * itensPorPaginaCadastros,
-                      usuariosGeraisFiltrados.length
-                    )}
-                  </span>{' '}
-                  de <span className="font-bold">{usuariosGeraisFiltrados.length}</span> registros
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setPaginaCadastros((p) => Math.max(1, p - 1))}
-                    disabled={paginaCadastros === 1}
-                    className="px-3 py-1.5 bg-white border border-slate-300 rounded-lg font-bold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 cursor-pointer transition-colors"
-                  >
-                    ← Anterior
-                  </button>
-                  <span className="px-2 font-mono text-slate-700">
-                    Página {paginaCadastros} de {totalPaginasCadastros}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setPaginaCadastros((p) => Math.min(totalPaginasCadastros, p + 1))}
-                    disabled={paginaCadastros === totalPaginasCadastros}
-                    className="px-3 py-1.5 bg-white border border-slate-300 rounded-lg font-bold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 cursor-pointer transition-colors"
-                  >
-                    Próxima →
-                  </button>
-                </div>
-              </div>
-            )}
+            {/* Paginação & Infinite Scroll do Cadastro Geral + Carregamento Sob Demanda do Supabase */}
+            <div className="p-3 bg-slate-50/60 border-t border-slate-200">
+              <PaginationControls
+                mode={modoPaginacaoUsuarios}
+                onModeChange={(novoModo) => {
+                  setModoPaginacaoUsuarios(novoModo);
+                  if (novoModo === 'infinite') {
+                    setVisiveisInfinitoUsuarios(
+                      Math.max(itensPorPaginaCadastros, paginaCadastros * itensPorPaginaCadastros)
+                    );
+                  }
+                }}
+                currentPage={Math.min(paginaCadastros, totalPaginasCadastros)}
+                totalPages={totalPaginasCadastros}
+                pageSize={itensPorPaginaCadastros}
+                pageSizeOptions={[15, 25, 50, 100]}
+                onPageChange={(p) => setPaginaCadastros(p)}
+                onPageSizeChange={(sz) => setItensPorPaginaCadastros(sz)}
+                totalItems={usuariosGeraisFiltrados.length}
+                displayedCount={usuariosGeraisPaginados.length}
+                itemLabel="usuários"
+                onLoadMore={handleCarregarMaisUsuarios}
+                hasMoreLocal={visiveisInfinitoUsuarios < usuariosGeraisFiltrados.length}
+                hasMoreRemote={progressoListasCandidatos.unloadedKeys.length > 0}
+                isLoadingRemote={carregandoLoteUsuariosSupabase}
+                onLoadMoreRemote={handleCarregarProximoLoteUsuariosSupabase}
+                remoteStatusLabel={
+                  progressoListasCandidatos.totalRemote > 0
+                    ? `Listas Supabase: ${progressoListasCandidatos.loadedKeys.length}/${progressoListasCandidatos.totalRemote} carregadas`
+                    : undefined
+                }
+              />
+            </div>
           </div>
 
           {/* Modal de Edição / Novo Usuário */}

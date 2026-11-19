@@ -276,6 +276,10 @@ export default async function handler(req, res) {
         if (metaRes.ok) {
           const metaRows = await metaRes.json();
           if (Array.isArray(metaRows)) {
+            const requestedKeysParam =
+              typeof req.query?.keys === 'string'
+                ? new Set(req.query.keys.split(',').map((s) => s.trim()).filter(Boolean))
+                : null;
             const keysToFetch = [];
             for (const row of metaRows) {
               if (!row || typeof row.chave !== 'string') continue;
@@ -284,6 +288,13 @@ export default async function handler(req, res) {
               if (rawKey === '_test_ping' || rawKey === 'certam_diag_heartbeat') continue;
               const k = LEGACY_KEY_MIGRATIONS[rawKey] || rawKey;
               if (k.includes('tjrs_2024') || k.includes('mprs_2024')) continue;
+              // Evita baixar datasets massivos de candidatos em lote no GET padrão; eles são carregados sob demanda pelo frontend
+              if (
+                k.startsWith('certam_candidatos_data_v6_') &&
+                (!requestedKeysParam || !requestedKeysParam.has(k))
+              ) {
+                continue;
+              }
               const ts = row.updated_at ? new Date(row.updated_at).getTime() : 1;
               const knownTs = db.versions[k] || 0;
               if (!db.entries[k] || ts > knownTs) {

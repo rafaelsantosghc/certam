@@ -136,45 +136,41 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       if (usuario) {
         localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(usuario));
-        if (usuario.is_admin || usuario.email?.toLowerCase() === 'rafasms0@hotmail.com') {
-          void cloudSync.pushAllLocal(true).then(() => cloudSync.pullFromServer());
-        } else {
-          void cloudSync.pullFromServer();
-        }
+        void cloudSync.ensureUserRegistryLoaded();
       } else {
         localStorage.removeItem(AUTH_STORAGE_KEY);
-        void cloudSync.pullFromServer();
       }
     } catch {
       // ignore
     }
   }, [usuario]);
 
-  // Registra início de sessão e contabiliza tempo ativo acumulado do usuário para auditoria
+  // Registra início de sessão e contabiliza tempo ativo acumulado do usuário para auditoria (throttled a 10 min para aliviar Supabase)
   useEffect(() => {
     if (!usuario) return;
     const chaveUser = usuario.cpf || usuario.email || usuario.id;
     if (!chaveUser) return;
 
     const sessionStart = Date.now();
+    let lastRecordedAt = sessionStart;
     let gravado = false;
 
-    // Registra o acesso inicial caso ainda não haja acessos hoje
-    userRegistryStore.registrarAcessoUsuario(chaveUser, 60);
-
     const interval = window.setInterval(() => {
-      const segundosAtivos = Math.round((Date.now() - sessionStart) / 1000);
-      if (segundosAtivos >= 60) {
-        userRegistryStore.registrarAcessoUsuario(chaveUser, segundosAtivos);
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      const now = Date.now();
+      const deltaSegundos = Math.round((now - lastRecordedAt) / 1000);
+      if (deltaSegundos >= 600) {
+        lastRecordedAt = now;
+        userRegistryStore.registrarAcessoUsuario(chaveUser, deltaSegundos);
       }
-    }, 60000);
+    }, 600000);
 
     const salvarAoSair = () => {
       if (gravado) return;
       gravado = true;
-      const segundosAtivos = Math.round((Date.now() - sessionStart) / 1000);
-      if (segundosAtivos >= 10) {
-        userRegistryStore.registrarAcessoUsuario(chaveUser, segundosAtivos);
+      const deltaSegundos = Math.round((Date.now() - lastRecordedAt) / 1000);
+      if (deltaSegundos >= 15) {
+        userRegistryStore.registrarAcessoUsuario(chaveUser, deltaSegundos);
       }
     };
 

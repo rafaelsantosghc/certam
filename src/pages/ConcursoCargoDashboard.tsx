@@ -118,16 +118,17 @@ export const ConcursoCargoDashboard: React.FC<ConcursoCargoDashboardProps> = ({
       setLotes(lotesStore.getLotes());
     };
     syncData();
-    void cloudSync.pullFromServer().then(syncData);
+    const concRef = certamStore.getConcurso(concursoId) || certamStore.getConcursos()[0];
+    const cargoRef = concRef ? certamStore.getCargo(concRef.id, cargoId) || concRef.cargos?.[0] : null;
+    if (concRef) {
+      void cloudSync.ensureCandidateListLoaded(concRef.id, cargoRef?.id).then(syncData);
+    }
     window.addEventListener('storage', syncData);
     window.addEventListener('certam_concursos_updated', syncData);
     window.addEventListener('certam_lotes_updated', syncData);
     window.addEventListener('certam_candidatos_updated', syncData);
 
-    const interval = window.setInterval(syncData, 3500);
-
     return () => {
-      window.clearInterval(interval);
       window.removeEventListener('storage', syncData);
       window.removeEventListener('certam_concursos_updated', syncData);
       window.removeEventListener('certam_lotes_updated', syncData);

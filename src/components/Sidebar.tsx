@@ -35,10 +35,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const { usuario, logout } = useAuth();
   const [concursos, setConcursos] = React.useState<Concurso[]>(() => certamStore.getConcursos());
   const [secaoConcursosAberta, setSecaoConcursosAberta] = React.useState(true);
+  const [limiteConcursosSidebar, setLimiteConcursosSidebar] = React.useState(8);
   const [concursosExpandidos, setConcursosExpandidos] = React.useState<Record<string, boolean>>({
     tjrs_2025: true,
     mprs_2025: true,
   });
+
+  const concursosVisiveisSidebar = React.useMemo(() => {
+    if (concursos.length <= limiteConcursosSidebar) return concursos;
+    const base = concursos.slice(0, limiteConcursosSidebar);
+    if (concursoAtualId && !base.some((c) => c.id === concursoAtualId)) {
+      const ativo = concursos.find((c) => c.id === concursoAtualId);
+      if (ativo) return [ativo, ...base.slice(0, limiteConcursosSidebar - 1)];
+    }
+    return base;
+  }, [concursos, limiteConcursosSidebar, concursoAtualId]);
 
   const efetivamenteColapsado = isCollapsed;
 
@@ -236,7 +247,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       Nenhum concurso ativo
                     </p>
                   ) : (
-                    concursos.map((conc) => {
+                    <>
+                      {concursosVisiveisSidebar.map((conc) => {
                     const isActive =
                       (currentView === 'concurso' || currentView === 'concurso_geral') &&
                       concursoAtualId === conc.id;
@@ -315,7 +327,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         )}
                       </div>
                     );
-                  })
+                  })}
+                      {concursos.length > limiteConcursosSidebar && (
+                        <button
+                          type="button"
+                          onClick={() => setLimiteConcursosSidebar((prev) => prev + 8)}
+                          className="w-full text-center py-1.5 px-2 text-[11px] font-semibold text-[#2DD4AA] hover:text-white bg-[#0C2640]/60 hover:bg-[#0C2640] rounded-lg border border-teal-500/20 transition-colors cursor-pointer"
+                        >
+                          Carregar mais concursos (+{concursos.length - limiteConcursosSidebar})
+                        </button>
+                      )}
+                    </>
                 )}
                 </div>
               )}

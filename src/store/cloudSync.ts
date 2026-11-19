@@ -11,6 +11,10 @@ const memoryStore = new Map<string, string>();
 const lastLocalWriteAt = new Map<string, number>();
 const knownServerVersions = new Map<string, number>();
 const seededMissingKeysInSession = new Set<string>();
+const remoteKeyMeta = new Map<string, { rawKey: string; updatedAt: number }>();
+const requestedOnDemandKeys = new Set<string>();
+const inflightOnDemandKeys = new Set<string>();
+let remoteMetaLoadedAt = 0;
 
 function loadPersistedServerVersions(): void {
   if (typeof window === 'undefined') return;
@@ -324,6 +328,33 @@ function isAdminSession(): boolean {
   } catch {
     return false;
   }
+}
+
+function hasActiveUserSession(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const raw = localStorage.getItem('certam_auth_user_v8');
+    return Boolean(raw && raw.length > 5);
+  } catch {
+    return false;
+  }
+}
+
+function isDeferredHeavyKey(canonicalKey: string): boolean {
+  // Listas de candidatos podem ter milhares de linhas (vários MB): só baixar sob demanda ao acessar o concurso/cargo ou paginar usuários
+  if (canonicalKey.startsWith('certam_candidatos_data_v6_')) return true;
+  // Registro geral de usuários não precisa ser baixado para visitantes anônimos
+  if (canonicalKey === 'certam_users_registry_v2' && !hasActiveUserSession()) return true;
+  return false;
+}
+
+function normalizeMatchSlug(str: string = ''): string {
+  return str
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
 }
 
 function sanitizeSyncValue(key: string, valStr: string | null | undefined): string | null {
@@ -1036,6 +1067,125 @@ async function pushEntriesToSupabase(entries: Record<string, string>): Promise<b
   return allOk;
 }
 
+async function refreshRemoteMetaFromSupabase(cfg: SupabaseConnectionConfig): Promise<any[] | null> {
+  if (Date.now() < supabaseCooldownUntil) {
+    return null;
+  }
+
+  let metaRows: any[] | null = null;
+  const metaRes = await fetch(`${cfg.url}/rest/v1/configuracoes?select=chave,updated_at`, {
+    method: 'GET',
+    headers: getSupabaseHeaders(cfg.anonKey),
+    cache: 'no-store',
+  });
+
+  if (metaRes.status === 402 || metaRes.status === 429 || metaRes.status >= 500) {
+    supabaseCooldownUntil = Date.now() + 5 * 60 * 1000;
+    return null;
+  }
+
+  if (metaRes.ok) {
+    const parsed = await metaRes.json().catch(() => null);
+    if (Array.isArray(parsed)) {
+      metaRows = parsed;
+    }
+  } else {
+    // Fallback caso a tabela legada não tenha a coluna updated_at: consulta APENAS a coluna 'chave' (~400 bytes), NUNCA select=*!
+    const keyOnlyRes = await fetch(`${cfg.url}/rest/v1/configuracoes?select=chave`, {
+      method: 'GET',
+      headers: getSupabaseHeaders(cfg.anonKey),
+      cache: 'no-store',
+    });
+    if (keyOnlyRes.ok) {
+      const parsedKeys = await keyOnlyRes.json().catch(() => null);
+      if (Array.isArray(parsedKeys)) {
+        metaRows = parsedKeys;
+      }
+    } else {
+      const errText = await keyOnlyRes.text().catch(() => `HTTP ${keyOnlyRes.status}`);
+      syncStatus.lastSupabaseOk = false;
+      syncStatus.lastSupabaseError = `Erro ao ler configuracoes (${keyOnlyRes.status}): ${errText.slice(0, 180)}`;
+      return null;
+    }
+  }
+
+  if (Array.isArray(metaRows)) {
+    remoteMetaLoadedAt = Date.now();
+    for (const row of metaRows) {
+      if (!row || typeof row.chave !== 'string') continue;
+      const rawKey = row.chave;
+      if (!rawKey.startsWith('certam_')) continue;
+      if (rawKey === '_test_ping' || rawKey === 'certam_diag_heartbeat') continue;
+      const canonicalKey = LEGACY_KEY_MIGRATIONS[rawKey] || rawKey;
+      if (!shouldSyncKey(canonicalKey)) continue;
+      const ts = row.updated_at ? new Date(row.updated_at).getTime() : 1;
+      const prev = remoteKeyMeta.get(canonicalKey);
+      if (!prev || ts >= prev.updatedAt || rawKey === canonicalKey) {
+        remoteKeyMeta.set(canonicalKey, { rawKey, updatedAt: Math.max(prev?.updatedAt || 0, ts) });
+      }
+    }
+  }
+
+  return metaRows;
+}
+
+async function fetchSpecificKeysFromSupabase(
+  cfg: SupabaseConnectionConfig,
+  rawKeysToDownload: string[],
+  versionsMap: Record<string, number>
+): Promise<{ entries: Record<string, string>; versions: Record<string, number> }> {
+  const entries: Record<string, string> = {};
+  const versions: Record<string, number> = {};
+  if (rawKeysToDownload.length === 0) return { entries, versions };
+
+  // Baixa em micro-lotes de até 4 chaves por requisição para evitar respostas gigantes no PostgREST
+  const CHUNK_SIZE = 4;
+  for (let i = 0; i < rawKeysToDownload.length; i += CHUNK_SIZE) {
+    const chunk = rawKeysToDownload.slice(i, i + CHUNK_SIZE);
+    const inList = chunk.map((k) => `"${k.replace(/"/g, '')}"`).join(',');
+    const deltaRes = await fetch(
+      `${cfg.url}/rest/v1/configuracoes?select=chave,valor&chave=in.(${encodeURIComponent(inList)})`,
+      {
+        method: 'GET',
+        headers: getSupabaseHeaders(cfg.anonKey),
+        cache: 'no-store',
+      }
+    );
+
+    if (deltaRes.status === 402 || deltaRes.status === 429 || deltaRes.status >= 500) {
+      supabaseCooldownUntil = Date.now() + 5 * 60 * 1000;
+      break;
+    }
+
+    if (deltaRes.ok) {
+      const deltaRows = await deltaRes.json();
+      if (Array.isArray(deltaRows)) {
+        for (const row of deltaRows) {
+          if (!row || typeof row.chave !== 'string') continue;
+          const rawKey = row.chave;
+          const canonicalKey = LEGACY_KEY_MIGRATIONS[rawKey] || rawKey;
+          if (!shouldSyncKey(canonicalKey)) continue;
+
+          const rawSerialized =
+            typeof row.valor === 'string' ? row.valor : JSON.stringify(row.valor ?? null);
+          const serialized = sanitizeSyncValue(canonicalKey, rawSerialized);
+          const ts = versionsMap[canonicalKey] || remoteKeyMeta.get(canonicalKey)?.updatedAt || 1;
+
+          if (!isNonEmptySerialized(serialized)) continue;
+          syncTelemetry.estimatedBytesDownloaded += serialized.length;
+
+          entries[canonicalKey] = serialized;
+          versions[canonicalKey] = ts;
+          knownServerVersions.set(canonicalKey, ts);
+        }
+      }
+    }
+  }
+
+  savePersistedServerVersions();
+  return { entries, versions };
+}
+
 async function fetchEntriesFromSupabase(): Promise<{
   entries: Record<string, string>;
   versions: Record<string, number>;
@@ -1050,45 +1200,9 @@ async function fetchEntriesFromSupabase(): Promise<{
   }
 
   try {
-    // PLANO 1 — DELTA SYNC ESTRITO (Zero-Payload para chaves em cache):
+    // PLANO 1 — DELTA SYNC ESTRITO + LAZY LOADING DE DATASETS MASSIVOS:
     // Passo 1: Consulta leve apenas de metadados (chave, updated_at) ~800 bytes
-    let metaRows: any[] | null = null;
-    const metaRes = await fetch(`${cfg.url}/rest/v1/configuracoes?select=chave,updated_at`, {
-      method: 'GET',
-      headers: getSupabaseHeaders(cfg.anonKey),
-      cache: 'no-store',
-    });
-
-    if (metaRes.status === 402 || metaRes.status === 429 || metaRes.status >= 500) {
-      // Se o Supabase estiver em restrição por cota/rate-limit, aplica backoff de 5 minutos para zerar Egress
-      supabaseCooldownUntil = Date.now() + 5 * 60 * 1000;
-      return null;
-    }
-
-    if (metaRes.ok) {
-      const parsed = await metaRes.json().catch(() => null);
-      if (Array.isArray(parsed)) {
-        metaRows = parsed;
-      }
-    } else {
-      // Fallback caso a tabela legada não tenha a coluna updated_at: consulta APENAS a coluna 'chave' (~400 bytes), NUNCA select=*!
-      const keyOnlyRes = await fetch(`${cfg.url}/rest/v1/configuracoes?select=chave`, {
-        method: 'GET',
-        headers: getSupabaseHeaders(cfg.anonKey),
-        cache: 'no-store',
-      });
-      if (keyOnlyRes.ok) {
-        const parsedKeys = await keyOnlyRes.json().catch(() => null);
-        if (Array.isArray(parsedKeys)) {
-          metaRows = parsedKeys;
-        }
-      } else {
-        const errText = await keyOnlyRes.text().catch(() => `HTTP ${keyOnlyRes.status}`);
-        syncStatus.lastSupabaseOk = false;
-        syncStatus.lastSupabaseError = `Erro ao ler configuracoes (${keyOnlyRes.status}): ${errText.slice(0, 180)}`;
-        return null;
-      }
-    }
+    const metaRows = await refreshRemoteMetaFromSupabase(cfg);
 
     if (Array.isArray(metaRows)) {
       syncTelemetry.deltaPollsCount++;
@@ -1121,47 +1235,23 @@ async function fetchEntriesFromSupabase(): Promise<{
           }
           syncTelemetry.keysSkippedByDelta++;
           syncTelemetry.estimatedBytesSaved += cachedVal.length;
+        } else if (isDeferredHeavyKey(canonicalKey) && !requestedOnDemandKeys.has(canonicalKey)) {
+          // Dataset pesado (candidatos de concurso/cargo não aberto nesta sessão ou registry anônimo):
+          // NÃO baixa automaticamente do Supabase — aguarda acesso explícito / paginação sob demanda!
+          if (isNonEmptySerialized(cachedVal)) {
+            entries[canonicalKey] = cachedVal;
+          }
+          syncTelemetry.keysSkippedByDelta++;
         } else {
           keysToDownload.push(rawKey);
         }
       }
 
-      // Passo 2: Baixa o payload (valor) APENAS das chaves efetivamente novas ou modificadas
+      // Passo 2: Baixa o payload (valor) APENAS das chaves leves ou ativamente solicitadas que mudaram
       if (keysToDownload.length > 0) {
-        const inList = keysToDownload.map((k) => `"${k.replace(/"/g, '')}"`).join(',');
-        const deltaRes = await fetch(
-          `${cfg.url}/rest/v1/configuracoes?select=chave,valor&chave=in.(${encodeURIComponent(inList)})`,
-          {
-            method: 'GET',
-            headers: getSupabaseHeaders(cfg.anonKey),
-            cache: 'no-store',
-          }
-        );
-
-        if (deltaRes.ok) {
-          const deltaRows = await deltaRes.json();
-          if (Array.isArray(deltaRows)) {
-            for (const row of deltaRows) {
-              if (!row || typeof row.chave !== 'string') continue;
-              const rawKey = row.chave;
-              const canonicalKey = LEGACY_KEY_MIGRATIONS[rawKey] || rawKey;
-              if (!shouldSyncKey(canonicalKey)) continue;
-
-              const rawSerialized =
-                typeof row.valor === 'string' ? row.valor : JSON.stringify(row.valor ?? null);
-              const serialized = sanitizeSyncValue(canonicalKey, rawSerialized);
-              const ts = versions[canonicalKey] || 1;
-
-              if (!isNonEmptySerialized(serialized)) continue;
-              syncTelemetry.estimatedBytesDownloaded += serialized.length;
-
-              entries[canonicalKey] = serialized;
-              versions[canonicalKey] = ts;
-              knownServerVersions.set(canonicalKey, ts);
-            }
-            savePersistedServerVersions();
-          }
-        }
+        const fetched = await fetchSpecificKeysFromSupabase(cfg, keysToDownload, versions);
+        Object.assign(entries, fetched.entries);
+        Object.assign(versions, fetched.versions);
       } else {
         savePersistedServerVersions();
       }
@@ -1932,6 +2022,225 @@ export const cloudSync = {
     return activePullPromise;
   },
 
+  /**
+   * Carrega sob demanda um conjunto específico de chaves do Supabase (sem baixar o banco inteiro).
+   * Ideal para paginação / infinite scroll e carregamento lazy de listas pesadas de candidatos.
+   */
+  async ensureKeysLoaded(keys: string[], forceRefresh = false): Promise<number> {
+    if (typeof window === 'undefined' || !Array.isArray(keys) || keys.length === 0) return 0;
+    const cfg = resolveSupabaseConfig();
+    if (!cfg || Date.now() < supabaseCooldownUntil) return 0;
+
+    // Garante que temos os metadados remotos para comparar timestamps e resolver nomes exatos
+    if (remoteKeyMeta.size === 0 || Date.now() - remoteMetaLoadedAt > 60000) {
+      try {
+        await refreshRemoteMetaFromSupabase(cfg);
+      } catch {
+        // ignore
+      }
+    }
+
+    const rawKeysToFetch: string[] = [];
+    const versionsMap: Record<string, number> = {};
+
+    for (const rawInput of keys) {
+      const canonicalKey = LEGACY_KEY_MIGRATIONS[rawInput] || rawInput;
+      if (!shouldSyncKey(canonicalKey)) continue;
+      requestedOnDemandKeys.add(canonicalKey);
+
+      if (inflightOnDemandKeys.has(canonicalKey)) continue;
+
+      const meta = remoteKeyMeta.get(canonicalKey);
+      const cachedVal =
+        memoryStore.get(canonicalKey) ??
+        (typeof window !== 'undefined' ? localStorage.getItem(canonicalKey) : null);
+      const knownTs = knownServerVersions.get(canonicalKey) || 0;
+      const remoteTs = meta?.updatedAt || 0;
+
+      const needsFetch =
+        forceRefresh ||
+        !isNonEmptySerialized(cachedVal) ||
+        (remoteTs > 0 && remoteTs > knownTs);
+
+      if (needsFetch) {
+        rawKeysToFetch.push(meta?.rawKey || canonicalKey);
+        versionsMap[canonicalKey] = remoteTs || 1;
+        inflightOnDemandKeys.add(canonicalKey);
+      }
+    }
+
+    if (rawKeysToFetch.length === 0) return 0;
+
+    try {
+      const { entries, versions } = await fetchSpecificKeysFromSupabase(cfg, rawKeysToFetch, versionsMap);
+      const changedKeys: string[] = [];
+      for (const [k, val] of Object.entries(entries)) {
+        if (!isNonEmptySerialized(val)) continue;
+        const prev = memoryStore.get(k) ?? localStorage.getItem(k);
+        if (prev !== val) {
+          memoryStore.set(k, val);
+          safeLocalStorageSet(k, val);
+          changedKeys.push(k);
+        }
+        if (versions[k]) {
+          knownServerVersions.set(k, versions[k]);
+        }
+      }
+      savePersistedServerVersions();
+      if (changedKeys.length > 0) {
+        dispatchUpdateEvents(changedKeys);
+      }
+      return changedKeys.length;
+    } catch {
+      return 0;
+    } finally {
+      for (const rawInput of keys) {
+        const canonicalKey = LEGACY_KEY_MIGRATIONS[rawInput] || rawInput;
+        inflightOnDemandKeys.delete(canonicalKey);
+      }
+    }
+  },
+
+  /**
+   * Carrega sob demanda apenas as listas de candidatos de um concurso (ou cargo específico) no Supabase.
+   */
+  async ensureCandidateListLoaded(concursoId: string, cargoId?: string): Promise<boolean> {
+    if (!concursoId) return false;
+    const cfg = resolveSupabaseConfig();
+    if (!cfg) return false;
+
+    if (remoteKeyMeta.size === 0) {
+      await refreshRemoteMetaFromSupabase(cfg).catch(() => null);
+    }
+
+    const prefixExact = cargoId
+      ? `certam_candidatos_data_v6_${concursoId}_${cargoId}`
+      : `certam_candidatos_data_v6_${concursoId}_`;
+
+    const concNorm = normalizeMatchSlug(concursoId);
+    const cargoNorm = cargoId ? normalizeMatchSlug(cargoId) : '';
+    const candidateKeys = new Set<string>();
+
+    if (cargoId) {
+      candidateKeys.add(prefixExact);
+    }
+
+    for (const k of remoteKeyMeta.keys()) {
+      if (!k.startsWith('certam_candidatos_data_v6_')) continue;
+      if (cargoId) {
+        if (k === prefixExact) {
+          candidateKeys.add(k);
+          continue;
+        }
+        if (k.startsWith(`certam_candidatos_data_v6_${concursoId}_`)) {
+          const suffixNorm = normalizeMatchSlug(k.slice(`certam_candidatos_data_v6_${concursoId}_`.length));
+          if (
+            suffixNorm === cargoNorm ||
+            suffixNorm === 'geral' ||
+            (cargoNorm.length >= 6 && (suffixNorm.startsWith(cargoNorm.slice(0, 12)) || cargoNorm.startsWith(suffixNorm.slice(0, 12))))
+          ) {
+            candidateKeys.add(k);
+          }
+        }
+      } else {
+        const restNorm = normalizeMatchSlug(k.slice('certam_candidatos_data_v6_'.length));
+        if (k.startsWith(`certam_candidatos_data_v6_${concursoId}_`) || (concNorm.length >= 4 && restNorm.startsWith(concNorm))) {
+          candidateKeys.add(k);
+        }
+      }
+    }
+
+    if (candidateKeys.size === 0) return false;
+    const loaded = await this.ensureKeysLoaded(Array.from(candidateKeys));
+    return loaded > 0;
+  },
+
+  /**
+   * Carrega sob demanda o cadastro geral de usuários (certam_users_registry_v2).
+   */
+  async ensureUserRegistryLoaded(): Promise<boolean> {
+    const loaded = await this.ensureKeysLoaded(['certam_users_registry_v2']);
+    return loaded > 0;
+  },
+
+  /**
+   * Retorna quantas listas de candidatos remotas já estão em cache local vs total existente no Supabase.
+   */
+  getCandidateDatasetsProgress(): {
+    loadedKeys: string[];
+    unloadedKeys: string[];
+    totalRemote: number;
+  } {
+    const loadedKeys: string[] = [];
+    const unloadedKeys: string[] = [];
+    const seen = new Set<string>();
+
+    for (const k of remoteKeyMeta.keys()) {
+      if (!k.startsWith('certam_candidatos_data_v6_')) continue;
+      seen.add(k);
+      const cachedVal =
+        memoryStore.get(k) ??
+        (typeof window !== 'undefined' ? localStorage.getItem(k) : null);
+      if (isNonEmptySerialized(cachedVal)) {
+        loadedKeys.push(k);
+      } else {
+        unloadedKeys.push(k);
+      }
+    }
+
+    // Inclui também chaves que já estejam em cache local mesmo antes do meta carregar
+    for (const k of this.getAllKeys()) {
+      if (!k.startsWith('certam_candidatos_data_v6_') || seen.has(k)) continue;
+      const val = memoryStore.get(k) ?? (typeof window !== 'undefined' ? localStorage.getItem(k) : null);
+      if (isNonEmptySerialized(val)) {
+        seen.add(k);
+        loadedKeys.push(k);
+      }
+    }
+
+    return {
+      loadedKeys,
+      unloadedKeys,
+      totalRemote: loadedKeys.length + unloadedKeys.length,
+    };
+  },
+
+  /**
+   * Carrega progressivamente o próximo lote de listas de candidatos do Supabase (para paginação/infinite scroll de usuários).
+   */
+  async loadNextCandidateBatchForUsers(batchSize = 2): Promise<{
+    loadedCount: number;
+    totalLoaded: number;
+    totalRemote: number;
+    hasMore: boolean;
+  }> {
+    const cfg = resolveSupabaseConfig();
+    if (cfg && remoteKeyMeta.size === 0) {
+      await refreshRemoteMetaFromSupabase(cfg).catch(() => null);
+    }
+
+    const before = this.getCandidateDatasetsProgress();
+    if (before.unloadedKeys.length === 0) {
+      return {
+        loadedCount: 0,
+        totalLoaded: before.loadedKeys.length,
+        totalRemote: before.totalRemote,
+        hasMore: false,
+      };
+    }
+
+    const nextBatch = before.unloadedKeys.slice(0, Math.max(1, batchSize));
+    const loadedCount = await this.ensureKeysLoaded(nextBatch);
+    const after = this.getCandidateDatasetsProgress();
+
+    return {
+      loadedCount,
+      totalLoaded: after.loadedKeys.length,
+      totalRemote: after.totalRemote,
+      hasMore: after.unloadedKeys.length > 0,
+    };
+  },
+
   getStatus(): SyncStatusSnapshot {
     const cfg = resolveSupabaseConfig();
     return {
@@ -2263,8 +2572,8 @@ export const cloudSync = {
     const cfg = resolveSupabaseConfig();
     if (cfg) {
       try {
-        // 3.1 Buscar todas as chaves existentes em public.configuracoes para remover qualquer chave de outro site (!certam_*) ou legada
-        const getRes = await fetch(`${cfg.url}/rest/v1/configuracoes?select=*`, {
+        // 3.1 Buscar apenas os nomes das chaves existentes em public.configuracoes (select=chave, zero payload)
+        const getRes = await fetch(`${cfg.url}/rest/v1/configuracoes?select=chave`, {
           method: 'GET',
           headers: getSupabaseHeaders(cfg.anonKey),
           cache: 'no-store',

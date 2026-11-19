@@ -1,12 +1,14 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { certamStore } from '../store/certamStore';
 import { lotesStore } from '../store/lotesStore';
 import { auditStore } from '../store/auditStore';
+import { cloudSync } from '../store/cloudSync';
 import { useAuth } from '../store/authContext';
 import { Concurso, Cargo, Candidato } from '../types';
 import { PerfilCandidatoModal } from '../components/PerfilCandidatoModal';
 import { ContatoAdminModal } from '../components/ContatoAdminModal';
 import { SolicitarVinculacaoModal } from '../components/SolicitarVinculacaoModal';
+import { PaginationControls, PaginationMode } from '../components/PaginationControls';
 import {
   Search,
   Plus,
@@ -53,6 +55,10 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
     'todos' | 'em_andamento' | 'homologados' | 'previstos' | 'encerrados'
   >('todos');
   const [filtroRegiao, setFiltroRegiao] = useState<string>('todas');
+  const [modoPaginacaoConcursos, setModoPaginacaoConcursos] = useState<PaginationMode>('infinite');
+  const [paginaConcursos, setPaginaConcursos] = useState<number>(1);
+  const [itensPorPaginaConcursos, setItensPorPaginaConcursos] = useState<number>(6);
+  const [visiveisInfinitoConcursos, setVisiveisInfinitoConcursos] = useState<number>(6);
 
   // Modais
   const [modalPerfilAberto, setModalPerfilAberto] = useState(false);
@@ -85,6 +91,25 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
       window.removeEventListener('storage', handleUpdate);
     };
   }, []);
+
+  // Carregamento sob demanda no Supabase: busca listas de candidatos APENAS dos concursos vinculados/inscritos/acompanhados pelo usuário logado
+  useEffect(() => {
+    if (!usuario) return;
+    const targetKeys = new Set<string>();
+    if (usuario.concurso_id && usuario.cargo_id) {
+      targetKeys.add(`certam_candidatos_data_v6_${usuario.concurso_id}_${usuario.cargo_id}`);
+    }
+    (usuario.concursos_inscritos || []).forEach((ins) => {
+      if (ins.concurso_id && ins.cargo_id) {
+        targetKeys.add(`certam_candidatos_data_v6_${ins.concurso_id}_${ins.cargo_id}`);
+      }
+    });
+    if (targetKeys.size > 0) {
+      void cloudSync.ensureKeysLoaded(Array.from(targetKeys));
+    } else if (usuario.concurso_id) {
+      void cloudSync.ensureCandidateListLoaded(usuario.concurso_id);
+    }
+  }, [usuario?.id, usuario?.concurso_id, usuario?.cargo_id, usuario?.concursos_inscritos?.length]);
 
   // Toast feedback
   const [toastMsg, setToastMsg] = useState<string | null>(null);
@@ -252,6 +277,39 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
       return matchTexto && matchStatus && matchRegiao;
     });
   }, [concursos, filtroTexto, filtroStatus, filtroRegiao]);
+
+  // Reset de paginação / infinite scroll quando filtros ou tamanho de página mudam
+  useEffect(() => {
+    setPaginaConcursos(1);
+    setVisiveisInfinitoConcursos(itensPorPaginaConcursos);
+  }, [filtroTexto, filtroStatus, filtroRegiao, itensPorPaginaConcursos]);
+
+  const totalPaginasConcursos = Math.max(
+    1,
+    Math.ceil(concursosFiltrados.length / itensPorPaginaConcursos)
+  );
+
+  const concursosExibidos = useMemo(() => {
+    if (modoPaginacaoConcursos === 'infinite') {
+      return concursosFiltrados.slice(0, visiveisInfinitoConcursos);
+    }
+    const pagSegura = Math.min(paginaConcursos, totalPaginasConcursos);
+    const start = (pagSegura - 1) * itensPorPaginaConcursos;
+    return concursosFiltrados.slice(start, start + itensPorPaginaConcursos);
+  }, [
+    concursosFiltrados,
+    modoPaginacaoConcursos,
+    visiveisInfinitoConcursos,
+    paginaConcursos,
+    totalPaginasConcursos,
+    itensPorPaginaConcursos,
+  ]);
+
+  const handleCarregarMaisConcursos = useCallback(() => {
+    setVisiveisInfinitoConcursos((prev) =>
+      Math.min(concursosFiltrados.length, prev + itensPorPaginaConcursos)
+    );
+  }, [concursosFiltrados.length, itensPorPaginaConcursos]);
 
   return (
     <div className="space-y-8 max-w-[1880px] w-full mx-auto">
@@ -1138,7 +1196,8 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
 
           <div className="flex items-center justify-between text-xs text-slate-500 pt-1 border-t border-slate-100">
             <span>
-              Exibindo <strong>{concursosFiltrados.length}</strong> concurso(s)
+              Exibindo <strong>{concursosExibidos.length}</strong> de{' '}
+              <strong>{concursosFiltrados.length}</strong> concurso(s)
             </span>
             {filtroTexto && (
               <button
@@ -1195,8 +1254,9 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
             Nenhum concurso encontrado para os filtros selecionados.
           </div>
         ) : (
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
-            {concursosFiltrados.map((conc) => {
+          <div className="space-y-5">
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+              {concursosExibidos.map((conc) => {
               const cargosAtivos = conc.cargos?.filter((cg) => cg.ativo) || [];
 
               return (
@@ -1398,6 +1458,28 @@ export const PortalHome: React.FC<PortalHomeProps> = ({ onNavigate }) => {
                 </div>
               );
             })}
+            </div>
+
+            <PaginationControls
+              mode={modoPaginacaoConcursos}
+              onModeChange={(novoModo) => {
+                setModoPaginacaoConcursos(novoModo);
+                if (novoModo === 'infinite') {
+                  setVisiveisInfinitoConcursos(Math.max(itensPorPaginaConcursos, paginaConcursos * itensPorPaginaConcursos));
+                }
+              }}
+              currentPage={Math.min(paginaConcursos, totalPaginasConcursos)}
+              totalPages={totalPaginasConcursos}
+              pageSize={itensPorPaginaConcursos}
+              pageSizeOptions={[6, 12, 24]}
+              onPageChange={(p) => setPaginaConcursos(p)}
+              onPageSizeChange={(sz) => setItensPorPaginaConcursos(sz)}
+              totalItems={concursosFiltrados.length}
+              displayedCount={concursosExibidos.length}
+              itemLabel="concurso(s)"
+              onLoadMore={handleCarregarMaisConcursos}
+              hasMoreLocal={visiveisInfinitoConcursos < concursosFiltrados.length}
+            />
           </div>
         )}
       </div>

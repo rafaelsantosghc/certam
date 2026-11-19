@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { lotesStore } from '../store/lotesStore';
 import { userRegistryStore } from '../store/userRegistryStore';
 import { certamStore } from '../store/certamStore';
+import { cloudSync } from '../store/cloudSync';
 import { useAuth } from '../store/authContext';
 import { COMARCAS_RS } from '../data/comarcas';
 import { Candidato, Lote, Comarca } from '../types';
@@ -113,6 +114,9 @@ export const SimuladorLotes: React.FC<SimuladorLotesProps> = ({
       setCandidatos(lotesStore.getCandidatos(concursoEfetivoId, cargoEfetivoId));
     };
     syncCandidatos();
+    if (concursoEfetivoId) {
+      void cloudSync.ensureCandidateListLoaded(concursoEfetivoId, cargoEfetivoId).then(syncCandidatos);
+    }
     window.addEventListener('storage', syncCandidatos);
     window.addEventListener('certam_candidatos_updated', syncCandidatos);
     return () => {

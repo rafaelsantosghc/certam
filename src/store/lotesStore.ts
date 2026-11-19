@@ -158,7 +158,7 @@ export const lotesStore = {
           (targetNormId && sNorm.length >= 6 && targetNormId.startsWith(sNorm)) ||
           (targetCanonico && sCanon === targetCanonico)
         ) {
-          cloudSync.setItem(exactKey, item.list, true);
+          cloudSync.setItemLocalOnly(exactKey, item.list);
           return item.list;
         }
       }
@@ -168,14 +168,14 @@ export const lotesStore = {
       if ((cargoIndex === 0 || (conc?.cargos?.length || 0) <= 1) && !hasExplicitGeralCargo) {
         const geralEntry = sameConcursoEntries.find((x) => normSlug(x.suffix) === 'geral');
         if (geralEntry) {
-          cloudSync.setItem(exactKey, geralEntry.list, true);
+          cloudSync.setItemLocalOnly(exactKey, geralEntry.list);
           return geralEntry.list;
         }
       }
 
       // 3. Se o concurso possui apenas 1 cargo e existe apenas 1 lista de candidatos para este concurso
       if ((conc?.cargos?.length || 0) === 1 && sameConcursoEntries.length === 1) {
-        cloudSync.setItem(exactKey, sameConcursoEntries[0].list, true);
+        cloudSync.setItemLocalOnly(exactKey, sameConcursoEntries[0].list);
         return sameConcursoEntries[0].list;
       }
 
@@ -188,13 +188,13 @@ export const lotesStore = {
           (targetNormId && targetNormId.length >= 6 && sNorm.endsWith(targetNormId)) ||
           (targetNormNome && targetNormNome.length >= 6 && sNorm.includes(targetNormNome.slice(0, 16)))
         ) {
-          cloudSync.setItem(exactKey, item.list, true);
+          cloudSync.setItemLocalOnly(exactKey, item.list);
           return item.list;
         }
       }
 
       if ((conc?.cargos?.length || 0) === 1 && sameOrgaoEntries.length === 1) {
-        cloudSync.setItem(exactKey, sameOrgaoEntries[0].list, true);
+        cloudSync.setItemLocalOnly(exactKey, sameOrgaoEntries[0].list);
         return sameOrgaoEntries[0].list;
       }
     } catch {

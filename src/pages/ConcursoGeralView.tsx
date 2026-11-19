@@ -49,7 +49,7 @@ export const ConcursoGeralView: React.FC<ConcursoGeralViewProps> = ({
       if (atual) setConcurso(atual);
     };
     sync();
-    void cloudSync.pullFromServer().then(sync);
+    void cloudSync.ensureCandidateListLoaded(concursoId).then(sync);
     window.addEventListener('storage', sync);
     window.addEventListener('certam_concursos_updated', sync);
     window.addEventListener('certam_candidatos_updated', sync);
